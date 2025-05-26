@@ -5,6 +5,8 @@ description = "CLI helper"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "typer>=0.9.0", # Typer's recommended dependency for better output
-    "rich>=13.0.0",
+    "typer>=0.15.4",
 ]
+
+[project.scripts]
+ewa = "ewa.main:main"
