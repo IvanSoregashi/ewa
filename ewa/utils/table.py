@@ -1,9 +1,9 @@
-from typing import List, Dict, Any
+from typing import Any
 from rich.console import Console
 from rich.table import Table
 import shutil
 
-def print_table(data: List[Dict[str, Any]], title: str = None) -> None:
+def print_table(data: list[dict[str, Any]], title: str = None) -> None:
     """
     Print a list of dictionaries as a pretty table.
     
@@ -30,13 +30,16 @@ def print_table(data: List[Dict[str, Any]], title: str = None) -> None:
             value = str(row.get(col, ""))
             col_widths[col] = max(col_widths[col], len(value))
     
-    total_width = sum(col_widths.values()) + len(columns) * 4
+    total_width = sum(col_widths.values()) + len(columns) * 3 + 1
     
     if total_width > term_width:
         excess = total_width - term_width
         
         widest_col = max(col_widths.items(), key=lambda x: x[1])
-        other_cols_avg = sum(w for c, w in col_widths.items() if c != widest_col[0]) / (len(columns) - 1)
+        if len(columns) > 1:
+            other_cols_avg = sum(w for c, w in col_widths.items() if c != widest_col[0]) / (len(columns) - 1)
+        else:
+            other_cols_avg = 0
         
         if widest_col[1] > other_cols_avg * 3:
             new_width = max(widest_col[1] - excess, 3)

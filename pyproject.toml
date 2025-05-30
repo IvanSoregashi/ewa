@@ -5,7 +5,8 @@ description = "CLI helper"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "typer>=0.15.4",
+    "ebooklib>=0.19",
+    "typer-shell>=0.1.12",
 ]
 
 [project.scripts]
