@@ -49,7 +49,7 @@ class EPUB:
         }
 
 
-class EPUBUseCase:
+class EPUBUseCases:
     def __init__(self, path: Path) -> None:
         self.set_path(path)
         self.epubs = None
@@ -65,6 +65,8 @@ class EPUBUseCase:
                 for file in self.path.glob(f"{'**/' if recursive else ''}*.epub",
                                            case_sensitive=False)]
     
-    def form_table(self, size: bool=False, chapters: bool=False) -> list[dict]:
+    def form_table(self, recursive: bool=False, size: bool=False, chapters: bool=False) -> list[dict]:
+        if self.epubs is None:
+            self.collect_epubs(recursive)
         return [EPUB(epub).to_dict(size, chapters) for epub in self.epubs]
 

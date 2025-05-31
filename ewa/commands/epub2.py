@@ -2,8 +2,9 @@ import logging
 import re
 from pathlib import Path
 import typer
-#from typer_shell import make_typer_shell
+from typer_shell import make_typer_shell
 from ewa.utils.table import print_table
+from ewa.use_cases.epub import EPUB, EPUBUseCases
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +13,7 @@ class EpubCommands:
         """Initialize the EpubCommands class with a Typer app instance."""
         self.app = app
         self.register_commands()
+        self.epub_use_cases = EPUBUseCases(Path.cwd())
     
     def register_commands(self):
         """Register all commands with the Typer app."""
@@ -25,18 +27,13 @@ class EpubCommands:
         chapters: bool = typer.Option(False, "--chapters", "-c", help="Parse name for chapters for each file"),
     ):
         """List all epub files in the current directory"""
-        files = []
-        for file in path.glob(f"{'**/' if recursive else ''}*.epub"):
-            file_info = {"Filename": file.name}
-            if chapters:
-                file_info["Chapters"] = re.search(r"(\d+\s*-\s*\d+)", file.name).group(1) or "N/A"
-            if size:
-                file_info["Size"] = f"{file.stat().st_size / 1024 / 1024:.0f} Mb"
-            files.append(file_info)
-        
+        if path != Path.cwd():
+            self.epub_use_cases.set_path(path)
+        files = self.epub_use_cases.form_table(recursive, size, chapters)
         print_table(files, title="EPUB Files")
 
+
 # Create the Typer app and initialize commands
-app = typer.Typer(help="epub helper application")
-#app = make_typer_shell(prompt="epub> ")
+#app = typer.Typer(help="epub helper application")
+app = make_typer_shell(prompt="epub> ")
 EpubCommands(app) 

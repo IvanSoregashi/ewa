@@ -4,6 +4,7 @@ from pathlib import Path
 import typer
 #from typer_shell import make_typer_shell
 from ewa.utils.table import print_table
+from ewa.use_cases.epub import EPUB, EPUBUseCases
 
 logger = logging.getLogger(__name__)
 

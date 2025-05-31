@@ -1,13 +1,14 @@
 [project]
 name = "ewa"
-version = "0.1.0"
+version = "0.1.1"
 description = "CLI helper"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "click<8.2.0",
     "ebooklib>=0.19",
     "typer-shell>=0.1.12",
 ]
 
 [project.scripts]
-ewa = "ewa.main:main"
+ewa = "ewa.main:app"
