@@ -19,15 +19,46 @@ def list(
     chapters: bool = Option(False, "--chapters", "-c", help="Parse name for chapters for each file"),
     ):
     """List all epub files in the current directory"""
-    path = path or ctx.obj.path
-    files = [EPUB(epub).to_dict(size, chapters) for epub in path.glob(f"{'**/' if recursive else ''}*.epub")]
+    use_cases: EPUBUseCases = ctx.obj
+    if path: use_cases.set_path(path)
+    files = use_cases.form_table(recursive, size, chapters)
     file_count = len(files)
     logger.debug(f"located {file_count} files")
-    files = [{"N": n, **f} for n, f in enumerate(files)]
     print_table(files, title="EPUB Files")
 
+
+@app.command()
+def select(ctx: Context, n: int = Argument(..., help="Number of the file to select")):
+    """Select an epub file"""
+    use_cases: EPUBUseCases = ctx.obj
+    epub: EPUB | None = use_cases.select_epub(n)
+    if epub:
+        logger.info(epub.get_metadata())
+    else:
+        logger.warning("No file selected")
 
 @app.command()
 def collect(path: Path = Argument(..., help="Path to the directory containing the EPUB files")):
     """Move all EPUB files from path to the current directory"""
     pass
+
+@app.command()
+def chapters(ctx: Context):
+    """Show chapters of the selected file"""
+    use_cases: EPUBUseCases = ctx.obj
+    if not use_cases.epub:
+        logger.warning("No file selected")
+        return
+    #chapters = use_cases.epub.get_chapters()
+    #zip_chapters = use_cases.epub.get_chapters_zip()
+    #print(chapters)
+    #print(zip_chapters)
+    #images = use_cases.epub.get_images()
+    #zip_images = use_cases.epub.get_images_zip()
+    #print(images)
+    #print(zip_images)
+    images_zip_info = use_cases.epub.get_images_zip_info()
+    print_table(images_zip_info)
+    #print_table(chapters, title="Chapters")
+
+

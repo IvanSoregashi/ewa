@@ -1,14 +1,37 @@
 import logging
+import zipfile
+import json
 import re
 from pathlib import Path
-from ebooklib import epub
+
+import ebooklib
+from ebooklib.epub import EpubBook, read_epub
 
 logger = logging.getLogger(__name__)
+
 
 class EPUB:
     def __init__(self, path: Path):
         self.set_path(path)
-        self.book = None
+        self._book = None
+        self._epub_error = None
+
+    @property
+    def book(self):
+        if self._book is None:
+            if self._epub_error is not None:
+                raise self._epub_error
+            else:
+                try:
+                    self.read_epub()
+                except Exception as e:
+                    self._epub_error = e
+                    raise e
+        return self._book
+    
+    @book.setter
+    def book(self, book: EpubBook):
+        self._book = book
 
     def set_path(self, path: Path):
         if not path.is_file() or path.suffix.lower() != ".epub":
@@ -20,8 +43,8 @@ class EPUB:
                 chapters: bool=False,
                 name: bool=False) -> dict:
         dictionary = {"Filename": self.path.name}
-        if name:
-            dictionary["Name"] = self.name()
+        #if name:
+        #    dictionary["Name"] = self.name()
         if chapters:
             dictionary["Chapters"] = re.search(r"(\d+\s*-\s*\d+)", self.path.name).group(1)
         if size:
@@ -29,30 +52,77 @@ class EPUB:
         return dictionary
 
     def read_epub(self):
-        self.book = epub.read_epub(self.path)
+        self.book: EpubBook = read_epub(self.path)
 
-    def get_metadata(self):
-        if self.book is None:
-            self.read_epub()
-        logger.info(f"Getting metadata for {self.path}, {self.book.metadata}")
-        return {
-            "identifier": self.book.get_metadata('DC', 'identifier'),
-            "title": self.book.get_metadata('DC', 'title'),
-            "language": self.book.get_metadata('DC', 'language'),
-            "creator": self.book.get_metadata('DC', 'creator'),
-            "contributor": self.book.get_metadata('DC', 'contributor'),
-            "publisher": self.book.get_metadata('DC', 'publisher'),
-            "rights": self.book.get_metadata('DC', 'rights'),
-            "coverage": self.book.get_metadata('DC', 'coverage'),
-            "date": self.book.get_metadata('DC', 'date'),
-            "description": self.book.get_metadata('DC', 'description')
-        }
+    def get_chapters(self):
+        return [chapter.file_name for chapter in self.book.get_items_of_type(ebooklib.ITEM_DOCUMENT)]
+
+    def get_chapters_zip(self):
+        with zipfile.ZipFile(self.path) as zip_file:
+            return [file for file in zip_file.namelist() if file.startswith("EPUB/chapters/")]
+
+    def get_images(self):
+        return [image.file_name for image in self.book.get_items_of_type(ebooklib.ITEM_IMAGE)]
+
+    def get_images_zip(self):
+        with zipfile.ZipFile(self.path) as zip_file:
+            return [file for file in zip_file.namelist() if file.startswith(("EPUB/Images/", "EPUB/images/"))]
+    
+    def get_images_zip_info(self):
+        images = []
+        total_size = 0
+        with zipfile.ZipFile(self.path) as zip_file:
+            for file_info in zip_file.infolist():
+                if file_info.filename.startswith(("EPUB/Images/", "EPUB/images/")):
+                    size = f"{file_info.file_size / 1024 / 1024:.2f} Mb"
+                    name = file_info.filename.split("/")[-1]
+                    year, month, day, *_ = file_info.date_time
+                    date = f"{year}-{month:02d}-{day:02d}"
+                    total_size += file_info.file_size
+                    images.append({"name": name, "size": size, "date": date})
+        total_size = f"{total_size / 1024 / 1024:.2f} Mb"
+        images.append({"name": "Total", "size": total_size})
+        return images
+
+    def zip_info(self):
+        images = 0
+        image_size = 0
+        chapters = 0
+        with zipfile.ZipFile(self.path) as zip_file:
+            data = [(info.filename, info.file_size,) for info in zip_file.infolist()]
+        for item in data:
+            if item[0].startswith("EPUB/images/"):
+                images += 1
+                image_size += item[1]
+            if item[0].startswith("EPUB/chapters/"):
+                chapters += 1
+        return {"images": images, "image_size": f"{image_size / 1024 / 1024:.2f} Mb", "chapters": chapters}
+
+    def get_metadata(self, full: bool=False) -> dict | None:
+        try:
+            if self.book is None:
+                self.read_epub()
+            if full:
+                metadata = self.book.metadata
+            else:
+                identifiers = [ident[0] for ident in self.book.get_metadata('DC', 'identifier')]
+                title = self.book.get_metadata('DC', 'title')[0][0]
+                metadata = {"identifier": identifiers, "title": title,}
+            return metadata
+        except Exception as e:
+            logger.error(f"Error reading {self.path}: {e}\nTrying zipfile...")
+        finally:
+            logger.info(self.zip_info())
+        
+
 
 
 class EPUBUseCases:
     def __init__(self, path: Path = Path.cwd()) -> None:
         self.set_path(path)
         self.epubs = None
+        self.table = None
+        self.epub = None
 
     def set_path(self, path: Path) -> None:
         path = Path(path)
@@ -60,13 +130,23 @@ class EPUBUseCases:
             raise ValueError("Path is not a directory")
         self.path = path
 
-    def collect_epubs(self, recursive: bool = False) -> None:
+    def find_epubs(self, recursive: bool = False) -> None:
         self.epubs = [file
                 for file in self.path.glob(f"{'**/' if recursive else ''}*.epub",
                                            case_sensitive=False)]
     
     def form_table(self, recursive: bool=False, size: bool=False, chapters: bool=False) -> list[dict]:
         if self.epubs is None:
-            self.collect_epubs(recursive)
-        return [EPUB(epub).to_dict(size, chapters) for epub in self.epubs]
+            self.find_epubs(recursive)
+        self.table = [EPUB(epub).to_dict(size, chapters) for epub in self.epubs]
+        return self.table
 
+    def select_epub(self, n: int) -> EPUB:
+        if not self.table or not self.epubs:
+            logger.warning("No table or epubs found, list files first")
+            return None
+        epub_path = [epub_path for epub_path in self.epubs if epub_path.name == self.table[n]["Filename"]][0]
+        self.epub = EPUB(epub_path)
+        logger.info(f"Selected {epub_path.name}")
+        return self.epub
+    

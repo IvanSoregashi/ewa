@@ -3,17 +3,22 @@ from rich.console import Console
 from rich.table import Table
 import shutil
 
-def print_table(data: list[dict[str, Any]], title: str = None) -> None:
+def print_table(data: list[dict[str, Any]], 
+                title: str = None,
+                enum: bool = True) -> None:
     """
     Print a list of dictionaries as a pretty table.
     
     Args:
         data: List of dictionaries where each dict represents a row
         title: Optional title for the table
+        enum: Optional boolean to enable enumeration of the table
     """
     if not data:
         return
-
+    if enum:
+        data = [{"N": i, **dt} for i, dt in enumerate(data)]
+    
     console = Console()
     table = Table(
         title=title,
