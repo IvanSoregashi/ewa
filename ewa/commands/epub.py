@@ -2,14 +2,14 @@ import logging
 import re
 from pathlib import Path
 import typer
-#from typer_shell import make_typer_shell
+from typer_shell import make_typer_shell
 from ewa.utils.table import print_table
 from ewa.use_cases.epub import EPUB, EPUBUseCases
 
 logger = logging.getLogger(__name__)
 
-app = typer.Typer(help="epub helper application")
-#app = make_typer_shell(prompt="epub> ")
+#app = typer.Typer(help="epub helper application")
+app = make_typer_shell(prompt="epub> ")
 
 
 @app.command()

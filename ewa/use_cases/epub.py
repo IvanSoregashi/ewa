@@ -50,7 +50,7 @@ class EPUB:
 
 
 class EPUBUseCases:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path = Path.cwd()) -> None:
         self.set_path(path)
         self.epubs = None
 

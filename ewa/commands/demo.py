@@ -22,15 +22,16 @@ def foobar(name: str = "Bob"):
 @app.command()
 def name(ctx: Context, name: str = typer.Argument("Bob")):
     "Name command"
-    print("Hello", name)
+    ctx.obj.name = name
+    print("Hello", ctx.obj.name)
 
 # Set both the shell and the inner shell to have the same default
 @app.command(hidden=True)
 @inner_app.command(hidden=True)
 def default(ctx: Context, line: str = "Bob"):
     "Name command wrapper for default"
-    name_ctx = Context(ctx.obj, ctx.params)
-    ctx.invoke(name, ctx=name_ctx, name=line)
+    print(f"Hello, {ctx.obj.name}")
+    ctx.invoke(name, ctx=ctx, name=line)
 
 if __name__ == "__main__":
     app() 

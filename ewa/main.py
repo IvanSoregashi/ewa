@@ -1,4 +1,5 @@
-from typer import Typer, Context
+from typer import Typer, Context, Option, Argument
+from pathlib import Path
 from typer_shell import make_typer_shell
 from ewa.commands import discover_commands
 from rich.console import Console
@@ -13,11 +14,25 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ewa")
 
-def launch(ctx: Context):
+app = Typer(help="EWA - Extensible CLI Framework")
+
+
+@app.callback()
+def callback(ctx: Context, debug: bool = Option(False, "--debug", "-d", help="Enable debug logging")):
+    if debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+#@app.command()
+#def ls(ctx: Context, recursive: bool = Option(False, "--recursive", "-r")):
+#    print(*map(lambda p: p.name, Path.cwd().glob("**/*" if recursive else "*")))
+
+def main():
     for name, command in discover_commands():
         app.add_typer(command, name=name)
-    print(f"Hello, world! and ctx: {ctx}")
+        #command.command("ls", help="List files in the current directory")(ls)
+    
+    app()
 
-app: Typer = make_typer_shell(prompt="ewa> ", launch=launch)
-
+if __name__ == "__main__":
+    main() 
 
