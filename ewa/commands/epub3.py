@@ -61,4 +61,14 @@ def chapters(ctx: Context):
     print_table(images_zip_info)
     #print_table(chapters, title="Chapters")
 
+@app.command()
+def images(ctx: Context):
+    """Show images of the selected file"""
+    use_cases: EPUBUseCases = ctx.obj
+    if not use_cases.epub:
+        logger.warning("No file selected")
+        return
+    images = use_cases.epub.get_images()
+    print_table(images, title="Images")
+
 

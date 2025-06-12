@@ -11,10 +11,9 @@ logger = logging.getLogger(__name__)
 
 
 class EPUB:
-    def __init__(self, path: Path):
-        self.set_path(path)
+    def __init__(self, book_path: Path):
+        self.set_path(book_path)
         self._book = None
-        self._epub_error = None
 
     @property
     def book(self):
@@ -33,45 +32,46 @@ class EPUB:
     def book(self, book: EpubBook):
         self._book = book
 
-    def set_path(self, path: Path):
-        if not path.is_file() or path.suffix.lower() != ".epub":
-            raise ValueError("Path is not a valid EPUB file")
-        self.path = path
+    def set_path(self, book_path: Path):
+        if not book_path.is_file() or book_path.suffix.lower() != ".epub":
+            raise ValueError("Path does not lead to an EPUB file")
+        self.book_path = book_path
+        self._epub_error = None
 
     def to_dict(self,
                 size: bool=False,
                 chapters: bool=False,
                 name: bool=False) -> dict:
-        dictionary = {"Filename": self.path.name}
-        #if name:
-        #    dictionary["Name"] = self.name()
+        dictionary = {"Filename": self.book_path.name}
+        if name:
+            dictionary["Name"] = self.name()
         if chapters:
-            dictionary["Chapters"] = re.search(r"(\d+\s*-\s*\d+)", self.path.name).group(1)
+            dictionary["Chapters"] = re.search(r"(\d+\s*-\s*\d+)", self.book_path.name).group(1)
         if size:
-            dictionary["Size"] = f"{self.path.stat().st_size / 1024 / 1024:.2f} Mb"
+            dictionary["Size"] = f"{self.book_path.stat().st_size / 1024 / 1024:.2f} Mb"
         return dictionary
 
     def read_epub(self):
-        self.book: EpubBook = read_epub(self.path)
+        self.book: EpubBook = read_epub(self.book_path)
 
     def get_chapters(self):
         return [chapter.file_name for chapter in self.book.get_items_of_type(ebooklib.ITEM_DOCUMENT)]
 
     def get_chapters_zip(self):
-        with zipfile.ZipFile(self.path) as zip_file:
+        with zipfile.ZipFile(self.book_path) as zip_file:
             return [file for file in zip_file.namelist() if file.startswith("EPUB/chapters/")]
 
     def get_images(self):
         return [image.file_name for image in self.book.get_items_of_type(ebooklib.ITEM_IMAGE)]
 
     def get_images_zip(self):
-        with zipfile.ZipFile(self.path) as zip_file:
+        with zipfile.ZipFile(self.book_path) as zip_file:
             return [file for file in zip_file.namelist() if file.startswith(("EPUB/Images/", "EPUB/images/"))]
     
     def get_images_zip_info(self):
         images = []
         total_size = 0
-        with zipfile.ZipFile(self.path) as zip_file:
+        with zipfile.ZipFile(self.book_path) as zip_file:
             for file_info in zip_file.infolist():
                 if file_info.filename.startswith(("EPUB/Images/", "EPUB/images/")):
                     size = f"{file_info.file_size / 1024 / 1024:.2f} Mb"
@@ -88,7 +88,7 @@ class EPUB:
         images = 0
         image_size = 0
         chapters = 0
-        with zipfile.ZipFile(self.path) as zip_file:
+        with zipfile.ZipFile(self.book_path) as zip_file:
             data = [(info.filename, info.file_size,) for info in zip_file.infolist()]
         for item in data:
             if item[0].startswith("EPUB/images/"):
@@ -110,7 +110,7 @@ class EPUB:
                 metadata = {"identifier": identifiers, "title": title,}
             return metadata
         except Exception as e:
-            logger.error(f"Error reading {self.path}: {e}\nTrying zipfile...")
+            logger.error(f"Error reading {self.book_path}: {e}\nTrying zipfile...")
         finally:
             logger.info(self.zip_info())
         
@@ -132,7 +132,7 @@ class EPUBUseCases:
 
     def find_epubs(self, recursive: bool = False) -> None:
         self.epubs = [file
-                for file in self.path.glob(f"{'**/' if recursive else ''}*.epub",
+                      for file in self.path.glob(f"{'**/' if recursive else ''}*.epub",
                                            case_sensitive=False)]
     
     def form_table(self, recursive: bool=False, size: bool=False, chapters: bool=False) -> list[dict]:
