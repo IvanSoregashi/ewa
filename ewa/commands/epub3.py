@@ -71,4 +71,9 @@ def images(ctx: Context):
     images = use_cases.epub.get_images()
     print_table(images, title="Images")
 
+@app.command()
+def analyze(ctx: Context):
+    """Analyze the selected file"""
+    use_cases: EPUBUseCases = ctx.obj
+    use_cases.analyze_all_epubs()
 

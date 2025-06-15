@@ -5,8 +5,10 @@ description = "CLI helper"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "beautifulsoup4>=4.13.4",
     "click<8.2.0",
     "ebooklib>=0.19",
+    "pillow>=11.2.1",
     "typer-shell>=0.1.12",
 ]
 

@@ -2,10 +2,16 @@ import logging
 import zipfile
 import json
 import re
+import tempfile
+import shutil
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import ebooklib
 from ebooklib.epub import EpubBook, read_epub
+from ewa.utils.zip import Zip
+from ewa.utils.image import resize_image
+from ewa.utils.parsing import update_image_references
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +89,7 @@ class EPUB:
         total_size = f"{total_size / 1024 / 1024:.2f} Mb"
         images.append({"name": "Total", "size": total_size})
         return images
+    
 
     def zip_info(self):
         images = 0
@@ -147,6 +154,47 @@ class EPUBUseCases:
             return None
         epub_path = [epub_path for epub_path in self.epubs if epub_path.name == self.table[n]["Filename"]][0]
         self.epub = EPUB(epub_path)
+        self.zip = Zip(epub_path)
         logger.info(f"Selected {epub_path.name}")
         return self.epub
+    
+    def resize_images_in_epub(self, size_threshold: int = 50 * 1024) -> None:
+        if self.epub is None:
+            logger.warning("No epub selected, select one first")
+            return
+        with tempfile.TemporaryDirectory() as tdir:
+            temp_dir = Path(tdir)
+            self.zip.extract_all(temp_dir)
+            with ThreadPoolExecutor() as executor:
+                metrics_tuple_futures = [executor.submit(resize_image, args=(filename,))
+                                         for filename in temp_dir.glob("EPUB/images/*")
+                                         if filename.suffix.lower() in ('.jpg', '.jpeg', '.png')
+                                         and filename.stat().st_size > size_threshold]
+                for future in as_completed(metrics_tuple_futures):
+                    try:
+                        old_metrics, new_metrics = future.result()
+                    except Exception as e:
+                        logger.error(f"Error resizing image {path}: {str(e)[:100]}")
+                        continue
+                    old_path = old_metrics['path']
+                    new_path = new_metrics['path']
+                    if old_path == new_path or new_path is None:
+                        continue
+                    executor.submit(update_image_references, temp_dir, old_path, new_path)
+
+            path = shutil.make_archive("archived_epub", "zip", temp_dir, verbose=True)
+
+
+        
+        
+    def analyze_all_epubs(self):
+        for epub in self.epubs:
+            print(f"Analyzing {epub.name}, {epub.stat().st_size / 1024 / 1024:.2f} Mb")
+            if epub.stat().st_size > 10000000:
+                for info in Zip(epub).iterate():
+                    if info.filename.endswith(".jpg") or info.filename.endswith(".png"):
+                        if "cover" in info.filename.lower():
+                            print(f"cover {info.filename} is too big with {info.file_size / 1024 / 1024:.2f} Mb")
+                        elif info.file_size > 1000000:
+                            print(f"file {info.filename} is too big with {info.file_size / 1024 / 1024:.2f} Mb")
     
