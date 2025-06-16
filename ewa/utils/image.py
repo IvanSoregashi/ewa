@@ -33,7 +33,6 @@ def resize_image(image_path: Path, max_width: int = 1080, max_height: int = None
     except Exception as e:
         logger.error(f"Error resizing image {image_path}: {str(e)[:100]}")
         raise
-    
 
 
 def calculate_dimensions(image: Image.Image, max_width: int = 1080, max_height: int = None) -> tuple[tuple[int, int], tuple[int, int]]:
@@ -53,10 +52,8 @@ def calculate_dimensions(image: Image.Image, max_width: int = 1080, max_height: 
 def is_convert_needed(image: Image.Image) -> bool:
     if image.mode == 'RGBA':
         no_transparency = image.getextrema()[3][0] == 255
-        logger.warning(f"Image {image.filename} is RGBA, transparency: {no_transparency}")
         return no_transparency
     if image.mode == 'RGB':
-        logger.warning(f"Image {image.filename} is RGB, return True for Convert to JPG")
         return True
     return False
 
@@ -76,7 +73,6 @@ def save_image(image: Image.Image, path: Path, quality) -> Path:
 
 
 def image_metrics(image: Image.Image, path: Path) -> dict:
-    filename = path
     size = path.stat().st_size
     return {
         'path': path,
