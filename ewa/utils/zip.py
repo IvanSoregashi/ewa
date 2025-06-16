@@ -2,7 +2,7 @@ import logging
 import time
 from pathlib import Path
 from typing import Any
-from zipfile import ZipFile
+from zipfile import ZipFile, ZIP_DEFLATED, ZIP_STORED
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,7 @@ class Zip:
                 #    logger.error("Zip file is corrupted")
         except Exception as e:
             logger.error(f"Error confirming path: {e}")
+
     
     def extract_all(self, path: Path):
         """Extract all files from the zip file to the given path"""

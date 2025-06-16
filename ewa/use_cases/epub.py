@@ -11,7 +11,7 @@ import ebooklib
 from ebooklib.epub import EpubBook, read_epub
 from ewa.utils.zip import Zip
 from ewa.utils.image import resize_image
-from ewa.utils.parsing import update_image_references_in_directory, update_image_references_in_file
+from ewa.utils.parsing import check_references
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,21 @@ class EPUB:
     def __init__(self, book_path: Path):
         self.set_path(book_path)
         self._book = None
+
+    @classmethod
+    def archive_directory(cls, source_dir: Path, epub_path: Path, skip_list: list[str] = []) -> 'EPUB':
+        with zipfile.ZipFile(epub_path, "w") as zipf:
+            mimetype_file = source_dir / "mimetype"
+            if mimetype_file.exists():
+                zipf.write(mimetype_file, arcname="mimetype", compress_type=zipfile.ZIP_STORED)
+            else:
+                raise FileNotFoundError("Missing required 'mimetype' file for EPUB.")
+
+            for file in source_dir.rglob("*"):
+                if file.is_file() and file.name != "mimetype" and file.name not in skip_list:
+                    arcname = file.relative_to(source_dir)
+                    zipf.write(file, arcname=arcname, compress_type=zipfile.ZIP_DEFLATED)
+        return cls(epub_path)
 
     @property
     def book(self):
@@ -89,7 +104,6 @@ class EPUB:
         total_size = f"{total_size / 1024 / 1024:.2f} Mb"
         images.append({"name": "Total", "size": total_size})
         return images
-    
 
     def zip_info(self):
         images = 0
@@ -120,16 +134,23 @@ class EPUB:
             logger.error(f"Error reading {self.book_path}: {e}\nTrying zipfile...")
         finally:
             logger.info(self.zip_info())
-        
-
 
 
 class EPUBUseCases:
     def __init__(self, path: Path = Path.cwd()) -> None:
         self.set_path(path)
+        self._setup_dirs()
         self.epubs = None
         self.table = None
         self.epub = None
+
+    def _setup_dirs(self):
+        self.USER_EPUB_DIR = Path("~/Downloads/EPUB").expanduser().absolute()
+        self.QUARANTINE_DIR = self.USER_EPUB_DIR / "Quarantine"
+        self.RESIZED_DIR = self.USER_EPUB_DIR / "Resized"
+
+        self.QUARANTINE_DIR.mkdir(parents=True, exist_ok=True)
+        self.RESIZED_DIR.mkdir(parents=True, exist_ok=True)
 
     def set_path(self, path: Path) -> None:
         path = Path(path)
@@ -140,7 +161,7 @@ class EPUBUseCases:
     def find_epubs(self, recursive: bool = False) -> None:
         self.epubs = [file
                       for file in self.path.glob(f"{'**/' if recursive else ''}*.epub",
-                                           case_sensitive=False)]
+                                                case_sensitive=False)]
     
     def form_table(self, recursive: bool=False, size: bool=False, chapters: bool=False) -> list[dict]:
         if self.epubs is None:
@@ -158,16 +179,16 @@ class EPUBUseCases:
         logger.info(f"Selected {epub_path.name}")
         return self.epub
     
-    def resize_images_in_epub(self, path: Path = None, size_threshold: int = 50 * 1024) -> None:
-        if self.epub is None and path is None:
+    def resize_images_in_epub(self, original_path: Path = None, size_threshold: int = 50 * 1024) -> None:
+        if self.epub is None and original_path is None:
             logger.error("No epub selected, select one first")
             return
         
-        if path is None:
-            path = self.epub.book_path
+        if original_path is None:
+            original_path = self.epub.book_path
             zip = self.zip
         else:
-            zip = Zip(path)
+            zip = Zip(original_path)
 
         with tempfile.TemporaryDirectory() as tdir:
             temp_dir = Path(tdir)
@@ -187,25 +208,30 @@ class EPUBUseCases:
 
             with ThreadPoolExecutor() as executor:
                 metrics_tuples = executor.map(resize_image, illustration_paths)
+            check_references(chapter_paths, metrics_tuples)
 
-                path_pairs = [(old_metrics['path'], new_metrics['path'])
-                              for old_metrics, new_metrics in metrics_tuples
-                              if new_metrics['path'] and old_metrics['path'] != new_metrics['path']]
-                
-                references, _ = wait(
-                    [executor.submit(update_image_references_in_file, filename, path_pairs)
-                     for filename in chapter_paths]
-                )
 
-                predicate = all([future.result() for future in references])
-                if predicate:
-                    logger.warning("All image references updated")
-                else:
-                    logger.error("Some image references were not updated")
+            
+            references, _ = wait(
+                [executor.submit(update_image_references_in_file, filename, path_pairs)
+                    for filename in chapter_paths]
+            )
 
-            new_epub_path = shutil.make_archive("archived_epub", "zip", temp_dir, verbose=True)
-            path = self.epub.book_path.with_suffix(".new.epub")
-            Path(new_epub_path).rename(path)
+            
+
+            predicate = all([future.result() for future in references])
+            
+            if predicate:
+                logger.warning("All image references updated")
+                EPUB.archive_directory(temp_dir, self.RESIZED_DIR / original_path.name)
+                #new_epub_path = shutil.make_archive("archived_epub", "zip", temp_dir, verbose=True)
+                #renamed_path = self.epub.book_path.with_suffix(".new.epub")
+                #Path(new_epub_path).rename(renamed_path)
+            else:
+                logger.error("Some image references were not updated")
+                move_epub_to_the_quarantine(original_path)
+
+            
         
         
     def analyze_all_epubs(self):
