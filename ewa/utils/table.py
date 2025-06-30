@@ -4,7 +4,7 @@ from rich.table import Table
 import shutil
 
 def print_table(data: list[dict[str, Any]], 
-                title: str = None,
+                title: str | None = None,
                 enum: bool = True) -> None:
     """
     Print a list of dictionaries as a pretty table.
@@ -42,7 +42,7 @@ def print_table(data: list[dict[str, Any]],
         
         widest_col = max(col_widths.items(), key=lambda x: x[1])
         if len(columns) > 1:
-            other_cols_avg = sum(w for c, w in col_widths.items() if c != widest_col[0]) / (len(columns) - 1)
+            other_cols_avg = sum(w for c, w in col_widths.items() if c != widest_col[0]) // (len(columns) - 1)
         else:
             other_cols_avg = 0
         

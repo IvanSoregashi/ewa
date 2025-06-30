@@ -3,15 +3,14 @@ import zipfile
 import json
 import re
 import tempfile
-import shutil
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import ThreadPoolExecutor
 
 import ebooklib
 from ebooklib.epub import EpubBook, read_epub
 from ewa.utils.zip import Zip
 from ewa.utils.image import resize_image
-from ewa.utils.parsing import check_references
+from ewa.utils.parsing import update_image_references_in_file
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +63,8 @@ class EPUB:
                 chapters: bool=False,
                 name: bool=False) -> dict:
         dictionary = {"Filename": self.book_path.name}
-        if name:
-            dictionary["Name"] = self.name()
+        #if name:
+        #    dictionary["Name"] = self.name()
         if chapters:
             dictionary["Chapters"] = re.search(r"(\d+\s*-\s*\d+)", self.book_path.name).group(1)
         if size:
@@ -141,16 +140,66 @@ class EPUBUseCases:
         self.set_path(path)
         self._setup_dirs()
         self.epubs = None
-        self.table = None
-        self.epub = None
+        self.table: list[dict] | None = None
+        self.epub: EPUB | None = None
+        self.zip: Zip | None = None
 
     def _setup_dirs(self):
         self.USER_EPUB_DIR = Path("~/Downloads/EPUB").expanduser().absolute()
         self.QUARANTINE_DIR = self.USER_EPUB_DIR / "Quarantine"
         self.RESIZED_DIR = self.USER_EPUB_DIR / "Resized"
+        self.UNCHANGED_DIR = self.USER_EPUB_DIR / "Unchanged"
 
         self.QUARANTINE_DIR.mkdir(parents=True, exist_ok=True)
         self.RESIZED_DIR.mkdir(parents=True, exist_ok=True)
+        self.UNCHANGED_DIR.mkdir(parents=True, exist_ok=True)
+
+    def _move_epub_to_unchanged_directory(self, epub_path: Path):
+        epub_path.rename(self.UNCHANGED_DIR / epub_path.name)
+
+    def _move_epub_to_quarantine(self, epub_path: Path):
+        epub_path.rename(self.QUARANTINE_DIR / epub_path.name)
+
+    def _save_epub_to_resized_directory(self, temp_dir: Path, source_path: Path):
+        target_path = self.RESIZED_DIR / source_path.name
+        epub = EPUB.archive_directory(temp_dir, target_path)
+        return target_path
+    
+    @staticmethod
+    def _resize_images_in_epub_temp_dir(temp_dir: Path, size_threshold: int):
+        illustration_paths = [
+                filename
+                for filename in temp_dir.glob("EPUB/images/*")
+                if filename.suffix.lower() in ('.jpg', '.jpeg', '.png')
+                and filename.stat().st_size > size_threshold
+            ]
+        
+        with ThreadPoolExecutor() as executor:
+            return executor.map(resize_image, illustration_paths)
+
+    @staticmethod
+    def _update_chapter_references(temp_dir: Path, metrics_tuples: list[tuple[dict, dict]]) -> list[dict]:
+        """
+        Check if image references are to be updated in chapter files.
+        Returns a list of metrics for each chapter file.
+        """
+
+        update_paths = [
+            (old_metrics['path'], new_metrics['path'])
+            for old_metrics, new_metrics in metrics_tuples
+            if new_metrics['path']
+            and old_metrics['success']
+            and new_metrics['success']
+            and old_metrics['file_size'] != new_metrics['file_size']
+        ]
+
+        chapter_paths = [
+            (filename, update_paths)
+            for filename in temp_dir.glob("EPUB/chapters/*.*html")
+        ]
+        
+        with ThreadPoolExecutor() as executor:
+            return executor.map(update_image_references_in_file, chapter_paths)
 
     def set_path(self, path: Path) -> None:
         path = Path(path)
@@ -179,7 +228,15 @@ class EPUBUseCases:
         logger.info(f"Selected {epub_path.name}")
         return self.epub
     
-    def resize_images_in_epub(self, original_path: Path = None, size_threshold: int = 50 * 1024) -> None:
+    def resize_and_save_epub(self, original_path: Path = None, size_threshold: int = 50 * 1024) -> None:
+        """
+        Resize images in epub.
+        If original_path is not provided, the current selected epub is used.
+        If size_threshold is not provided, the default is 50 Mb.
+        Resized epub is saved in RESIZED_DIR.
+        Unused images are removed.
+        If some image references were not updated, the epub is moved to QUARANTINE_DIR.
+        """
         if self.epub is None and original_path is None:
             logger.error("No epub selected, select one first")
             return
@@ -194,46 +251,25 @@ class EPUBUseCases:
             temp_dir = Path(tdir)
             zip.extract_all(temp_dir)
 
-            illustration_paths = [
-                filename
-                for filename in temp_dir.glob("EPUB/images/*")
-                if filename.suffix.lower() in ('.jpg', '.jpeg', '.png')
-                and filename.stat().st_size > size_threshold
-            ]
+            image_metric_pairs = self._resize_images_in_epub_temp_dir(temp_dir, size_threshold)
+            formatted_image_metrics = format_image_metrics(image_metric_pairs)
 
-            chapter_paths = [
-                filename
-                for filename in temp_dir.glob("EPUB/chapters/*.*html")
-            ]
+            print(json.dumps(formatted_image_metrics, indent=4))
+            if not formatted_image_metrics['changed']:
+                logger.warning(f"No images were resized, moving {original_path.name} to UNCHANGED_DIR")
+                self._move_epub_to_unchanged_directory(original_path)
+                return
 
-            with ThreadPoolExecutor() as executor:
-                metrics_tuples = executor.map(resize_image, illustration_paths)
-            check_references(chapter_paths, metrics_tuples)
+            chapter_metrics = self._update_chapter_references(temp_dir, image_metric_pairs)
 
-
-            
-            references, _ = wait(
-                [executor.submit(update_image_references_in_file, filename, path_pairs)
-                    for filename in chapter_paths]
-            )
-
-            
-
-            predicate = all([future.result() for future in references])
-            
-            if predicate:
+            if all([metric['success'] for metric in chapter_metrics]):
                 logger.warning("All image references updated")
-                EPUB.archive_directory(temp_dir, self.RESIZED_DIR / original_path.name)
-                #new_epub_path = shutil.make_archive("archived_epub", "zip", temp_dir, verbose=True)
-                #renamed_path = self.epub.book_path.with_suffix(".new.epub")
-                #Path(new_epub_path).rename(renamed_path)
+                remove_unused_images(chapter_metrics)
+                self._save_epub_to_resized_directory(temp_dir, original_path)
             else:
                 logger.error("Some image references were not updated")
-                move_epub_to_the_quarantine(original_path)
+                self._move_epub_to_quarantine(original_path)
 
-            
-        
-        
     def analyze_all_epubs(self):
         for epub in self.epubs:
             print(f"Analyzing {epub.name}, {epub.stat().st_size / 1024 / 1024:.2f} Mb")
@@ -245,3 +281,72 @@ class EPUBUseCases:
                         elif info.file_size > 1000000:
                             print(f"file {info.filename} is too big with {info.file_size / 1024 / 1024:.2f} Mb")
     
+
+def remove_unused_images(metrics: list[dict]) -> bool:
+    for metric in metrics:
+        for path in metric['for_removal']:
+            logger.info(f"Removing {path.name}")
+            if path.exists():
+                try:
+                    path.unlink()
+                except Exception as e:
+                    logger.error(f"Error removing {path.name}: {e}")
+                    return False
+            else:
+                logger.warning(f"File {path.name} does not exist")
+    return True
+
+
+def format_image_metrics(metric_pairs: list[tuple[dict, dict]]) -> dict:
+    """
+    Format image metrics.
+    Returns a dictionary with the total old size, total new size, unchanged images, changed images, success, and error.
+    """
+    total_old_size = 0
+    total_new_size = 0
+    unchanged = []
+    changed = []
+    success = True
+    error = []
+    try:
+        for old_metric, new_metric in metric_pairs:
+            if old_metric == new_metric:
+                if old_metric['success'] and new_metric['success']:
+                    unchanged.append(f"{old_metric['path'].name:<20}: {old_metric['mode']} {new_metric['file_size'] / 1024 / 1024:.2f}")
+                else:
+                    error.append(f"ERROR {old_metric['path'].name:<20}: {old_metric['error']}")
+                continue
+            if old_metric['mode'] != new_metric['mode']:
+                mode = f"{old_metric['mode']} -> {new_metric['mode']}"
+            else:
+                mode = f"{old_metric['mode']}"
+            if old_metric['size'] != new_metric['size']:
+                size = f"width {round(new_metric['size'][0] / old_metric['size'][0] * 100)} %"
+            else:
+                size = f"{old_metric['size'][0]}x{old_metric['size'][1]}"
+            if old_metric['file_size'] != new_metric['file_size']:
+                filesize = f"filesize {old_metric['file_size'] / 1024 / 1024:.2f} -> {new_metric['file_size'] / 1024 / 1024:.2f} Mb ({round(new_metric['file_size'] / old_metric['file_size'] * 100)} %)"
+            else:
+                filesize = f"filesize {old_metric['file_size'] / 1024 / 1024:.2f} Mb"
+            changed.append(f"{old_metric['path'].name:<20}: {mode:<5} {size:<12} {filesize}")
+            total_old_size += old_metric['file_size']
+            total_new_size += new_metric['file_size']
+    except Exception as e:
+        logger.error(f"Error when reading image metric pairs: {e}")
+        success = False
+    return {
+        "success": success,
+        "total_old_size": total_old_size,
+        "total_new_size": total_new_size,
+        "unchanged": unchanged,
+        "changed": changed,
+        "error": error
+    }
+
+
+def format_chapter_metrics_success(metrics: list[dict]) -> dict:
+    pass
+
+
+def format_chapter_metrics_failure(metrics: list[dict]) -> dict:
+    pass
