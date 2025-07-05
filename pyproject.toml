@@ -9,6 +9,7 @@ dependencies = [
     "click<8.2.0",
     "ebooklib>=0.19",
     "lxml>=5.4.0",
+    "pandas>=2.3.0",
     "pillow>=11.2.1",
     "typer-shell>=0.1.12",
 ]

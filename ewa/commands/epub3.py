@@ -77,3 +77,8 @@ def analyze(ctx: Context):
     use_cases: EPUBUseCases = ctx.obj
     use_cases.analyze_all_epubs()
 
+@app.command()
+def resize(ctx: Context):
+    """Resize the selected file"""
+    use_cases: EPUBUseCases = ctx.obj
+    use_cases.resize_and_save_epub()

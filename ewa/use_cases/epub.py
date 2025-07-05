@@ -175,7 +175,7 @@ class EPUBUseCases:
             ]
         
         with ThreadPoolExecutor() as executor:
-            return executor.map(resize_image, illustration_paths)
+            return list(executor.map(resize_image, illustration_paths))
 
     @staticmethod
     def _update_chapter_references(temp_dir: Path, metrics_tuples: list[tuple[dict, dict]]) -> list[dict]:
@@ -199,7 +199,7 @@ class EPUBUseCases:
         ]
         
         with ThreadPoolExecutor() as executor:
-            return executor.map(update_image_references_in_file, chapter_paths)
+            return list(executor.map(update_image_references_in_file, chapter_paths))
 
     def set_path(self, path: Path) -> None:
         path = Path(path)
@@ -252,6 +252,7 @@ class EPUBUseCases:
             zip.extract_all(temp_dir)
 
             image_metric_pairs = self._resize_images_in_epub_temp_dir(temp_dir, size_threshold)
+            
             formatted_image_metrics = format_image_metrics(image_metric_pairs)
 
             print(json.dumps(formatted_image_metrics, indent=4))
@@ -283,6 +284,7 @@ class EPUBUseCases:
     
 
 def remove_unused_images(metrics: list[dict]) -> bool:
+    logger.info(f"Removing unused images, {[metric['for_removal'] for metric in metrics]}")
     for metric in metrics:
         for path in metric['for_removal']:
             logger.info(f"Removing {path.name}")

@@ -1,6 +1,7 @@
 import json
 import logging
 import tempfile
+import pandas as pd
 from typing import Any
 from pathlib import Path
 from zipfile import ZipFile
@@ -30,6 +31,28 @@ def setup_dirs() -> tuple[Path, Path, Path]:
     return quarantine_dir, resized_dir, unchanged_dir
 
 
+def directory_file_statistics(path: Path):
+    return [
+        {
+            "path": filepath,
+            "size": filepath.stat().st_size,
+            "suffix": filepath.suffix.lower(),
+            "name": filepath.stem,
+            "directory": filepath.parent.relative_to(path)
+        } 
+        for filepath in path.rglob("*")
+    ]
+
+
+def analyze_file_statistic(path: Path | None = None, data: list[dict] | None = None):
+    if not path and not not data:
+        raise ValueError("analyze_file_statistic is called without argument")
+    if path:
+        data = directory_file_statistics(path)
+    df = pd.DataFrame(data)
+    total_size = df["size"].sum()
+
+
 def resize_images_in_epub(epub_path: Path, size_threshold: int = 50 * 1024) -> None:
     """
     Resize images in an epub.
@@ -45,6 +68,9 @@ def resize_images_in_epub(epub_path: Path, size_threshold: int = 50 * 1024) -> N
         temp_dir = Path(tdir)
         with ZipFile(epub_path) as zip_file:
             zip_file.extractall(temp_dir)
+
+        stats = directory_file_statistics(temp_dir, images={"glob": "EPUB/images/*", "suffix": ('.jpg', '.jpeg', '.png')}, chapters={"glob": "EPUB/chapters/*.*html"})
+        print(json.dumps(stats, indent=4))
         
         # get the illustration paths
         illustration_paths = [
@@ -82,13 +108,13 @@ def resize_images_in_epub(epub_path: Path, size_threshold: int = 50 * 1024) -> N
         
         chapter_metrics = list(executor.map(update_image_references_in_file, chapter_paths))
 
-        if all([metric['success'] for metric in chapter_metrics]):
-            logger.warning("All image references updated")
-            remove_unused_images(chapter_metrics)
-            self._save_epub_to_resized_directory(temp_dir, original_path)
-        else:
-            logger.error("Some image references were not updated")
-            self._move_epub_to_quarantine(original_path)
+        #if all([metric['success'] for metric in chapter_metrics]):
+        #    logger.warning("All image references updated")
+        #    remove_unused_images(chapter_metrics)
+        #    self._save_epub_to_resized_directory(temp_dir, original_path)
+        #else:
+        #    logger.error("Some image references were not updated")
+        #    self._move_epub_to_quarantine(original_path)
 
 
 
