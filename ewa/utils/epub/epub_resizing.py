@@ -45,12 +45,38 @@ def directory_file_statistics(path: Path):
 
 
 def analyze_file_statistic(path: Path | None = None, data: list[dict] | None = None):
-    if not path and not not data:
+    if not path and not data:
         raise ValueError("analyze_file_statistic is called without argument")
     if path:
         data = directory_file_statistics(path)
     df = pd.DataFrame(data)
     total_size = df["size"].sum()
+    print(pd.DataFrame(df.groupby("suffix")["size"].sum().apply(lambda x: x / total_size * 100).round(2)))
+    print(pd.DataFrame(df.groupby("directory")["size"].sum().apply(lambda x: x / total_size * 100).round(2)))
+
+
+def epub_directory_statistics(path: Path | None = None, data: list[dict] | None = None, size_threshold: int = 50 * 1024) -> tuple[list[dict], list[Path], list[Path]]:
+    """
+    Returns a tuple of the data, image paths, and chapter paths.
+    """
+    if not path and not data:
+        raise ValueError("epub_directory_statistics is called without argument")
+    if path:
+        data = directory_file_statistics(path)
+    image_paths = [
+        datum["path"]
+        for datum in data
+        if datum["suffix"] in ('.jpg', '.jpeg', '.png')
+        and datum["size"] > size_threshold
+        and datum["directory"] == Path("EPUB/images")
+        ]
+    chapter_paths = [
+        datum["path"]
+        for datum in data
+        if datum["suffix"] in ('.html', '.xhtml')
+        and datum["directory"] == Path("EPUB/chapters")
+        ]
+    return image_paths, chapter_paths
 
 
 def resize_images_in_epub(epub_path: Path, size_threshold: int = 50 * 1024) -> None:
@@ -61,27 +87,17 @@ def resize_images_in_epub(epub_path: Path, size_threshold: int = 50 * 1024) -> N
     if not epub_path.exists() and epub_path.suffix.lower() != '.epub':
         raise FileNotFoundError(f"EPUB file not found: {epub_path}")
 
-    quarantine_dir, resized_dir, unchanged_dir = setup_dirs()
-
-    # check the path
     with tempfile.TemporaryDirectory() as tdir, ThreadPoolExecutor(max_workers=50) as executor:
         temp_dir = Path(tdir)
+        quarantine_dir, resized_dir, unchanged_dir = setup_dirs()
+
         with ZipFile(epub_path) as zip_file:
             zip_file.extractall(temp_dir)
 
-        stats = directory_file_statistics(temp_dir, images={"glob": "EPUB/images/*", "suffix": ('.jpg', '.jpeg', '.png')}, chapters={"glob": "EPUB/chapters/*.*html"})
-        print(json.dumps(stats, indent=4))
-        
-        # get the illustration paths
-        illustration_paths = [
-                filename
-                for filename in temp_dir.glob("EPUB/images/*")
-                if filename.suffix.lower() in ('.jpg', '.jpeg', '.png')
-                and filename.stat().st_size > size_threshold
-            ]
 
-        # resize the images
-        image_metric_pairs = list(executor.map(resize_image, illustration_paths))
+        stats, illustration_paths, chapter_paths = epub_directory_statistics(temp_dir, size_threshold)
+
+        resize_results = list(executor.map(resize_image, illustration_paths))
 
         # format the image metrics
         formatted_image_metrics = format_image_metrics(image_metric_pairs)
@@ -117,47 +133,68 @@ def resize_images_in_epub(epub_path: Path, size_threshold: int = 50 * 1024) -> N
         #    self._move_epub_to_quarantine(original_path)
 
 
-
-def resize_image(image_path: Path, max_width: int = 1080, max_height: int | None = None, quality: int = 80) -> tuple[dict, dict]:
+def resize_image(image_path: Path, max_width: int = 1080, max_height: int | None = None, quality: int = 80) -> dict:
     """
     Resize image.
-    Returns a tuple of old metrics and new metrics.
+    Returns a dictionary with the results
     """
-    new_path = None
     try:
         with Image.open(image_path) as image:
-            old_metrics = image_metrics(image, image_path)
+            original_size = image_path.stat().st_size
+            original_mode = image.mode
+            original_format = image_path.suffix.lower()
+
+            result = {}
+            result["original_path"] = image_path
+            result["original_size"] = original_size
+
             old_dimensions, new_dimensions = calculate_dimensions(image, max_width, max_height)
             resize = old_dimensions != new_dimensions
             convert = is_convert_needed(image)
 
             if resize:
                 image = image.resize(new_dimensions, Image.Resampling.LANCZOS)
+                result["resize"] = round(old_dimensions[0] * old_dimensions[1] / new_dimensions[0] * new_dimensions[1] * 100, 2)
+            else:
+                result["resize"] = 100
             
             if convert:
                 image = image.convert('RGB')
-
-            if resize or convert:
-                new_path = save_image(image, image_path, quality)                
+                result["convert"] = f"{original_mode} -> RGB"
             else:
-                new_path = image_path
+                result["convert"] = original_mode
 
-            new_metrics = image_metrics(image, new_path)
-            return old_metrics, new_metrics
+            if resize or convert or original_format in ('.jpg', '.jpeg'):
+                if original_format in ('.jpg', '.jpeg') or image.mode == 'RGB':
+                    new_path = image_path.with_suffix('.jpg')
+                    result["new_path"] = new_path
+                    image.save(new_path, optimize=True, quality=quality)
+                else:
+                    new_path = image_path
+                    result["new_path"] = new_path
+                    image.save(new_path, optimize=True)
+                
+                result["changed"] = True
+                result["success"] = True
+                result["error"] = None
+                
+                new_size = new_path.stat().st_size
+                compression = round(new_size / original_size * 100, 2)
+                result["compression"] = compression
+                result["savings"] = original_size - new_size
+                result["new_size"] = new_size
+            else:
+                result["new_path"] = None
+                result["success"] = True
+                result["error"] = None
+                result["changed"] = False
+
     except Exception as e:
-        logger.error(f"Error resizing image {image_path}: {str(e)[:100]}")
-        if new_path and new_path.exists():
-            new_path.unlink()
-        return {
-            'success': False,
-            'error': e,
-            'path': image_path
-        }, {
-            'success': False,
-            'error': e,
-            'path': image_path
-        }
+        result["success"] = False
+        result["error"] = e
+        result["changed"] = False
 
+    return result
 
 
 def remove_unused_images(metrics: list[dict]) -> bool:
@@ -230,6 +267,7 @@ def format_chapter_metrics_success(metrics: list[dict]) -> dict:
 def format_chapter_metrics_failure(metrics: list[dict]) -> dict:
     pass
 
+
 def calculate_dimensions(image: Image.Image, max_width: int = 1080, max_height: int | None = None) -> tuple[tuple[int, int], tuple[int, int]]:
     width, height = image.size
     new_width, new_height = width, height
@@ -248,39 +286,13 @@ def is_convert_needed(image: Image.Image) -> bool:
     if image.mode == 'RGBA':
         extrema = image.getextrema()
         if len(extrema) != 4:
-            return False
+            logger.warning(f"Image {image.path} of mode {image.mode} has xtrema {extrema}, converting to RGB")
+            return True
         no_transparency = extrema[3][0] == 255
         return no_transparency
     if image.mode == 'RGB':
         return True
     return False
-
-
-def save_image(image: Image.Image, path: Path, quality) -> Path:
-    if path.suffix.lower() in ('.jpg', '.jpeg'):
-        image.save(path, optimize=True, quality=quality)
-        return path
-    if image.mode == 'RGB':
-        new_path = path.with_stem(path.stem).with_suffix('.jpg')
-        image.save(new_path, optimize=True, quality=quality)
-        return new_path
-    if path.suffix.lower() == '.png':
-        image.save(path, optimize=True)
-        return path
-    raise ValueError(f"Unsupported image format: {path.suffix}, mode: {image.mode}, path: {path}")
-
-
-def image_metrics(image: Image.Image, path: Path) -> dict:
-    size = path.stat().st_size
-    return {
-        'path': path,
-        'file_size': size,
-        'size': image.size,
-        'mode': image.mode,
-        'format': path.suffix.lower(), 
-        'success': True
-    }
-
 
 
 
