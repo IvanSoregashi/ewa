@@ -1,4 +1,3 @@
-import json
 import logging
 import tempfile
 import pandas as pd
@@ -16,152 +15,13 @@ from bs4 import BeautifulSoup
 from bs4 import XMLParsedAsHTMLWarning
 import warnings
 
-from ewa.utils.epub.epub_data import FileStat, StatReport, ImageResizeStats, ImageResizeReport
+from ewa.utils.epub.epub_state import EpubState, FileStat, StatReport
+from ewa.utils.epub.image_resize import ImageProcessor
+from ewa.utils.epub.chapter_processor import ImageResizeReport
+from ewa.utils.epub.chapter_processor import compress_dir_into_epub, epub_target_directories
 
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class FileStat:
-    path: Path
-    size: int
-    suffix: str
-    name: str
-    directory: Path
-
-
-@dataclass
-class StatReport:
-    name: str
-    files: int
-    size: float
-    percentage: float
-
-
-@dataclass
-class ImageResizeStats:
-    original_path: Path
-    original_size: int
-    original_mode: str
-    original_dimensions: tuple[int, int]
-    extrema: tuple = None
-    new_path: Path = None
-    new_size: int = 0
-    new_mode: str = None
-    new_dimensions: tuple[int, int] = None
-    success: bool = True
-    error: str = None
-    total_references: int = 0
-    updated_references: int = 0
-
-    @property
-    def resize(self) -> float:
-        if self.original_dimensions and self.new_dimensions:
-            return round((self.original_dimensions[0] * self.original_dimensions[1]) / (self.new_dimensions[0] * self.new_dimensions[1]) * 100, 2)
-        return 100
-
-    @property
-    def compression(self) -> float:
-        return round(self.new_size / self.original_size * 100, 2)
-
-    @property
-    def savings(self) -> int:
-        return self.original_size - self.new_size
-
-    @property
-    def to_resize(self) -> bool:
-        return self.original_dimensions != self.new_dimensions
-    
-    @property
-    def to_convert(self) -> bool:
-        return self.new_mode == 'RGB'
-    
-    @property
-    def to_save(self) -> bool:
-        return self.to_resize or self.to_convert
-    
-    @property
-    def renamed(self) -> bool:
-        return self.new_path != self.original_path and self.new_path is not None
-    
-    @property
-    def references_update_status(self) -> str:
-        if self.total_references == 0:
-            return "orphaned"
-        if self.updated_references == 0:
-            return "failed"
-        if self.updated_references == self.total_references:
-            return "success"
-        return "partial"
-
-    @classmethod
-    def from_image(cls, image_path: Path, image: Image.Image) -> "ImageResizeStats":
-        return cls(
-            original_path=image_path,
-            original_size=image_path.stat().st_size,
-            original_mode=image.mode,
-            original_dimensions=image.size,
-            extrema=image.getextrema(),
-        )
-    
-    def __post_init__(self) -> None:
-        self.calculate_new_mode()
-        
-    def __hash__(self):
-        return hash(self.original_path)
-    
-    def __eq__(self, other):
-        if not isinstance(other, ImageResizeStats):
-            return False
-        return self.original_path == other.original_path
-
-    def calculate_new_dimensions(self, max_width: int = 1080, max_height: int = None) -> None:
-        width, height = self.original_dimensions
-        new_width, new_height = width, height
-        if width > max_width:
-            ratio = max_width / width
-            new_width = max_width
-            new_height = int(height * ratio)
-        if max_height is not None and new_height > max_height:
-            ratio = max_height / new_height
-            new_width = int(width * ratio)
-            new_height = max_height
-        self.new_dimensions = (new_width, new_height)
-
-    def calculate_new_mode(self) -> None:
-        if self.original_mode == 'RGBA':
-            assert len(self.extrema) == 4, f"Image of mode RGBA has {self.extrema} extrema"
-            self.new_mode = 'RGB' if self.extrema[3][0] == 255 else 'RGBA'
-        else:
-            self.new_mode = 'RGB' if self.original_mode == 'RGB' else self.original_mode
-        self.new_path = self.original_path.with_suffix('.jpg') if self.new_mode == 'RGB' else self.original_path
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "path": str(self.original_path),
-            "old_mode": self.original_mode,
-            "new_mode": self.new_mode,
-            "resize": self.resize,
-            "compression": self.compression,
-            "renamed": self.renamed,
-            "references": self.references_update_status,
-            "error": self.error,
-        }
-
-
-@dataclass
-class ImageResizeReport:
-    name: str
-    files: int
-    large_files: int
-    changed_files: int
-    referenced_files: int
-    orphaned_files: int
-    original_size_mb: float
-    new_size_mb: float
-    compression_percent: float
-
 
 @dataclass
 class EpubContentFile:
@@ -175,18 +35,8 @@ class EpubContentFile:
 
 
 @dataclass
-class EpubStreamState:
+class EpubStreamState(EpubState):
     """State for streaming EPUB processing"""
-    epub_path: Path
-    temp_dir: Path | None = None
-    output_path: Path | None = None
-    size_threshold: int = 50 * 1024
-    max_width: int = 1080
-    quality: int = 80
-    image_workers: int = 50
-    chapter_workers: int = 10
-    file_stats: list[FileStat] = field(default_factory=list)
-    resize_results: list[ImageResizeStats] = field(default_factory=list)
     stream: 'EpubStream' = None
 
 
@@ -278,7 +128,7 @@ class EpubStreamProcessor:
     def process_images(self, size_threshold: int | None = None,
                       max_width: int = 1080, 
                       quality: int = 80,
-                      max_workers: int = 50) -> list[ImageResizeStats]:
+                      max_workers: int = 50) -> list[ImageProcessor]:
         """Process images using streaming operations"""
         if not self._state.stream:
             raise ValueError("Must call extract() first")
@@ -287,7 +137,7 @@ class EpubStreamProcessor:
             self._state.size_threshold = size_threshold
         
         # Demonstrate true streaming: chain operations lazily
-        self._state.resize_results = (
+        self._state.generate_image_processors = (
             self._state.stream
             .filter(is_in_images_dir)           # Filter to images directory
             .filter(is_image)                   # Filter to image files
@@ -300,17 +150,17 @@ class EpubStreamProcessor:
             )
         )
         
-        if not self._state.resize_results:
+        if not self._state.generate_image_processors:
             logger.warning("process_images: no image files found")
         
-        return self._state.resize_results
+        return self._state.generate_image_processors
     
     def process_chapters(self, max_workers: int = 10) -> None:
         """Process chapters using streaming operations"""
         if not self._state.stream:
             raise ValueError("Must call extract() first")
         
-        if not self._state.resize_results:
+        if not self._state.generate_image_processors:
             logger.warning("process_chapters: no resize results found")
             return
         
@@ -323,7 +173,7 @@ class EpubStreamProcessor:
         
         # Process chapters in parallel
         lock = Lock()
-        chapter_tasks = [(epub_content_file.path, self._state.resize_results, lock)
+        chapter_tasks = [(epub_content_file.path, self._state.generate_image_processors, lock)
                          for epub_content_file in chapter_stream.files]
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -335,7 +185,7 @@ class EpubStreamProcessor:
         if success:
             try:
                 self._state.output_path = target_path / self._state.epub_path.name
-                self._archive_directory(self._state.temp_dir, self._state.output_path)
+                compress_dir_into_epub(self._state.temp_dir, self._state.output_path)
                 return self._state.output_path
             except Exception as e:
                 logger.error(f"Failed to archive directory: {e}")
@@ -353,12 +203,12 @@ class EpubStreamProcessor:
         # Use streaming to analyze results
         error_stream = (
             self._state.stream
-            .filter(lambda f: any(r.error for r in self._state.resize_results if r.original_path == f.path))
+            .filter(lambda f: any(r.error for r in self._state.generate_image_processors if r.original_path == f.path))
         )
         
         errors = [
             result.error
-            for result in self._state.resize_results
+            for result in self._state.generate_image_processors
             if result.error
         ]
 
@@ -412,14 +262,14 @@ class EpubStreamProcessor:
             )
         }
     
-    def _resize_image(self, epub_content_file: EpubContentFile, max_width: int, quality: int, size_threshold: int) -> ImageResizeStats:
+    def _resize_image(self, epub_content_file: EpubContentFile, max_width: int, quality: int, size_threshold: int) -> ImageProcessor:
         """Resize a single image"""
         image_path = epub_content_file.path
         suffix = image_path.suffix.lower()
         size = image_path.stat().st_size
         
         if suffix not in ('.jpg', '.jpeg', '.png') or size < size_threshold:
-            return ImageResizeStats(
+            return ImageProcessor(
                 original_path=image_path,
                 original_size=size,
                 original_mode=None,
@@ -431,8 +281,8 @@ class EpubStreamProcessor:
 
         try:
             with Image.open(image_path) as image:
-                resize_stats = ImageResizeStats.from_image(image_path, image)
-                resize_stats.calculate_new_dimensions(max_width)
+                resize_stats = ImageProcessor.from_image(image_path, image)
+                resize_stats._calculate_new_dimensions(max_width)
                 if resize_stats.original_size < size_threshold:
                     resize_stats.success = False
                     resize_stats.error = f"Image is too small, skipping"
@@ -457,7 +307,7 @@ class EpubStreamProcessor:
 
         return resize_stats
     
-    def _update_chapter(self, data: tuple[Path, list[ImageResizeStats], Lock]) -> None:
+    def _update_chapter(self, data: tuple[Path, list[ImageProcessor], Lock]) -> None:
         """Update image references in a single chapter"""
         chapter_path, all_results, lock = data
         try:
@@ -490,7 +340,7 @@ class EpubStreamProcessor:
     
     def _remove_unused_images(self) -> tuple[bool, Path]:
         """Remove unused images and return target directory"""
-        quarantine_dir, resized_dir, unchanged_dir = self._setup_dirs()
+        quarantine_dir, resized_dir, unchanged_dir = epub_target_directories()
         images_to_remove = []
         
         for result in self.resize_results:
@@ -518,32 +368,7 @@ class EpubStreamProcessor:
                 return False, quarantine_dir
             
         return True, resized_dir
-    
-    def _setup_dirs(self) -> tuple[Path, Path, Path]:
-        """Setup output directories"""
-        user_epub_dir = Path("~/Downloads/EPUB").expanduser().absolute()
-        quarantine_dir = user_epub_dir / "Quarantine"
-        resized_dir = user_epub_dir / "Resized"
-        unchanged_dir = user_epub_dir / "Unchanged"
-        quarantine_dir.mkdir(parents=True, exist_ok=True)
-        resized_dir.mkdir(parents=True, exist_ok=True)
-        unchanged_dir.mkdir(parents=True, exist_ok=True)
-        return quarantine_dir, resized_dir, unchanged_dir
-    
-    def _archive_directory(self, source_dir: Path, epub_path: Path) -> None:
-        """Archive directory to EPUB file"""
-        with ZipFile(epub_path, "w") as zipf:
-            mimetype_file = source_dir / "mimetype"
-            if mimetype_file.exists():
-                zipf.write(mimetype_file, arcname="mimetype", compress_type=ZIP_STORED)
-            else:
-                raise FileNotFoundError("Missing required 'mimetype' file for EPUB.")
 
-            for file in source_dir.rglob("*"):
-                if file.is_file() and file.name != "mimetype":
-                    arcname = file.relative_to(source_dir)
-                    zipf.write(file, arcname=arcname, compress_type=ZIP_DEFLATED)
-    
     def _generate_static_analytics(self) -> list[StatReport]:
         """Generate static analytics from file statistics"""
         if not self._state.file_stats:
