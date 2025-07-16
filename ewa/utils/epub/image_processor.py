@@ -47,7 +47,7 @@ class ImageProcessor:
     image_settings: ImageOptimizationSettings = field(default_factory=ImageOptimizationSettings)
 
     # Results
-    error: str | None = None
+    error: str = ""
 
     @property
     def resize_percent(self) -> float:
@@ -230,11 +230,13 @@ class ImageProcessor:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "name": str(self.original_path.name)[-10:],
+            "name": str(self.original_path.name),
             "new_mode": self.new_mode if self.new_mode == self.original_mode else f"->{self.new_mode}",
             "resize": self.resize_percent,
+            "old_size": self.original_size,
+            "new_size": self.new_size,
             "compression": self.compression,
-            "error": self.error[:20] if self.error else "",
+            "error": self.error,
         }
     
 

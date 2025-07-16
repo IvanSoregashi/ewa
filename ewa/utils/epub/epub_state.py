@@ -13,7 +13,7 @@ from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 import pandas as pd
 
-from ewa.utils.epub.image_processor import EpubIllustrations
+from ewa.utils.epub.image_processor import EpubIllustrations, ImageOptimizationSettings
 from ewa.utils.epub.chapter_processor import EpubChapters
 
 logger = logging.getLogger(__name__)
@@ -87,6 +87,21 @@ class OptimizeResult:
             "original_size": f"{self.original_epub_size / 1024 / 1024:.2f} mb",
             "error": self.error[:50],
         }
+    
+    def report_line_resize(self) -> dict:
+        old_image_size = sum(rr["old_size"] for rr in self.resize_report)
+        new_image_size = sum(rr["new_size"] for rr in self.resize_report)
+        compression = round(new_image_size / old_image_size * 100, 2)
+        images = len(self.resize_report)
+        #errors = len([rr for rr in self.resize_report if rr["error"]])
+        return {
+            "name": self.original_epub_path.name,
+            "time": f"{self.total_time:.2f} s",
+            "images": images,
+            "old_size": f"{old_image_size / 1024 / 1024:.2f} mb",
+            "compressed_to": f"{compression:.2f}%",
+            "success": self.resize_success,
+        }
 
 
 @dataclass
@@ -97,6 +112,9 @@ class EpubState:
     temp_dir: Path | None = None
     output_path: Path | None = None
     user_epub_dir: Path = Path("~/Downloads/EPUB").expanduser().absolute()
+
+    # Settings
+    image_settings: ImageOptimizationSettings = field(default_factory=ImageOptimizationSettings)
 
     # Statistics
     file_stats: list[FileStat] = field(default_factory=list)  # ???
@@ -143,7 +161,7 @@ class EpubState:
         with ZipFile(self.epub_path) as zip_file:
             zip_file.extractall(self.temp_dir)
         self.chapters = EpubChapters(self.temp_dir)
-        self.illustrations = EpubIllustrations(self.temp_dir)
+        self.illustrations = EpubIllustrations(self.temp_dir, self.image_settings)
         
     def collect_file_stats(self) -> None:
         """
@@ -270,13 +288,31 @@ class EpubState:
             result.resized_epub_path = self.compress_dir_into_epub(self.resized_dir)
             result.resized_epub_size = result.resized_epub_path.stat().st_size
             result.success = True
-            #result.original_epub_path = self.move_original(self.processed_dir)
+            result.original_epub_path = self.move_original(self.processed_dir)
         except Exception as e:
             # FAIL DUE TO UNKNOWN ERROR
             result.error = str(e)
             result.success = False
-            #result.original_epub_path = self.move_original(self.quarantine_dir)
+            result.original_epub_path = self.move_original(self.quarantine_dir)
         logger.warning(f"EPUBState.optimize: done in {time.time() - start_time:.2f} s")
+        self.teardown()
+        result.total_time = time.time() - start_time
+        return result
+
+    def measure_optimized_size(self) -> OptimizeResult:
+        start_time = time.time()
+        result = OptimizeResult()
+        result.original_epub_path = self.epub_path
+        result.original_epub_size = self.epub_path.stat().st_size
+        try:
+            self.extract()
+            result.resize_success = self.illustrations.optimize_images()
+            result.resize_time = self.illustrations.optimization_time
+            result.resize_report = self.illustrations.detailed_resize_report()
+            result.success = True
+        except Exception as e:
+            result.error = str(e)
+            result.success = False
         self.teardown()
         result.total_time = time.time() - start_time
         return result
@@ -297,5 +333,5 @@ class EpubState:
 
     def __del__(self) -> None:
         """Destructor - ensures teardown is called when object is garbage collected"""
-        if hasattr(self, 'temp_dir') and self.temp_dir:
+        if self.temp_dir:
             self.teardown()
