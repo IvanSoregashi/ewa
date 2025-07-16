@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-import os
 import shutil
 import tempfile
 import logging
 import time
 
+from typing import Any
 from dataclasses import dataclass, field
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
-from typing import Any, Generator
-from concurrent.futures import ThreadPoolExecutor
+
 
 import pandas as pd
 
-from ewa.utils.epub.image_processor import EpubIllustrations, ImageProcessor
-from ewa.utils.epub.chapter_processor import EpubChapters, ChapterProcessor
+from ewa.utils.epub.image_processor import EpubIllustrations
+from ewa.utils.epub.chapter_processor import EpubChapters
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +53,7 @@ class OptimizeResult:
     resize_report: list[dict] = field(default_factory=list)
 
     # Validation results
-    validation_success: bool = False
+    validation_success: bool = True
     validation_time: float = 0
     validation_report: list[dict] = field(default_factory=list)
 
@@ -66,31 +65,27 @@ class OptimizeResult:
     # Total results
     success: bool = False
     total_time: float = 0
-    error: str | None = None
+    error: str = ""
 
     original_epub_path: Path | None = None
     original_epub_size: float = 0
     resized_epub_path: Path | None = None
     resized_epub_size: float = 0
 
-    # Report results
-    report_name: str | None = None
-    report: list[dict] = field(default_factory=list)
-
     def report_line_success(self) -> dict:
         return {
             "name": self.original_epub_path.name,
             "time": f"{self.total_time:.2f} s",
-            "original_size": f"{self.original_epub_path.stat().st_size / 1024 / 1024:.2f} mb",
-            "compression": f"{self.resized_epub_path.stat().st_size / self.original_epub_path.stat().st_size * 100:.2f}%",
+            "original_size": f"{self.original_epub_size / 1024 / 1024:.2f} mb",
+            "compressed_to": f"{self.resized_epub_size / self.original_epub_size * 100:.2f}%",
         }
     
     def report_line_failure(self) -> dict:
         return {
             "name": self.original_epub_path.name,
             "time": f"{self.total_time:.2f} s",
-            "original_size": f"{self.original_epub_path.stat().st_size / 1024 / 1024:.2f} mb",
-            "error": self.error[:20] if self.error else "",
+            "original_size": f"{self.original_epub_size / 1024 / 1024:.2f} mb",
+            "error": self.error[:50],
         }
 
 
@@ -236,11 +231,9 @@ class EpubState:
                     if file.is_file() and file.name != "mimetype":
                         arcname = file.relative_to(self.temp_dir)
                         zipf.write(file, arcname=arcname, compress_type=ZIP_DEFLATED)
-            self.move_original(self.processed_dir)
             return path
         except Exception as e:
             logger.error(f"EPUBState.compress_dir_into_epub: failed to compress directory into EPUB: {e}")
-            self.move_original(self.quarantine_dir)
             raise e
             
 
@@ -249,35 +242,41 @@ class EpubState:
         result = OptimizeResult()
         result.original_epub_path = self.epub_path
         result.original_epub_size = self.epub_path.stat().st_size
+        logger.warning(f"EPUBState.optimize: optimizing {self.epub_path}")
         try:
             self.extract()
             result.resize_success = self.illustrations.optimize_images()
             result.resize_time = self.illustrations.optimization_time
             if not result.resize_success:
+                logger.warning("EPUBState.optimize: some images failed to resize")
                 # WARNING, SOME IMAGES FAILED TO RESIZE
                 result.resize_report = self.illustrations.detailed_resize_report()
                 result.validation_success = self.illustrations.validate_image_names()
                 result.validation_time = self.illustrations.validation_time
             if not result.validation_success:
+                logger.warning("EPUBState.optimize: some images failed to validate")
                 # FAIL DUE TO INCORRECT IMAGE RESIZE
                 result.validation_report = self.illustrations.validation_report
                 raise RuntimeError("Failed to validate image failes")
             result.chapter_success = self.chapters.update_image_references(self.illustrations.get_replacers())
             result.chapter_time = self.chapters.update_time
             if not result.chapter_success:
+                logger.warning("EPUBState.optimize: some images failed to update references")
                 # FAIL DUE TO INCORRECT IMAGE REFERENCE UPDATE
                 result.chapter_report = self.chapters.detailed_report()
                 raise RuntimeError("Failed to update image references")
             # SUCCESS, NO ERRORS
+            logger.warning("EPUBState.optimize: compressing directory into EPUB")
             result.resized_epub_path = self.compress_dir_into_epub(self.resized_dir)
+            result.resized_epub_size = result.resized_epub_path.stat().st_size
             result.success = True
-            result.original_epub_path = self.move_original(self.processed_dir)
-            result.resized_epub_size = self.resized_epub_path.stat().st_size
+            #result.original_epub_path = self.move_original(self.processed_dir)
         except Exception as e:
             # FAIL DUE TO UNKNOWN ERROR
             result.error = str(e)
             result.success = False
-            result.original_epub_path = self.move_original(self.quarantine_dir)
+            #result.original_epub_path = self.move_original(self.quarantine_dir)
+        logger.warning(f"EPUBState.optimize: done in {time.time() - start_time:.2f} s")
         self.teardown()
         result.total_time = time.time() - start_time
         return result

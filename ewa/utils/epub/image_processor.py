@@ -316,6 +316,7 @@ class EpubIllustrations:
         return [ip.to_dict() for ip in self.image_processors]
 
     def validate_image_names(self) -> bool:
+        logger.warning("EpubIllustrations.validate_image_names: validating image names")
         start_time = time.time()
         
         data_names = [ip.new_path.name if ip.renamed else ip.original_path.name
@@ -323,6 +324,7 @@ class EpubIllustrations:
         real_names = [path.name for path in self.iter_image_paths()]
         data_names = list(sorted(data_names))
         real_names = list(sorted(real_names))
+        logger.warning(f"validation: {len(data_names)=} {len(real_names)=}")
 
         #data_paths = [ip.new_path if ip.renamed else ip.original_path
         #              for ip in self.image_processors]
@@ -336,6 +338,7 @@ class EpubIllustrations:
             return True
         else:
             names_diff = set(data_names) ^ set(real_names)
+            logger.error(f"validation failed: {names_diff=}")
             self.validation_report = {
                 "names_diff": names_diff,
                 "len_real": len(real_names),
