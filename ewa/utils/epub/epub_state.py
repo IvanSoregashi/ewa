@@ -4,6 +4,7 @@ import os
 import shutil
 import tempfile
 import logging
+import time
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,8 +14,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
 
-from ewa.utils.epub.image_processor import ImageProcessor
-from ewa.utils.epub.chapter_processor import ChapterProcessor
+from ewa.utils.epub.image_processor import EpubIllustrations, ImageProcessor
+from ewa.utils.epub.chapter_processor import EpubChapters, ChapterProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,55 @@ class StatReport:
         }
 
 
+
+@dataclass
+class OptimizeResult:
+    # Resize results
+    resize_success: bool = False
+    resize_time: float = 0
+    resize_report: list[dict] = field(default_factory=list)
+
+    # Validation results
+    validation_success: bool = False
+    validation_time: float = 0
+    validation_report: list[dict] = field(default_factory=list)
+
+    # Chapter results
+    chapter_success: bool = False
+    chapter_time: float = 0
+    chapter_report: list[dict] = field(default_factory=list)
+
+    # Total results
+    success: bool = False
+    total_time: float = 0
+    error: str | None = None
+
+    original_epub_path: Path | None = None
+    original_epub_size: float = 0
+    resized_epub_path: Path | None = None
+    resized_epub_size: float = 0
+
+    # Report results
+    report_name: str | None = None
+    report: list[dict] = field(default_factory=list)
+
+    def report_line_success(self) -> dict:
+        return {
+            "name": self.original_epub_path.name,
+            "time": f"{self.total_time:.2f} s",
+            "original_size": f"{self.original_epub_path.stat().st_size / 1024 / 1024:.2f} mb",
+            "compression": f"{self.resized_epub_path.stat().st_size / self.original_epub_path.stat().st_size * 100:.2f}%",
+        }
+    
+    def report_line_failure(self) -> dict:
+        return {
+            "name": self.original_epub_path.name,
+            "time": f"{self.total_time:.2f} s",
+            "original_size": f"{self.original_epub_path.stat().st_size / 1024 / 1024:.2f} mb",
+            "error": self.error[:20] if self.error else "",
+        }
+
+
 @dataclass
 class EpubState:
     """State for EPUB processing"""
@@ -53,25 +103,13 @@ class EpubState:
     output_path: Path | None = None
     user_epub_dir: Path = Path("~/Downloads/EPUB").expanduser().absolute()
 
-    # Filter settings
-    size_threshold: int = 50 * 1024
-    supported_suffixes: tuple[str] = ('.jpg', '.jpeg', '.png')
-    
-    # Resize settings
-    max_width: int = 1080
-    max_height: int | None = None
-    quality: int = 80 # 0-100
-    workers: int = os.cpu_count()
+    # Statistics
+    file_stats: list[FileStat] = field(default_factory=list)  # ???
 
-    # Results
-    file_stats: list[FileStat] = field(default_factory=list)
-    image_processors: list[ImageProcessor] = field(default_factory=list)
-    chapter_results: list[dict[str, Any]] = field(default_factory=list)
-    chapter_errors: int = 0
-    images_to_remove: list[Path] = field(default_factory=list)
-    success: bool = False
+    # Components
+    chapters: EpubChapters | None = None
+    illustrations: EpubIllustrations | None = None
 
-    # Target directories
     @property
     def quarantine_dir(self) -> Path:
         return self.user_epub_dir / "Quarantine"
@@ -88,81 +126,19 @@ class EpubState:
     def processed_dir(self) -> Path:
         return self.user_epub_dir / "Processed"
 
-    def illustrations(self) -> Generator[Path, None, None]:
-        """Generate paths for all illustrations"""
-        return (
-            datum.path
-            for datum in self.file_stats
-            if datum.directory == Path("EPUB/Images")
-        )
-    
-    def chapters(self) -> Generator[Path, None, None]:
-        """Generate paths for all chapters"""
-        return (
-            datum.path
-            for datum in self.file_stats
-            if datum.directory == Path("EPUB/chapters")
-        )
-    
-    def generate_image_processors(self) -> Generator[ImageProcessor, None, None]:
-        """Generate image processors for all illustrations"""
-        if self.image_processors:
-            yield from self.image_processors
-        else:
-            for path in self.illustrations():
-                image_processor = ImageProcessor.from_path(path)
-                image_processor.update_settings(
-                    size_threshold=self.size_threshold,
-                    max_width=self.max_width,
-                    max_height=self.max_height,
-                    quality=self.quality,
-                    supported_suffixes=self.supported_suffixes,
-                )
-                yield image_processor
-
-    def generate_chapter_processors(self) -> Generator[ChapterProcessor, None, None]:
-        """Generate chapter processors for all chapters"""
-        for path in self.chapters():
-            if path.suffix.lower() not in (".xhtml", ".html"):
-                logger.warning(f"chapter_processors: skipping non-HTML file: {path}")
-                continue
-            chapter_processor = ChapterProcessor(path=path)
-            yield chapter_processor
-
     def __post_init__(self) -> None:
         self.quarantine_dir.mkdir(parents=True, exist_ok=True)
         self.resized_dir.mkdir(parents=True, exist_ok=True)
         self.unchanged_dir.mkdir(parents=True, exist_ok=True)
         self.processed_dir.mkdir(parents=True, exist_ok=True)
 
-    def set_settings(
-            self,
-            size_threshold: int | None = None, 
-            max_width: int | None = None,
-            max_height: int | None = None,
-            quality: int | None = None, 
-            workers: int | None = None,
-            supported_suffixes: tuple[str] | None = None
-        ) -> None:
-        """Set the settings"""
-        if size_threshold is not None:
-            self.size_threshold = size_threshold
-        if max_width is not None:
-            self.max_width = max_width
-        if max_height is not None:
-            self.max_height = max_height
-        if quality is not None:
-            self.quality = quality
-        if workers is not None:
-            self.workers = workers
-        if supported_suffixes is not None:
-            self.supported_suffixes = supported_suffixes
-
     def extract(self) -> None:
         """
         Extract EPUB to temporary directory
         Updates:
             temp_dir: The temporary directory created or existing.
+            chapters: The chapters component created.
+            illustrations: The illustrations component created.
         """
         if self.temp_dir is None:
             self.temp_dir = Path(tempfile.mkdtemp())
@@ -171,7 +147,9 @@ class EpubState:
 
         with ZipFile(self.epub_path) as zip_file:
             zip_file.extractall(self.temp_dir)
-
+        self.chapters = EpubChapters(self.temp_dir)
+        self.illustrations = EpubIllustrations(self.temp_dir)
+        
     def collect_file_stats(self) -> None:
         """
         Collect file statistics
@@ -228,125 +206,81 @@ class EpubState:
         
         return report
 
-    def resize_illustrations(self) -> None:
-        """
-        Resize illustrations
-        Updates:
-            image_processors: The image processors performed the resize.
-        """
-        with ThreadPoolExecutor(max_workers=self.workers) as executor:
-            self.image_processors = list(executor.map(lambda ip: ip.optimize_image(), self.generate_image_processors()))
-
-    def resize_report(self) -> list[dict]:
-        """
-        Generate a report of the resize operations
-        """
-        return [ip.to_dict() for ip in self.image_processors]
-
-    def update_image_references(self) -> None:
-        """
-        Update image references
-        Updates:
-            image_processors: The image processors updated with the number of references.
-        """
-        with ThreadPoolExecutor(max_workers=self.workers) as executor:
-            results = list(executor.map(lambda p: p.update_image_references(self.image_processors), self.generate_chapter_processors()))
-        success = [result["success"] for result in results]
-        if not all(success):
-            logger.error(f"EPUBState.update_image_references: success at updating ({sum(success)}/{len(success)})")
-        self.chapter_errors = len(success) - sum(success)
-        self.chapter_results = results
-
-    def chapter_report(self) -> list[dict]:
-        report = []
-        for result in self.chapter_results:
-            report.append({
-                "chapter": result["chapter"],
-                "success": result["success"],
-                "error": str(result["error"])[:50],
-                "renamed": len([i for i, r in result["images"].items() if r == "renamed"]),
-                "not_renamed": len([i for i, r in result["images"].items() if r == "not renamed"]),
-                "not_found": len([i for i, r in result["images"].items() if r == "not found"]),
-            })
-        report = [r for r in sorted(report, key=lambda x: x["chapter"])
-                  if r["renamed"] or r["not_renamed"] or r["not_found"] or not r["success"]]
-        return report
-
-    def remove_unused_images(self) -> tuple[bool, Path]:
-        """
-        Remove unused images
-        Returns:
-            True if the images were removed successfully, False otherwise.
-            The path to the directory to save epub on success or move to quarantine on failure.
-        """
-        if self.chapter_errors > 0:
-            logger.error(f"EPUBState.remove_unused_images: {self.chapter_errors} chapter errors, moving file to quarantine directory")
-            self.success = False
-
-        for image_processor in self.image_processors:
-            if image_processor.success and image_processor.renamed and image_processor.references_update_status == "success":
-                self.images_to_remove.append(image_processor.original_path)
-            if not image_processor.success and image_processor.renamed and image_processor.new_path.exists():
-                logger.warning(f"EPUBState.remove_unused_images: image {image_processor.new_path.name} was not resized successfully, removing new path")
-                self.images_to_remove.append(image_processor.new_path)
-        
-        if not self.images_to_remove:
-            logger.error("No unused images to remove, moving file to unchanged directory")
-            self.success = False
-        
-        if len(self.images_to_remove) != len([ip for ip in self.image_processors if ip.renamed]):
-            logger.error(f"Number of images to remove ({len(self.images_to_remove)}) does not match number of renamed images ({len([ip for ip in self.image_processors if ip.renamed])})")
-            self.success = False
-        
-        for image_path in self.images_to_remove:
-            try:
-                image_path.unlink()
-            except Exception as e:
-                logger.error(f"Error removing {image_path.name}: {e}")
-                self.success = False
-        
-        self.success = True
-    
-    def move_original(self) -> None:
-        assert self.epub_path.exists(), f"EPUBState.move_original: EPUB file {self.epub_path} does not exist"
-        if self.success:
-            path = self.processed_dir / self.epub_path.name
-        else:
-            path = self.quarantine_dir / self.epub_path.name
+    def move_original(self, directory: Path) -> Path:
+        if not self.epub_path.exists() or not directory.exists():
+            raise FileNotFoundError(f"EPUBState.move_original: EPUB file {self.epub_path} does not exist")
+        path = directory / self.epub_path.name
+        while path.exists():
+            path = path.with_stem(path.stem + "+")
         self.epub_path.rename(path)
+        self.epub_path = path
+        return self.epub_path
 
-    def compress_dir_into_epub(self, epub_path: Path | None = None) -> None:
-        """
-        Compress directory (extracted from EPUB) into EPUB file
-        Updates:
-            output_path: The EPUB file created.
-        """
-        if self.success:
-            try:
-                if epub_path is None:
-                    path = self.resized_dir / self.epub_path.name
+    def compress_dir_into_epub(self, directory: Path) -> Path:
+        if not directory.exists() or not directory.is_dir():
+            raise FileNotFoundError(f"EPUBState.compress_dir_into_epub: directory {directory} does not exist")
+        if not self.temp_dir.exists() or not self.temp_dir.is_dir():
+            raise FileNotFoundError(f"EPUBState.compress_dir_into_epub: temp directory {self.temp_dir} does not exist")
+        path = directory / self.epub_path.name
+        while path.exists():
+            path = path.with_stem(path.stem + "+")
+        try:
+            with ZipFile(path, "w") as zipf:
+                mimetype_file = self.temp_dir / "mimetype"
+                if mimetype_file.exists():
+                    zipf.write(mimetype_file, arcname="mimetype", compress_type=ZIP_STORED)
                 else:
-                    path = epub_path
-                if path.is_dir():
-                    path = path / self.epub_path.name
-                while path.exists():
-                    logger.warning(f"EPUBState.compress_dir_into_epub: file {path} already exists, adding '+'")
-                    path = path.with_stem(path.stem + "+")
-                with ZipFile(path, "w") as zipf:
-                    mimetype_file = self.temp_dir / "mimetype"
-                    if mimetype_file.exists():
-                        zipf.write(mimetype_file, arcname="mimetype", compress_type=ZIP_STORED)
-                    else:
-                        raise FileNotFoundError("Missing required 'mimetype' file for EPUB.")
+                    raise FileNotFoundError("Missing required 'mimetype' file for EPUB.")
 
-                    for file in self.temp_dir.rglob("*"):
-                        if file.is_file() and file.name != "mimetype":
-                            arcname = file.relative_to(self.temp_dir)
-                            zipf.write(file, arcname=arcname, compress_type=ZIP_DEFLATED)
-            except Exception as e:
-                logger.error(f"EPUBState.compress_dir_into_epub: failed to compress directory into EPUB: {e}")
-                self.success = False
-        #self.move_original()
+                for file in self.temp_dir.rglob("*"):
+                    if file.is_file() and file.name != "mimetype":
+                        arcname = file.relative_to(self.temp_dir)
+                        zipf.write(file, arcname=arcname, compress_type=ZIP_DEFLATED)
+            self.move_original(self.processed_dir)
+            return path
+        except Exception as e:
+            logger.error(f"EPUBState.compress_dir_into_epub: failed to compress directory into EPUB: {e}")
+            self.move_original(self.quarantine_dir)
+            raise e
+            
+
+    def optimize(self) -> OptimizeResult:
+        start_time = time.time()
+        result = OptimizeResult()
+        result.original_epub_path = self.epub_path
+        result.original_epub_size = self.epub_path.stat().st_size
+        try:
+            self.extract()
+            result.resize_success = self.illustrations.optimize_images()
+            result.resize_time = self.illustrations.optimization_time
+            if not result.resize_success:
+                # WARNING, SOME IMAGES FAILED TO RESIZE
+                result.resize_report = self.illustrations.detailed_resize_report()
+                result.validation_success = self.illustrations.validate_image_names()
+                result.validation_time = self.illustrations.validation_time
+            if not result.validation_success:
+                # FAIL DUE TO INCORRECT IMAGE RESIZE
+                result.validation_report = self.illustrations.validation_report
+                raise RuntimeError("Failed to validate image failes")
+            result.chapter_success = self.chapters.update_image_references(self.illustrations.get_replacers())
+            result.chapter_time = self.chapters.update_time
+            if not result.chapter_success:
+                # FAIL DUE TO INCORRECT IMAGE REFERENCE UPDATE
+                result.chapter_report = self.chapters.detailed_report()
+                raise RuntimeError("Failed to update image references")
+            # SUCCESS, NO ERRORS
+            result.resized_epub_path = self.compress_dir_into_epub(self.resized_dir)
+            result.success = True
+            result.original_epub_path = self.move_original(self.processed_dir)
+            result.resized_epub_size = self.resized_epub_path.stat().st_size
+        except Exception as e:
+            # FAIL DUE TO UNKNOWN ERROR
+            result.error = str(e)
+            result.success = False
+            result.original_epub_path = self.move_original(self.quarantine_dir)
+        self.teardown()
+        result.total_time = time.time() - start_time
+        return result
 
     def teardown(self) -> None:
         """

@@ -16,7 +16,7 @@ from bs4 import XMLParsedAsHTMLWarning
 import warnings
 
 from ewa.utils.epub.epub_state import EpubState, FileStat, StatReport
-from ewa.utils.epub.image_resize import ImageProcessor
+from ewa.utils.epub.image_processor import ImageProcessor
 from ewa.utils.epub.chapter_processor import ImageResizeReport
 from ewa.utils.epub.chapter_processor import compress_dir_into_epub, epub_target_directories
 

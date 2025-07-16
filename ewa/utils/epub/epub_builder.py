@@ -30,7 +30,7 @@ class EpubProcessor:
             supported_suffixes: tuple[str] | None = None
         ) -> 'EpubProcessor':
         """Setup the EPUB processor"""
-        self._state.set_settings(
+        self._state.set_image_resize_settings(
             size_threshold=size_threshold,
             max_width=max_width,
             max_height=max_height,

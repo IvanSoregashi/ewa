@@ -1,12 +1,29 @@
 from PIL import Image
+import os
 import logging
+from typing import Generator
+import time
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from threading import Lock
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
+
+
+
+
+@dataclass
+class ImageOptimizationSettings:
+    # Filter settings
+    size_threshold: int = 50 * 1024
+    supported_suffixes: tuple[str] = ('.jpg', '.jpeg', '.png')
+    
+    # Resize settings
+    max_width: int = 1080
+    max_height: int | None = None
+    quality: int = 80 # 0-100
 
 
 @dataclass
@@ -27,19 +44,10 @@ class ImageProcessor:
     extrema: tuple | None = None
 
     # Settings
-    size_threshold: int = 50 * 1024
-    supported_suffixes: tuple[str] = ('.jpg', '.jpeg', '.png')
-    max_width: int = 1080
-    max_height: int | None = None
-    quality: int = 80
+    image_settings: ImageOptimizationSettings = field(default_factory=ImageOptimizationSettings)
 
-    # References
-    success: bool = True
-    error: str = ""
-    lock: Lock = Lock()
-    total_references: int = 0
-    updated_references: int = 0
-
+    # Results
+    error: str | None = None
 
     @property
     def resize_percent(self) -> float:
@@ -71,28 +79,19 @@ class ImageProcessor:
     def renamed(self) -> bool:
         return self.new_path != self.original_path and self.new_path is not None
 
-    @property
-    def references_update_status(self) -> str:
-        if self.total_references == 0:
-            return "orphaned"
-        if self.updated_references == 0:
-            return "failed"
-        if self.updated_references == self.total_references:
-            return "success"
-        return "partial"
-
     @classmethod
-    def from_path(cls, path: Path) -> "ImageProcessor":
+    def from_path(cls, path: Path, settings: ImageOptimizationSettings) -> "ImageProcessor":
         size = path.stat().st_size
         return cls(
             original_path=path,
             original_size=size,
             original_mode=None,
             original_dimensions=None,
+            image_settings=settings,
         )
 
     @classmethod
-    def from_image(cls, path: Path, image: Image.Image) -> "ImageProcessor":
+    def from_image(cls, path: Path, image: Image.Image, settings: ImageOptimizationSettings) -> "ImageProcessor":
         size = path.stat().st_size
         return cls(
             original_path=path,
@@ -100,46 +99,9 @@ class ImageProcessor:
             original_mode=image.mode,
             original_dimensions=image.size,
             extrema=image.getextrema(),
+            image_settings=settings,
         )
 
-    def is_eligible(self) -> bool:
-        if self.original_size < self.size_threshold:
-            self.error = f"{self.original_size} small"
-            return False
-        if self.original_path.suffix.lower() not in self.supported_suffixes:
-            self.error = f"{self.original_path.suffix.lower()} unsupported"
-            return False
-        return True
-
-    def update_settings(
-            self,
-            *,
-            size_threshold: int | None = None,
-            max_width: int | None = None,
-            max_height: int | None = None,
-            quality: int | None = None,
-            supported_suffixes: tuple[str] | None = None,
-    ) -> None:
-        """
-        Update the image resize processor settings.
-        Args:
-            size_threshold: The size threshold for the image.
-            max_width: The maximum width for the image.
-            max_height: The maximum height for the image.
-            quality: The quality for the image.
-            supported_formats: The supported formats for the image.
-        """
-        if size_threshold is not None:
-            self.size_threshold = size_threshold
-        if max_width is not None:
-            self.max_width = max_width
-        if max_height is not None:
-            self.max_height = max_height
-        if quality is not None:
-            self.quality = quality
-        if supported_suffixes is not None:
-            self.supported_suffixes = supported_suffixes
-        
     def update_from_image(self, image: Image.Image) -> None:
         """
         Update the image resize processor from a PIL image.
@@ -173,6 +135,21 @@ class ImageProcessor:
         self.new_size = self.original_size
         self._calculate_new_dimensions()
 
+    def not_eligible(self) -> None:
+        self.new_path = self.original_path
+        self.new_size = self.original_size
+        self.new_mode = self.original_mode
+        self.new_dimensions = self.original_dimensions
+
+    def is_eligible(self) -> bool:
+        if self.original_size < self.image_settings.size_threshold:
+            self.error = f"{self.original_size} small"
+            return False
+        if self.original_path.suffix.lower() not in self.image_settings.supported_suffixes:
+            self.error = f"{self.original_path.suffix.lower()} unsupported"
+            return False
+        return True
+
     def __hash__(self):
         return hash(self.original_path)
 
@@ -192,14 +169,14 @@ class ImageProcessor:
             return
         width, height = self.original_dimensions
         new_width, new_height = width, height
-        if width > self.max_width:
-            ratio = self.max_width / width
-            new_width = self.max_width
+        if width > self.image_settings.max_width:
+            ratio = self.image_settings.max_width / width
+            new_width = self.image_settings.max_width
             new_height = int(height * ratio)
-        if self.max_height is not None and new_height > self.max_height:
-            ratio = self.max_height / new_height
+        if self.image_settings.max_height is not None and new_height > self.image_settings.max_height:
+            ratio = self.image_settings.max_height / new_height
             new_width = int(width * ratio)
-            new_height = self.max_height
+            new_height = self.image_settings.max_height
         self.new_dimensions = (new_width, new_height)
 
     def _calculate_new_mode(self) -> None:
@@ -215,16 +192,17 @@ class ImageProcessor:
             self.new_mode = 'RGB' if self.original_mode == 'RGB' else self.original_mode
 
     def _delete_original(self) -> None:
-        if self.original_path.exists():
+        if self.renamed and self.original_path.exists() and self.new_path.exists():
             self.original_path.unlink()
     
     def _delete_new(self) -> None:
-        if self.new_path and self.new_path.exists():
+        if self.renamed and self.original_path.exists() and self.new_path.exists():
             self.new_path.unlink()
 
-    def optimize_image(self) -> "ImageProcessor":
+    def optimize_image(self) -> bool:
         if not self.is_eligible():
-            return self
+            self.not_eligible()
+            return True
         try:
             with Image.open(self.original_path) as image:
                 self.update_from_image(image)
@@ -235,22 +213,20 @@ class ImageProcessor:
                 if self.to_save:
                     if self.to_convert:
                         image = image.convert('RGB')
-                        image.save(self.new_path, optimize=True, quality=self.quality)
+                        image.save(self.new_path, optimize=True, quality=self.image_settings.quality)
                     else:
                         image.save(self.new_path, optimize=True)
                     self.new_size = self.new_path.stat().st_size
+                    self._delete_original()
+                else:
+                    self.error = f"not eligible: {self.original_mode} {self.original_dimensions}"
+                    self.not_eligible()
+            return True
         except Exception as e:
-            self.success = False
             self.error = f"{e.__class__.__name__}"
-        return self
-
-    def threadsafe_increment_total_references(self, amount: int = 1) -> None:
-        with self.lock:
-            self.total_references += amount
-
-    def threadsafe_increment_updated_references(self, amount: int = 1) -> None:
-        with self.lock:
-            self.updated_references += amount
+            self._delete_new()
+            self.not_eligible()
+            return False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -258,7 +234,114 @@ class ImageProcessor:
             "new_mode": self.new_mode if self.new_mode == self.original_mode else f"->{self.new_mode}",
             "resize": self.resize_percent,
             "compression": self.compression,
-            "renamed": self.renamed,
-            "references": self.references_update_status,
-            "error": self.error[:50],
+            "error": self.error[:20] if self.error else "",
         }
+    
+
+@dataclass
+class EpubIllustrations:
+    epub_temp_dir: Path
+    image_processors: list[ImageProcessor] = field(default_factory=list)
+
+    image_settings: ImageOptimizationSettings = field(default_factory=ImageOptimizationSettings)
+
+    optimization_time: float = 0
+    validation_time: float = 0
+    validation_report: list[dict] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.image_processors = list(self.iter_image_processors())
+
+    def __len__(self) -> int:
+        return len(self.image_processors)
+
+    @property
+    def original_size(self) -> int:
+        return sum(ip.original_size for ip in self.image_processors)
+
+    @property
+    def actual_size(self) -> int:
+        return sum(p.stat().st_size for p in self.iter_image_paths())
+
+    @property
+    def new_size(self) -> int:
+        return sum(ip.new_size for ip in self.image_processors)
+
+    @property
+    def compression(self) -> float:
+        return round(self.new_size / self.original_size * 100, 2)
+
+    @property
+    def errors(self) -> list[str]:
+        return [ip.error for ip in self.image_processors if ip.error is not None]
+    
+    @property
+    def errors_count(self) -> int:
+        return len(self.errors)
+
+    def iter_image_paths(self) -> Generator[Path, None, None]:
+        for path in self.epub_temp_dir.glob("EPUB/images/*.*"):
+            yield path
+
+    def iter_image_processors(self) -> Generator[ImageProcessor, None, None]:
+        for path in self.iter_image_paths():
+            processor = ImageProcessor.from_path(path, self.image_settings)
+            yield processor
+
+    def optimize_images(self) -> bool:
+        start_time = time.time()
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+            results = executor.map(ImageProcessor.optimize_image, self.image_processors)
+        self.optimization_time = time.time() - start_time
+        return all(results)
+
+    def get_replacers(self) -> dict[str, str]:
+        return {
+            img.original_path.name: img.new_path.name
+            for img in self.image_processors
+            if img.renamed
+        }
+    
+    def short_report(self) -> str:
+        return f"{self.original_size() / 1024 / 1024:.2f} mb / {len(self)}"
+
+    def short_optimization_report(self) -> str:
+        return {
+            "images t/o/e": f"{len(self)} / {len([ip for ip in self.image_processors if ip.error is None])} / {self.errors_count}",
+            "compression": f"{self.compression:.2f}%",
+            "time": f"{self.optimization_time:.2f} s",
+        }
+
+    def detailed_resize_report(self) -> str:
+        return [ip.to_dict() for ip in self.image_processors]
+
+    def validate_image_names(self) -> bool:
+        start_time = time.time()
+        
+        data_names = [ip.new_path.name if ip.renamed else ip.original_path.name
+                    for ip in self.image_processors]
+        real_names = [path.name for path in self.iter_image_paths()]
+        data_names = list(sorted(data_names))
+        real_names = list(sorted(real_names))
+
+        #data_paths = [ip.new_path if ip.renamed else ip.original_path
+        #              for ip in self.image_processors]
+        #exist = all(path.exists() for path in data_paths)
+        #real_paths = [path for path in self.iter_image_paths()]
+        #data_paths = list(sorted(data_paths))
+        #real_paths = list(sorted(real_paths))
+
+        if data_names == real_names:
+            self.validation_time = time.time() - start_time
+            return True
+        else:
+            names_diff = set(data_names) ^ set(real_names)
+            self.validation_report = {
+                "names_diff": names_diff,
+                "len_real": len(real_names),
+                "len_data": len(data_names),
+            }
+            logger.error(f"dn len={len(data_names)}, rn len={len(real_names)}, diff={names_diff=}")
+            self.validation_time = time.time() - start_time
+            return False
+    
