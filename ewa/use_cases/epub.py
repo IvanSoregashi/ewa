@@ -7,7 +7,6 @@ from pathlib import Path
 
 import ebooklib
 from ebooklib.epub import EpubBook, read_epub
-from ewa.utils.zip import Zip
 
 
 logger = logging.getLogger(__name__)

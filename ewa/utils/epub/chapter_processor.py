@@ -111,11 +111,11 @@ class EpubChapters:
     @property
     def with_images(self) -> list[ChapterProcessor]:            
         return [self.chapter_processors[i] for i in self.map_image_references()]
-    
+
     @property
     def errors(self) -> list[str] | None:
         return [ch.error for ch in self.with_images if ch.error is not None]
-    
+
     @property
     def updated(self) -> int:
         return len([ch for ch in self.chapter_processors if ch.references_updated > 0])
@@ -172,11 +172,9 @@ class EpubChapters:
             "chapters t/u/e": f"{len(self)} / {self.updated} / {len(self.errors)}",
             "time": f"{self.update_time:.2f} s",
         }
-    
+
     def detailed_report(self) -> list[dict]:
         return [ch.to_dict()
                 for ch in self.chapter_processors
                 if ch.error is not None
                 or ch.references_updated > 0]
-
-

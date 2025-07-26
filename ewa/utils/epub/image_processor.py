@@ -1,7 +1,7 @@
 from PIL import Image
 import os
 import logging
-from typing import Generator
+from typing import Generator, Protocol
 import time
 
 from dataclasses import dataclass, field
@@ -11,43 +11,54 @@ from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
+class ImageProcessorError(Exception):
+    pass
 
-
-
-@dataclass
-class ImageOptimizationSettings:
-    # Filter settings
-    size_threshold: int = 50 * 1024
-    supported_suffixes: tuple[str] = ('.jpg', '.jpeg', '.png')
-    
-    # Resize settings
-    max_width: int = 1080
-    max_height: int | None = None
-    quality: int = 80 # 0-100
-
+class NotEligibleError(ImageProcessorError):
+    pass
 
 @dataclass
-class ImageProcessor:
-    # Original image
+class ImageProcessingResult:
     original_path: Path
     original_size: int
+
     original_mode: str | None = None
     original_dimensions: tuple[int, int] | None = None
 
-    # New image
-    new_path: Path | None = None
-    new_size: int = 0
     new_mode: str | None = None
     new_dimensions: tuple[int, int] | None = None
 
-    # Image processing
-    extrema: tuple | None = None
+    new_path: Path | None = None
+    new_size: int | None = None
 
-    # Settings
-    image_settings: ImageOptimizationSettings = field(default_factory=ImageOptimizationSettings)
-
-    # Results
+    success: bool = False
     error: str = ""
+    time: float = 0
+
+    @classmethod
+    def from_path(cls, path: Path) -> "ImageProcessingResult":
+        size = path.stat().st_size
+        return cls(
+            original_path=path,
+            original_size=size,
+            new_path=path,
+            new_size=size,
+        )
+
+    def update_from_image_header(self, image: Image.Image) -> "ImageProcessingResult":
+        self.original_mode = image.mode
+        self.original_dimensions = image.size
+        self.new_mode = self.original_mode
+        self.new_dimensions = self.original_dimensions
+        return self
+
+    def update_from_new_path(self) -> "ImageProcessingResult":
+        self.new_size = self.new_path.stat().st_size
+        return self
+
+    @property
+    def name(self) -> str:
+        return self.original_path.name
 
     @property
     def resize_percent(self) -> float:
@@ -56,297 +67,226 @@ class ImageProcessor:
         return 100
 
     @property
-    def compression(self) -> float:
+    def compressed_to(self) -> float:
+        if self.new_size is None or self.original_size is None:
+            return 100
         return round(self.new_size / self.original_size * 100, 2)
 
     @property
     def savings(self) -> int:
         return self.original_size - self.new_size
-
+    
     @property
-    def to_resize(self) -> bool:
+    def resized(self) -> bool:
         return self.original_dimensions != self.new_dimensions
-
+    
     @property
-    def to_convert(self) -> bool:
-        return self.new_mode == 'RGB'
-
-    @property
-    def to_save(self) -> bool:
-        return self.to_resize or self.to_convert
+    def converted(self) -> bool:
+        return self.new_mode == "RGB"
 
     @property
     def renamed(self) -> bool:
-        return self.new_path != self.original_path and self.new_path is not None
+        return self.new_path and self.original_path.name != self.new_path.name
 
-    @classmethod
-    def from_path(cls, path: Path, settings: ImageOptimizationSettings) -> "ImageProcessor":
-        size = path.stat().st_size
-        return cls(
-            original_path=path,
-            original_size=size,
-            original_mode=None,
-            original_dimensions=None,
-            image_settings=settings,
-        )
+    def short_report(self) -> str:
+        pass
 
-    @classmethod
-    def from_image(cls, path: Path, image: Image.Image, settings: ImageOptimizationSettings) -> "ImageProcessor":
-        size = path.stat().st_size
-        return cls(
-            original_path=path,
-            original_size=size,
-            original_mode=image.mode,
-            original_dimensions=image.size,
-            extrema=image.getextrema(),
-            image_settings=settings,
-        )
-
-    def update_from_image(self, image: Image.Image) -> None:
-        """
-        Update the image resize processor from a PIL image.
-        Args:
-            image: The PIL image to update from.
-        Updates:
-        - original_mode
-        - original_dimensions
-        - extrema
-        - new_mode
-        - new_dimensions
-        - new_size
-        - new_path
-        """
-        self.original_mode = image.mode
-        self.original_dimensions = image.size
-        self.extrema = image.getextrema()
-        self.__post_init__()
-
-    def __post_init__(self) -> None:
-        """
-        Post-initialization method.
-        Updates:
-        - new_mode
-        - new_dimensions
-        - new_size
-        - new_path
-        """
-        self._calculate_new_mode()
-        self.new_path = self.original_path.with_suffix('.jpg') if self.new_mode == 'RGB' else self.original_path
-        self.new_size = self.original_size
-        self._calculate_new_dimensions()
-
-    def not_eligible(self) -> None:
-        self.new_path = self.original_path
-        self.new_size = self.original_size
-        self.new_mode = self.original_mode
-        self.new_dimensions = self.original_dimensions
-
-    def is_eligible(self) -> bool:
-        if self.original_size < self.image_settings.size_threshold:
-            self.error = f"{self.original_size} small"
-            return False
-        if self.original_path.suffix.lower() not in self.image_settings.supported_suffixes:
-            self.error = f"{self.original_path.suffix.lower()} unsupported"
-            return False
-        return True
-
-    def __hash__(self):
-        return hash(self.original_path)
-
-    def __eq__(self, other):
-        if not isinstance(other, ImageProcessor):
-            return False
-        return self.original_path == other.original_path
-
-    def _calculate_new_dimensions(self) -> None:
-        """
-        Calculate the new dimensions for the image.
-        Updates:
-            new_dimensions: The new dimensions for the image.
-        """
-        if self.original_dimensions is None:
-            self.new_dimensions = None
-            return
-        width, height = self.original_dimensions
-        new_width, new_height = width, height
-        if width > self.image_settings.max_width:
-            ratio = self.image_settings.max_width / width
-            new_width = self.image_settings.max_width
-            new_height = int(height * ratio)
-        if self.image_settings.max_height is not None and new_height > self.image_settings.max_height:
-            ratio = self.image_settings.max_height / new_height
-            new_width = int(width * ratio)
-            new_height = self.image_settings.max_height
-        self.new_dimensions = (new_width, new_height)
-
-    def _calculate_new_mode(self) -> None:
-        """
-        Calculate the new mode for the image.
-        Updates:
-            new_mode: The new mode for the image.
-        """
-        if self.original_mode == 'RGBA':
-            assert len(self.extrema) == 4, f"Image of mode RGBA has {self.extrema} extrema"
-            self.new_mode = 'RGB' if self.extrema[3][0] == 255 else 'RGBA'
-        else:
-            self.new_mode = 'RGB' if self.original_mode == 'RGB' else self.original_mode
-
-    def _delete_original(self) -> None:
-        if self.renamed and self.original_path.exists() and self.new_path.exists():
-            self.original_path.unlink()
-    
-    def _delete_new(self) -> None:
-        if self.renamed and self.original_path.exists() and self.new_path.exists():
-            self.new_path.unlink()
-
-    def optimize_image(self) -> bool:
-        if not self.is_eligible():
-            self.not_eligible()
-            return True
-        try:
-            with Image.open(self.original_path) as image:
-                self.update_from_image(image)
-
-                if self.to_resize:
-                    image = image.resize(self.new_dimensions, Image.Resampling.LANCZOS)
-
-                if self.to_save:
-                    if self.to_convert:
-                        image = image.convert('RGB')
-                        image.save(self.new_path, optimize=True, quality=self.image_settings.quality)
-                    else:
-                        image.save(self.new_path, optimize=True)
-                    self.new_size = self.new_path.stat().st_size
-                    self._delete_original()
-                else:
-                    self.error = f"not eligible: {self.original_mode} {self.original_dimensions}"
-                    self.not_eligible()
-            return True
-        except Exception as e:
-            self.error = f"{e.__class__.__name__}"
-            self._delete_new()
-            self.not_eligible()
-            return False
-
-    def to_dict(self) -> dict[str, Any]:
+    def detailed_report(self) -> str:
         return {
-            "name": str(self.original_path.name),
-            "new_mode": self.new_mode if self.new_mode == self.original_mode else f"->{self.new_mode}",
-            "resize": self.resize_percent,
+            "name": self.original_path.name,
+            "original_mode": self.original_mode,
+            "new_mode": self.new_mode,
             "old_size": self.original_size,
             "new_size": self.new_size,
-            "compression": self.compression,
+            "resize": self.resize_percent,
+            "compressed_to": self.compressed_to,
+            "savings": self.savings,
             "error": self.error,
         }
+
+@dataclass
+class ImageSettings:
+    size_lower_threshold: int | None = 50 * 1024
+    size_upper_threshold: int | None = None
+    supported_suffixes: tuple[str] = ('.jpg', '.jpeg', '.png')
+    max_width: int | None = 1080
+    max_height: int | None = None
+    convertible_modes: tuple[str] = ('RGB', 'RGBA')
+    quality: int = 80
+
+
+@dataclass
+class OptimizeResult:
+    # Resize results
+    optimization_results: list[ImageProcessingResult] = field(default_factory=list)
+    optimization_time: float = 0
+    optimization_success: bool = False
+
+    # Validation results
+    validation_report: list[dict] = field(default_factory=list)
+    validation_time: float = 0
+    validation_success: bool = True
+
+    # Chapter results
+    chapter_report: list[dict] = field(default_factory=list)
+    chapter_time: float = 0
+    chapter_success: bool = False
+
+    # Total results
+    success: bool = False
+    total_time: float = 0
+    error: str = ""
+
+    original_epub_path: Path | None = None
+    original_epub_size: float = 0
+    resized_epub_path: Path | None = None
+    resized_epub_size: float = 0
+
+    def image_rename_dict(self) -> dict[str, str]:
+        return {
+            img.original_path.name: img.new_path.name
+            for img in self.optimization_results
+            if img.renamed
+        }
+
+    def report_line_success(self) -> dict:
+        return {
+            "name": self.original_epub_path.name,
+            "time": f"{self.total_time:.2f} s",
+            "original_size": f"{self.original_epub_size / 1024 / 1024:.2f} mb",
+            "compressed_to": f"{self.resized_epub_size / self.original_epub_size * 100:.2f}%",
+        }
     
+    def report_line_failure(self) -> dict:
+        return {
+            "name": self.original_epub_path.name,
+            "time": f"{self.total_time:.2f} s",
+            "original_size": f"{self.original_epub_size / 1024 / 1024:.2f} mb",
+            "error": self.error[:50],
+        }
+    
+    def report_line_resize(self) -> dict:
+        old_image_size = sum(rr["old_size"] for rr in self.resize_report)
+        new_image_size = sum(rr["new_size"] for rr in self.resize_report)
+        compression = round(new_image_size / old_image_size * 100, 2)
+        images = len(self.resize_report)
+        #errors = len([rr for rr in self.resize_report if rr["error"]])
+        return {
+            "name": self.original_epub_path.name,
+            "time": f"{self.total_time:.2f} s",
+            "images": images,
+            "old_size": f"{old_image_size / 1024 / 1024:.2f} mb",
+            "compressed_to": f"{compression:.2f}%",
+            "success": self.resize_success,
+        }
+
+
+@dataclass
+class ImageProcessor:
+    settings: ImageSettings
+
+    def raise_for_suffix(self, result: ImageProcessingResult) -> None:
+        if result.original_path.suffix.lower() not in self.settings.supported_suffixes:
+            raise NotEligibleError(f"suffix {result.original_path.suffix.lower()} not supported")
+        
+    def raise_for_size(self, result: ImageProcessingResult) -> None:
+        if result.original_size < self.settings.size_lower_threshold:
+            raise NotEligibleError(f"size {result.original_size} bytes is too small")
+        if self.settings.size_upper_threshold and result.original_size > self.settings.size_upper_threshold:
+            raise NotEligibleError(f"size {result.original_size} bytes is too large")
+        
+    def calculate_new_dimensions(self, result: ImageProcessingResult) -> None:
+        width, height = result.original_dimensions
+        new_width, new_height = width, height
+        if self.settings.max_width and width > self.settings.max_width:
+            ratio = self.settings.max_width / width
+            new_width = self.settings.max_width
+            new_height = int(height * ratio)
+        if self.settings.max_height is not None and new_height > self.settings.max_height:
+            ratio = self.settings.max_height / new_height
+            new_width = int(width * ratio)
+            new_height = self.settings.max_height
+        result.new_dimensions = (new_width, new_height)
+
+    def calculate_new_mode(self, result: ImageProcessingResult, image: Image.Image) -> None:
+        if result.original_mode == 'RGBA':
+            # LOADS IMAGE
+            extrema = image.getextrema()
+            no_transparency = len(extrema) == 4 and extrema[3][0] == 255
+            result.new_mode = 'RGB' if no_transparency else 'RGBA'
+        else:
+            result.new_mode = result.original_mode
+    
+    def raise_for_mode_and_dimensions(self, result: ImageProcessingResult) -> None:
+        if not result.resized and not result.converted:
+            raise NotEligibleError(f"mode {result.original_mode} and dimensions {result.original_dimensions} do not need to be processed")
+
+    def calculate_new_path(self, result: ImageProcessingResult) -> None:
+        if result.new_mode == 'RGB' and result.original_path.suffix.lower() == '.png':
+            result.new_path = result.original_path.with_suffix('.jpg')
+        else:
+            result.new_path = result.original_path
+
+    def optimize_image(self, path: Path) -> ImageProcessingResult:
+        start_time = time.time()
+        result = ImageProcessingResult.from_path(path)
+        try:
+            self.raise_for_suffix(result)
+            self.raise_for_size(result)
+            with Image.open(path) as image:
+                result.update_from_image_header(image)  # reads image header
+                self.calculate_new_dimensions(result)
+                self.calculate_new_mode(result, image)  # loads image for RGBA
+                self.raise_for_mode_and_dimensions(result)
+                self.calculate_new_path(result)
+                if result.resized:
+                    image = image.resize(result.new_dimensions, Image.Resampling.LANCZOS)
+                if result.converted:
+                    if result.original_mode == 'RGBA':
+                        image = image.convert('RGB')
+                    image.save(result.new_path, optimize=True, quality=self.settings.quality)
+                else:
+                    image.save(result.new_path, optimize=True)
+                result.update_from_new_path()
+                if result.new_size > result.original_size:
+                    result.new_path.unlink()
+                    result.new_path = result.original_path
+                    result.new_size = result.original_size
+                    raise NotEligibleError(f"new size {result.new_size} is larger than original size {result.original_size}")
+                result.success = True
+                if result.renamed:
+                    result.original_path.unlink()
+        except NotEligibleError as e:
+            result.success = True
+            result.error = e
+        except Exception as e:
+            result.success = False
+            result.error = e
+        result.time = time.time() - start_time
+        return result
+
 
 @dataclass
 class EpubIllustrations:
     epub_temp_dir: Path
-    image_processors: list[ImageProcessor] = field(default_factory=list)
 
-    image_settings: ImageOptimizationSettings = field(default_factory=ImageOptimizationSettings)
+    image_settings: ImageSettings = field(default_factory=ImageSettings)
 
     optimization_time: float = 0
-    validation_time: float = 0
-    validation_report: list[dict] = field(default_factory=list)
-
-    def __post_init__(self) -> None:
-        self.image_processors = list(self.iter_image_processors())
-
-    def __len__(self) -> int:
-        return len(self.image_processors)
-
-    @property
-    def original_size(self) -> int:
-        return sum(ip.original_size for ip in self.image_processors)
 
     @property
     def actual_size(self) -> int:
         return sum(p.stat().st_size for p in self.iter_image_paths())
 
-    @property
-    def new_size(self) -> int:
-        return sum(ip.new_size for ip in self.image_processors)
-
-    @property
-    def compression(self) -> float:
-        return round(self.new_size / self.original_size * 100, 2)
-
-    @property
-    def errors(self) -> list[str]:
-        return [ip.error for ip in self.image_processors if ip.error is not None]
-    
-    @property
-    def errors_count(self) -> int:
-        return len(self.errors)
-
     def iter_image_paths(self) -> Generator[Path, None, None]:
         for path in self.epub_temp_dir.glob("EPUB/images/*.*"):
             yield path
 
-    def iter_image_processors(self) -> Generator[ImageProcessor, None, None]:
-        for path in self.iter_image_paths():
-            processor = ImageProcessor.from_path(path, self.image_settings)
-            yield processor
-
-    def optimize_images(self) -> bool:
+    def optimize_images(self) -> list[ImageProcessingResult]:
         start_time = time.time()
+        processor = ImageProcessor(self.image_settings)
         with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-            results = executor.map(ImageProcessor.optimize_image, self.image_processors)
+            results = list(executor.map(processor.optimize_image, self.iter_image_paths()))
         self.optimization_time = time.time() - start_time
-        return all(results)
+        return results
 
-    def get_replacers(self) -> dict[str, str]:
-        return {
-            img.original_path.name: img.new_path.name
-            for img in self.image_processors
-            if img.renamed
-        }
-    
-    def short_report(self) -> str:
-        return f"{self.original_size() / 1024 / 1024:.2f} mb / {len(self)}"
-
-    def short_optimization_report(self) -> str:
-        return {
-            "images t/o/e": f"{len(self)} / {len([ip for ip in self.image_processors if ip.error is None])} / {self.errors_count}",
-            "compression": f"{self.compression:.2f}%",
-            "time": f"{self.optimization_time:.2f} s",
-        }
-
-    def detailed_resize_report(self) -> str:
-        return [ip.to_dict() for ip in self.image_processors]
-
-    def validate_image_names(self) -> bool:
-        logger.warning("EpubIllustrations.validate_image_names: validating image names")
-        start_time = time.time()
-        
-        data_names = [ip.new_path.name if ip.renamed else ip.original_path.name
-                    for ip in self.image_processors]
-        real_names = [path.name for path in self.iter_image_paths()]
-        data_names = list(sorted(data_names))
-        real_names = list(sorted(real_names))
-        logger.warning(f"validation: {len(data_names)=} {len(real_names)=}")
-
-        #data_paths = [ip.new_path if ip.renamed else ip.original_path
-        #              for ip in self.image_processors]
-        #exist = all(path.exists() for path in data_paths)
-        #real_paths = [path for path in self.iter_image_paths()]
-        #data_paths = list(sorted(data_paths))
-        #real_paths = list(sorted(real_paths))
-
-        if data_names == real_names:
-            self.validation_time = time.time() - start_time
-            return True
-        else:
-            names_diff = set(data_names) ^ set(real_names)
-            logger.error(f"validation failed: {names_diff=}")
-            self.validation_report = {
-                "names_diff": names_diff,
-                "len_real": len(real_names),
-                "len_data": len(data_names),
-            }
-            logger.error(f"dn len={len(data_names)}, rn len={len(real_names)}, diff={names_diff=}")
-            self.validation_time = time.time() - start_time
-            return False
-    

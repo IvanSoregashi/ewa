@@ -174,8 +174,8 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-What Happens to the Bobim Rug That Gets Stuck Between the Kesare？ 1-299 \[Nice to Shih Tzu] (Encoded).epub
-ewa/1.html
-ewa/cover.png_rs.jpg
-ewa/cover.png
-ewa/test.ipynb
+**/*.epub
+**/*.html
+**/*.jpg
+**/*.png
+**/*.ipynb
