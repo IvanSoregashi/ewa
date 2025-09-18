@@ -9,13 +9,17 @@ from pathlib import Path
 from typing import Any
 from concurrent.futures import ThreadPoolExecutor
 
+
 logger = logging.getLogger(__name__)
+
 
 class ImageProcessorError(Exception):
     pass
 
+
 class NotEligibleError(ImageProcessorError):
     pass
+
 
 @dataclass
 class ImageProcessingResult:
@@ -106,11 +110,11 @@ class ImageProcessingResult:
 
 @dataclass
 class ImageSettings:
-    size_lower_threshold: int | None = 50 * 1024
-    size_upper_threshold: int | None = None
+    size_lower_threshold: int = 50 * 1024
+    size_upper_threshold: int = 0  # 0 (falsy) means no upper threshold
     supported_suffixes: tuple[str] = ('.jpg', '.jpeg', '.png')
-    max_width: int | None = 1080
-    max_height: int | None = None
+    max_width: int = 1080
+    max_height: int = 0  # 0 (falsy) means no upper threshold
     convertible_modes: tuple[str] = ('RGB', 'RGBA')
     quality: int = 80
 
@@ -202,10 +206,11 @@ class ImageProcessor:
             ratio = self.settings.max_width / width
             new_width = self.settings.max_width
             new_height = int(height * ratio)
-        if self.settings.max_height is not None and new_height > self.settings.max_height:
+        if self.settings.max_height and new_height > self.settings.max_height:
             ratio = self.settings.max_height / new_height
             new_width = int(width * ratio)
             new_height = self.settings.max_height
+        print(result.original_dimensions, (new_width, new_height))
         result.new_dimensions = (new_width, new_height)
 
     def calculate_new_mode(self, result: ImageProcessingResult, image: Image.Image) -> None:
