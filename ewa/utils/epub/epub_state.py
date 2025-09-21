@@ -12,7 +12,7 @@ from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile, ZipInfo
 
 import pandas as pd
 
-from ewa.utils.epub.image_processor import EpubIllustrations, OptimizeResult, ImageSettings
+from ewa.utils.epub.image_processor import EpubIllustrations, OptimizeResult, ImageSettings, ImageProcessingResult
 from ewa.utils.epub.chapter_processor import EpubChapters
 
 logger = logging.getLogger(__name__)
@@ -262,3 +262,71 @@ class Epub(ZipMixin):
         self.ziplike_path = path
         return self.ziplike_path
 
+
+
+
+
+@dataclass
+class OptimizeResult:
+    # Resize results
+    optimization_results: list[ImageProcessingResult] = field(default_factory=list)
+    optimization_time: float = 0
+    optimization_success: bool = False
+
+    # Validation results
+    validation_report: list[dict] = field(default_factory=list)
+    validation_time: float = 0
+    validation_success: bool = True
+
+    # Chapter results
+    chapter_report: list[dict] = field(default_factory=list)
+    chapter_time: float = 0
+    chapter_success: bool = False
+
+    # Total results
+    success: bool = False
+    total_time: float = 0
+    error: str = ""
+
+    original_epub_path: Path | None = None
+    original_epub_size: float = 0
+    resized_epub_path: Path | None = None
+    resized_epub_size: float = 0
+
+    def image_rename_dict(self) -> dict[str, str]:
+        return {
+            img.name: img.new_image.path.name
+            for img in self.optimization_results
+            if img.renamed
+        }
+
+    def report_line_success(self) -> dict:
+        return {
+            "name": self.original_epub_path.name,
+            "time": f"{self.total_time:.2f} s",
+            "original_size": f"{self.original_epub_size / 1024 / 1024:.2f} mb",
+            "compressed_to": f"{self.resized_epub_size / self.original_epub_size * 100:.2f}%",
+        }
+    
+    def report_line_failure(self) -> dict:
+        return {
+            "name": self.original_epub_path.name,
+            "time": f"{self.total_time:.2f} s",
+            "original_size": f"{self.original_epub_size / 1024 / 1024:.2f} mb",
+            "error": self.error[:50],
+        }
+    
+    def report_line_resize(self) -> dict:
+        old_image_size = sum(rr["old_size"] for rr in self.optimization_results)
+        new_image_size = sum(rr["new_size"] for rr in self.optimization_results)
+        compression = round(new_image_size / old_image_size * 100, 2)
+        images = len(self.optimization_results)
+        #errors = len([rr for rr in self.resize_report if rr["error"]])
+        return {
+            "name": self.original_epub_path.name,
+            "time": f"{self.total_time:.2f} s",
+            "images": images,
+            "old_size": f"{old_image_size / 1024 / 1024:.2f} mb",
+            "compressed_to": f"{compression:.2f}%",
+            "success": self.optimization_success,
+        }

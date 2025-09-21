@@ -1,12 +1,11 @@
 from PIL import Image
 import os
 import logging
-from typing import Generator, Protocol
+from typing import Generator
 import time
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 from concurrent.futures import ThreadPoolExecutor
 
 
@@ -108,6 +107,7 @@ class ImageProcessingResult:
             "error": self.error,
         }
 
+
 @dataclass
 class ImageSettings:
     size_lower_threshold: int = 50 * 1024
@@ -117,72 +117,6 @@ class ImageSettings:
     max_height: int = 0  # 0 (falsy) means no upper threshold
     convertible_modes: tuple[str] = ('RGB', 'RGBA')
     quality: int = 80
-
-
-@dataclass
-class OptimizeResult:
-    # Resize results
-    optimization_results: list[ImageProcessingResult] = field(default_factory=list)
-    optimization_time: float = 0
-    optimization_success: bool = False
-
-    # Validation results
-    validation_report: list[dict] = field(default_factory=list)
-    validation_time: float = 0
-    validation_success: bool = True
-
-    # Chapter results
-    chapter_report: list[dict] = field(default_factory=list)
-    chapter_time: float = 0
-    chapter_success: bool = False
-
-    # Total results
-    success: bool = False
-    total_time: float = 0
-    error: str = ""
-
-    original_epub_path: Path | None = None
-    original_epub_size: float = 0
-    resized_epub_path: Path | None = None
-    resized_epub_size: float = 0
-
-    def image_rename_dict(self) -> dict[str, str]:
-        return {
-            img.original_path.name: img.new_path.name
-            for img in self.optimization_results
-            if img.renamed
-        }
-
-    def report_line_success(self) -> dict:
-        return {
-            "name": self.original_epub_path.name,
-            "time": f"{self.total_time:.2f} s",
-            "original_size": f"{self.original_epub_size / 1024 / 1024:.2f} mb",
-            "compressed_to": f"{self.resized_epub_size / self.original_epub_size * 100:.2f}%",
-        }
-    
-    def report_line_failure(self) -> dict:
-        return {
-            "name": self.original_epub_path.name,
-            "time": f"{self.total_time:.2f} s",
-            "original_size": f"{self.original_epub_size / 1024 / 1024:.2f} mb",
-            "error": self.error[:50],
-        }
-    
-    def report_line_resize(self) -> dict:
-        old_image_size = sum(rr["old_size"] for rr in self.resize_report)
-        new_image_size = sum(rr["new_size"] for rr in self.resize_report)
-        compression = round(new_image_size / old_image_size * 100, 2)
-        images = len(self.resize_report)
-        #errors = len([rr for rr in self.resize_report if rr["error"]])
-        return {
-            "name": self.original_epub_path.name,
-            "time": f"{self.total_time:.2f} s",
-            "images": images,
-            "old_size": f"{old_image_size / 1024 / 1024:.2f} mb",
-            "compressed_to": f"{compression:.2f}%",
-            "success": self.resize_success,
-        }
 
 
 @dataclass
@@ -210,7 +144,6 @@ class ImageProcessor:
             ratio = self.settings.max_height / new_height
             new_width = int(width * ratio)
             new_height = self.settings.max_height
-        print(result.original_dimensions, (new_width, new_height))
         result.new_dimensions = (new_width, new_height)
 
     def calculate_new_mode(self, result: ImageProcessingResult, image: Image.Image) -> None:
