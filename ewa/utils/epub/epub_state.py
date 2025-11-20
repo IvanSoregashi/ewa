@@ -4,15 +4,18 @@ import shutil
 import tempfile
 import logging
 import time
+import os
 
-from typing import Any, Iterator
+from typing import Any, Iterator, Generator
 from dataclasses import dataclass, field
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile, ZipInfo
 
 import pandas as pd
 
-from ewa.utils.epub.image_processor import EpubIllustrations, OptimizeResult, ImageSettings, ImageProcessingResult
+from ewa.utils.image.image_processor import ImageProcessingResult, ImageProcessor
+from ewa.utils.image.image_optimization_settings import ImageSettings
 from ewa.utils.epub.chapter_processor import EpubChapters
 
 logger = logging.getLogger(__name__)
@@ -55,19 +58,6 @@ class ZipMixin:
                 yield info
 
 
-@dataclass
-class EpubUserDirectory:
-    directory: Path = Path("~/Downloads/EPUB").expanduser().absolute()
-    quarantine_dir: Path = directory / "Quarantine"
-    resized_dir: Path = directory / "Resized"
-    unchanged_dir: Path = directory / "Unchanged"
-    processed_dir: Path = directory / "Processed"
-
-    def __post_init__(self) -> None:
-        self.quarantine_dir.mkdir(parents=True, exist_ok=True)
-        self.resized_dir.mkdir(parents=True, exist_ok=True)
-        self.unchanged_dir.mkdir(parents=True, exist_ok=True)
-        self.processed_dir.mkdir(parents=True, exist_ok=True)
 
 
 @dataclass
@@ -81,7 +71,7 @@ class FileStat:
     @classmethod
     def from_zip_info(cls, info: ZipInfo) -> FileStat:
         return cls(
-            path=info.filename,
+            path=Path(info.filename),
             size=info.file_size,
             suffix=info.filename.split(".")[-1],
             name=Path(info.filename).name,
@@ -119,7 +109,7 @@ class StatReport:
 class UnpackedEpub(ZipMixin):
     # Paths
     output_path: Path | None = None
-    user_directory: EpubUserDirectory = field(default_factory=EpubUserDirectory)
+    #user_directory: EpubUserDirectory = field(default_factory=EpubUserDirectory)
 
     chapters: EpubChapters | None = None
     illustrations: EpubIllustrations | None = None
@@ -207,7 +197,7 @@ class UnpackedEpub(ZipMixin):
             self._extract()
             self.chapters = EpubChapters(self.unpacked_directory)
             self.illustrations = EpubIllustrations(self.unpacked_directory, image_settings)
-            result.optimization_results = self.illustrations.optimize_images()
+            result.optimization_results = self.illustrations.optimize_images_in_sync()
             result.optimization_time = self.illustrations.optimization_time
             result.optimization_success = all(op_result.success for op_result in result.optimization_results)
             assert result.optimization_success, "Some images failed to resize"
@@ -233,7 +223,7 @@ class UnpackedEpub(ZipMixin):
         try:
             self._extract()
             self.illustrations = EpubIllustrations(self.unpacked_directory, image_settings)
-            result.optimization_results = self.illustrations.optimize_images()
+            result.optimization_results = self.illustrations.optimize_images_in_sync()
             result.optimization_time = self.illustrations.optimization_time
             result.optimization_success = all(op_result.success for op_result in result.optimization_results)
             result.success = True
@@ -250,7 +240,7 @@ class Epub(ZipMixin):
     """State for EPUB processing"""
     # Paths
     output_path: Path | None = None
-    user_directory: EpubUserDirectory = field(default_factory=EpubUserDirectory)
+    #user_directory: EpubUserDirectory = field(default_factory=EpubUserDirectory)
 
     def move_original(self, directory: Path) -> Path:
         if not self.ziplike_path.exists() or not directory.exists():
@@ -261,9 +251,6 @@ class Epub(ZipMixin):
         self.ziplike_path.rename(path)
         self.ziplike_path = path
         return self.ziplike_path
-
-
-
 
 
 @dataclass
@@ -330,3 +317,38 @@ class OptimizeResult:
             "compressed_to": f"{compression:.2f}%",
             "success": self.optimization_success,
         }
+
+
+@dataclass
+class EpubIllustrations:
+    epub_temp_dir: Path
+
+    image_settings: "ImageSettings"
+
+    optimization_time: float = 0
+
+    @property
+    def actual_size(self) -> int:
+        return sum(p.stat().st_size for p in self.iter_image_paths())
+
+    def iter_image_paths(self) -> Generator[Path, None, None]:
+        for path in self.epub_temp_dir.glob("EPUB/images/*.*"):
+            yield path
+
+    def optimize_images_in_threads(self) -> list[ImageProcessingResult]:
+        start_time = time.time()
+        processor = ImageProcessor(self.image_settings)
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+            results = list(executor.map(processor.optimize_image, self.iter_image_paths()))
+        self.optimization_time = time.time() - start_time
+        return results
+    
+    def optimize_images_in_sync(self) -> list[ImageProcessingResult]:
+        start_time = time.time()
+        processor = ImageProcessor(self.image_settings)
+        results = list(map(processor.optimize_image, self.iter_image_paths()))
+        self.optimization_time = time.time() - start_time
+        return results
+
+
+

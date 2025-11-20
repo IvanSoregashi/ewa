@@ -167,7 +167,7 @@ class EpubChapters:
         self.update_time = time.time() - start_time
         return all(results)
 
-    def short_report(self) -> str:
+    def short_report(self) -> dict:
         return {
             "chapters t/u/e": f"{len(self)} / {self.updated} / {len(self.errors)}",
             "time": f"{self.update_time:.2f} s",
