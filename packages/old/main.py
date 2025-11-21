@@ -1,8 +1,7 @@
 import hashlib
 from pathlib import Path
 import pandas as pd
-from ewa.utils.epub.epub import EPUB
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 import time
 
 

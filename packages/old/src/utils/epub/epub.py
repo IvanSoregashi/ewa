@@ -3,24 +3,18 @@ from __future__ import annotations
 import shutil
 import tempfile
 import logging
-import time
-import os
 
-from typing import Any, Iterator, Generator
+from typing import Any
 from datetime import datetime
-from dataclasses import dataclass, field
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from hashlib import md5
-from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile, ZipInfo
+from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
-import pandas as pd
 from bs4 import BeautifulSoup
 
-from ewa.utils.epub.epub_state import EpubIllustrations
-from ewa.utils.image.image_processor import ImageProcessingResult, ImageProcessor
-from ewa.utils.image.image_optimization_settings import ImageSettings
-from ewa.utils.epub.chapter_processor import EpubChapters
+from packages.old.src.utils.epub.epub_state import EpubIllustrations
+from packages.old.src.utils.image.image_optimization_settings import ImageSettings
+from packages.old.src.utils.epub.chapter_processor import EpubChapters
 
 logger = logging.getLogger(__name__)
 

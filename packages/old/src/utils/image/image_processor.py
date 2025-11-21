@@ -1,13 +1,9 @@
-from PIL import Image
-import os
 import logging
-from typing import Generator
 import time
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
-from ewa.utils.image.image_data import ImageData
+from packages.ewa import ImageData
 
 logger = logging.getLogger(__name__)
 

@@ -1,20 +1,12 @@
 import logging
-import sqlite3
-import zipfile
-import json
-import re
-import tempfile
 
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
-from sqlitedict import SqliteDict
 import pandas as pd
-import ebooklib
-from ebooklib.epub import EpubBook, read_epub
 
-from ewa.utils.epub.epub import EPUB, UnpackedEPUB
-from ewa.settings import config
+from packages.old.src.utils.epub.epub import EPUB
+from packages.old.src.settings import config
 
 
 logger = logging.getLogger(__name__)

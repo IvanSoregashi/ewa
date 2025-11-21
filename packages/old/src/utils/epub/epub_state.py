@@ -14,9 +14,9 @@ from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile, ZipInfo
 
 import pandas as pd
 
-from ewa.utils.image.image_processor import ImageProcessingResult, ImageProcessor
-from ewa.utils.image.image_optimization_settings import ImageSettings
-from ewa.utils.epub.chapter_processor import EpubChapters
+from packages.old.src.utils.image.image_processor import ImageProcessingResult, ImageProcessor
+from packages.old.src.utils.image.image_optimization_settings import ImageSettings
+from packages.old.src.utils.epub.chapter_processor import EpubChapters
 
 logger = logging.getLogger(__name__)
 

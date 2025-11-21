@@ -1,7 +1,5 @@
-from typer import Typer, Context, Option, Argument
-from pathlib import Path
-from typer_shell import make_typer_shell
-from ewa.commands import discover_commands
+from typer import Typer, Context, Option
+from packages.plugins import discover_commands
 from rich.console import Console
 from rich.logging import RichHandler
 import logging

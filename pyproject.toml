@@ -1,21 +1,13 @@
 [project]
-name = "ewa"
-version = "0.1.1"
-description = "CLI helper"
+name = "ewa-workspace"
+version = "0.1.0"
+description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
-dependencies = [
-    "jupyter>=1.1.1",
-    "pydantic-settings>=2.11.0",
-    "typer>=0.12.5",
-    "typer-shell>=0.1.12",
-    "beautifulsoup4>=4.13.4",
-    "lxml>=5.4.0",
-    "ebooklib>=0.19",
-    "pandas>=2.3.0",
-    "pillow>=11.2.1",
-    "sqlitedict>=2.1.0",
-]
+requires-python = ">=3.14"
+dependencies = []
 
-[project.scripts]
-ewa = "ewa.main:app"
+[tool.uv.workspace]
+members = [
+    "packages/ewa",
+    "packages/plugins/*"
+]

@@ -1,10 +1,9 @@
 import logging
-import re
 from pathlib import Path
 from typer import Typer, Context, Option, Argument
 from typer_shell import make_typer_shell
-from ewa.utils.table import print_table
-from ewa.use_cases.epub import EPUB, EPUBUseCases
+from packages.old.src.utils.table import print_table
+from packages.old.use_cases.epub import EPUB, EPUBUseCases
 
 logger = logging.getLogger(__name__)
 
