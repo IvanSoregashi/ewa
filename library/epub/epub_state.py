@@ -14,9 +14,9 @@ from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile, ZipInfo
 
 import pandas as pd
 
-from packages.old.src.utils.image.image_processor import ImageProcessingResult, ImageProcessor
-from packages.old.src.utils.image.image_optimization_settings import ImageSettings
-from packages.old.src.utils.epub.chapter_processor import EpubChapters
+from library.image.image_processor import ImageProcessingResult, ImageProcessor
+from library.image.image_optimization_settings import ImageSettings
+from plugins.epub.old import EpubChapters
 
 logger = logging.getLogger(__name__)
 

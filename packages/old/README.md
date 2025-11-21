@@ -1,2 +1,0 @@
-# ewa
-CLI helper

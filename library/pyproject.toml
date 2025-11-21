@@ -1,0 +1,14 @@
+[project]
+name = "library"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "beautifulsoup4>=4.14.2",
+    "ebooklib>=0.20",
+    "lxml>=6.0.2",
+    "pandas>=2.3.3",
+    "pillow>=12.0.0",
+    "sqlitedict>=2.1.0",
+]

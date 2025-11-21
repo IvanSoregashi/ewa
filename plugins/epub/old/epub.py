@@ -5,8 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
 
-from packages.old.src.utils.epub.epub import EPUB
-from packages.old.src.settings import config
+from library.epub.epub import EPUB
+from library.settings import config
 
 
 logger = logging.getLogger(__name__)

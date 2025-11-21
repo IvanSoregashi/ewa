@@ -1,6 +1,7 @@
 import typer
 import shlex
 from ewa.ui import console
+from ewa.loader import load_plugins
 
 app = typer.Typer(name="ewa", help="Ewa CLI")
 
@@ -33,6 +34,7 @@ def repl(ctx: typer.Context):
 
 
 def main():
+    load_plugins(app)
     app()
 
 if __name__ == "__main__":
