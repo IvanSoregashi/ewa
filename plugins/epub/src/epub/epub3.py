@@ -2,8 +2,8 @@ import logging
 from pathlib import Path
 from typer import Typer, Context, Option, Argument
 from typer_shell import make_typer_shell
-from plugins.epub.old import print_table
-from plugins.epub.old.epub import EPUB, EPUBUseCases
+from epub import print_table
+from epub import EPUB, EPUBUseCases
 
 logger = logging.getLogger(__name__)
 

@@ -12,11 +12,11 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile, ZipInfo
 
-import pandas as pd
+#import pandas as pd
 
 from library.image.image_processor import ImageProcessingResult, ImageProcessor
 from library.image.image_optimization_settings import ImageSettings
-from plugins.epub.old import EpubChapters
+from library.markup.chapter_processor import EpubChapters
 
 logger = logging.getLogger(__name__)
 
@@ -151,42 +151,42 @@ class UnpackedEpub(ZipMixin):
                 if filepath.is_file()
             ]
 
-    def file_report(self) -> list[dict]:
-        if not self.file_stats:
-            self._collect_file_stats()
-        
-        df = pd.DataFrame([stat.__dict__ for stat in self.file_stats])
-        total_size = df["size"].sum()
-        
-        report = [StatReport(
-            name="TOTAL",
-            files=len(df),
-            size=round(total_size / (1024 * 1024), 2),
-            percentage=100.0
-        ).to_dict()]
-        
-        for directory in sorted(df["directory"].unique()):
-            dir_data = df[df["directory"] == directory]
-            dir_size = dir_data["size"].sum()
-            
-            report.append(StatReport(
-                name=str(directory),
-                files=len(dir_data),
-                size=round(dir_size / (1024 * 1024), 2),
-                percentage=round(dir_size / total_size * 100, 2)
-            ).to_dict())
-            
-            for suffix in sorted(dir_data["suffix"].unique()):
-                suffix_data = dir_data[dir_data["suffix"] == suffix]
-                suffix_size = suffix_data["size"].sum()
-                report.append(StatReport(
-                    name=f" {suffix}",
-                    files=len(suffix_data),
-                    size=round(suffix_size / (1024 * 1024), 2),
-                    percentage=round(suffix_size / total_size * 100, 2)
-                ).to_dict())
-        
-        return report
+    # def file_report(self) -> list[dict]:
+    #     if not self.file_stats:
+    #         self._collect_file_stats()
+    #
+    #     df = pd.DataFrame([stat.__dict__ for stat in self.file_stats])
+    #     total_size = df["size"].sum()
+    #
+    #     report = [StatReport(
+    #         name="TOTAL",
+    #         files=len(df),
+    #         size=round(total_size / (1024 * 1024), 2),
+    #         percentage=100.0
+    #     ).to_dict()]
+    #
+    #     for directory in sorted(df["directory"].unique()):
+    #         dir_data = df[df["directory"] == directory]
+    #         dir_size = dir_data["size"].sum()
+    #
+    #         report.append(StatReport(
+    #             name=str(directory),
+    #             files=len(dir_data),
+    #             size=round(dir_size / (1024 * 1024), 2),
+    #             percentage=round(dir_size / total_size * 100, 2)
+    #         ).to_dict())
+    #
+    #         for suffix in sorted(dir_data["suffix"].unique()):
+    #             suffix_data = dir_data[dir_data["suffix"] == suffix]
+    #             suffix_size = suffix_data["size"].sum()
+    #             report.append(StatReport(
+    #                 name=f" {suffix}",
+    #                 files=len(suffix_data),
+    #                 size=round(suffix_size / (1024 * 1024), 2),
+    #                 percentage=round(suffix_size / total_size * 100, 2)
+    #             ).to_dict())
+    #
+    #     return report
 
     def optimize(self, image_settings: ImageSettings) -> OptimizeResult:
         start_time = time.time()

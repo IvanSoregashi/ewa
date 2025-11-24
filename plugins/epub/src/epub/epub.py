@@ -12,9 +12,9 @@ from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 from bs4 import BeautifulSoup
 
-from library.epub.epub_state import EpubIllustrations
+from epub_state import EpubIllustrations
 from library.image.image_optimization_settings import ImageSettings
-from plugins.epub.old import EpubChapters
+from library.markup.chapter_processor import EpubChapters
 
 logger = logging.getLogger(__name__)
 

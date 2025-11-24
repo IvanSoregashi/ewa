@@ -1,15 +1,7 @@
-import logging
-
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
-
-from library.epub.epub import EPUB
-from library.settings import config
-
-
-logger = logging.getLogger(__name__)
 
 
 def scan_dir_for_epubs(dir: Path):
@@ -29,6 +21,4 @@ def scan_dir_for_epubs(dir: Path):
         df = pd.DataFrame(item for result in results for item in result)
 
     # save file contents to fc table
-    config.epub.epubs_db
-
     # save file info to fi table

@@ -71,10 +71,14 @@ version = "0.1.0"
 source = { editable = "plugins/epub" }
 dependencies = [
     { name = "ewa" },
+    { name = "library", extra = ["db", "docs"] },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "ewa", editable = "." }]
+requires-dist = [
+    { name = "ewa", editable = "." },
+    { name = "library", extras = ["db", "docs"], editable = "library" },
+]
 
 [[package]]
 name = "ewa"
@@ -94,25 +98,34 @@ requires-dist = [
 [[package]]
 name = "library"
 version = "0.1.0"
-source = { virtual = "library" }
-dependencies = [
+source = { editable = "library" }
+
+[package.optional-dependencies]
+data = [
+    { name = "pandas" },
+]
+db = [
+    { name = "sqlitedict" },
+]
+docs = [
     { name = "beautifulsoup4" },
     { name = "ebooklib" },
     { name = "lxml" },
-    { name = "pandas" },
+]
+image = [
     { name = "pillow" },
-    { name = "sqlitedict" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "beautifulsoup4", specifier = ">=4.14.2" },
-    { name = "ebooklib", specifier = ">=0.20" },
-    { name = "lxml", specifier = ">=6.0.2" },
-    { name = "pandas", specifier = ">=2.3.3" },
-    { name = "pillow", specifier = ">=12.0.0" },
-    { name = "sqlitedict", specifier = ">=2.1.0" },
+    { name = "beautifulsoup4", marker = "extra == 'docs'", specifier = ">=4.14.2" },
+    { name = "ebooklib", marker = "extra == 'docs'", specifier = ">=0.20" },
+    { name = "lxml", marker = "extra == 'docs'", specifier = ">=6.0.2" },
+    { name = "pandas", marker = "extra == 'data'", specifier = ">=2.3.3" },
+    { name = "pillow", marker = "extra == 'image'", specifier = ">=12.0.0" },
+    { name = "sqlitedict", marker = "extra == 'db'", specifier = ">=2.1.0" },
 ]
+provides-extras = ["db", "docs", "data", "image"]
 
 [[package]]
 name = "lxml"
