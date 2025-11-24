@@ -1,0 +1,24 @@
+[project]
+name = "epub"
+version = "0.1.0"
+description = "CLI plugin for working with epub files"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "ewa",
+    "library[db, docs]"
+]
+
+[tool.uv.sources]
+ewa = { workspace = true }
+library = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/epub"]
+
+[project.entry-points."ewa.plugins"]
+epub = "epub.main:app"
