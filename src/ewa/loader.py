@@ -1,13 +1,13 @@
 import importlib.metadata
 import typer
 from ewa.ui import print_success, print_error
-import sys
 
 PLUGIN_GROUP = "ewa.plugins"
 
+
 def load_plugins(main_app: typer.Typer):
     """Discovers and mounts plugins to the main app."""
-    if hasattr(importlib.metadata, 'entry_points'):
+    if hasattr(importlib.metadata, "entry_points"):
         eps = importlib.metadata.entry_points()
         plugins = eps.select(group=PLUGIN_GROUP)
     else:

@@ -3,8 +3,12 @@ from typing import Any
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
 
 class EpubSettings:
     def __init__(self, profile_dir: Path):
@@ -19,7 +23,7 @@ class EpubSettings:
 class Config(Settings):
     PROFILE: Path = Path("~/.ewa").expanduser().absolute()
 
-    #epub: EpubSettings = EpubSettings(profile_dir=PROFILE)
+    # epub: EpubSettings = EpubSettings(profile_dir=PROFILE)
 
     def model_post_init(self, context: Any, /) -> None:
         self.profile_dir.mkdir(parents=True, exist_ok=True)

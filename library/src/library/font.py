@@ -27,7 +27,9 @@ def render_letter(ch: str, font: FreeTypeFont, canvas_size: int) -> Image.Image:
     return img
 
 
-def render_centered_letter(ch: str, font: FreeTypeFont, canvas_size: int) -> Image.Image:
+def render_centered_letter(
+    ch: str, font: FreeTypeFont, canvas_size: int
+) -> Image.Image:
     """
     receive character, font and size
     returns rendered centered Image.Image of the character
@@ -48,7 +50,9 @@ def render_centered_letter(ch: str, font: FreeTypeFont, canvas_size: int) -> Ima
     return img
 
 
-def character_to_hash_and_img(char: str, font: FreeTypeFont, size: int) -> tuple[str, Image.Image]:
+def character_to_hash_and_img(
+    char: str, font: FreeTypeFont, size: int
+) -> tuple[str, Image.Image]:
     """
     receive character, font and size
     render character in Image.Image, and take hash
@@ -59,7 +63,9 @@ def character_to_hash_and_img(char: str, font: FreeTypeFont, size: int) -> tuple
     return h, img
 
 
-def font_to_dict(characters: Iterator[str], font_path: Path, size: int = 24) -> dict[str, list[str]]:
+def font_to_dict(
+    characters: Iterator[str], font_path: Path, size: int = 24
+) -> dict[str, list[str]]:
     """
     receive collections of characters, path to a font file and size (of the font)
     iterate over collection,
@@ -72,11 +78,15 @@ def font_to_dict(characters: Iterator[str], font_path: Path, size: int = 24) -> 
     for char in characters:
         h, img = character_to_hash_and_img(char, font, size)
         groups.setdefault(h, []).append(char)
-    logger.debug(f"Font {font_path} {font_path.stat().st_size / 1024 / 1024:.1f} mb collected dict in {time.time() - start:.1f} s")
+    logger.debug(
+        f"Font {font_path} {font_path.stat().st_size / 1024 / 1024:.1f} mb collected dict in {time.time() - start:.1f} s"
+    )
     return groups
 
 
-def render_glyphs(characters: Iterator[str], font_path: Path, size: int = 24) -> dict[str, Image.Image]:
+def render_glyphs(
+    characters: Iterator[str], font_path: Path, size: int = 24
+) -> dict[str, Image.Image]:
     """
     receive collections of characters, path to a font file and size (of the font)
     iterate over collection,
@@ -89,8 +99,10 @@ def render_glyphs(characters: Iterator[str], font_path: Path, size: int = 24) ->
     for char in characters:
         h, img = character_to_hash_and_img(char, font, size)
         if h not in images:
-           images[h] = img
-    logger.debug(f"Font {font_path} {font_path.stat().st_size / 1024 / 1024:.1f} mb rendered glyphs in {time.time() - start:.1f} s")
+            images[h] = img
+    logger.debug(
+        f"Font {font_path} {font_path.stat().st_size / 1024 / 1024:.1f} mb rendered glyphs in {time.time() - start:.1f} s"
+    )
     return images
 
 
@@ -103,7 +115,9 @@ def font_to_hangul_dict(font_path: Path) -> dict[str, list[str]]:
     return font_to_dict(characters, font_path, 24)
 
 
-def render_and_save_hangul_glyphs(font_path: Path, image_dir: Path = Path("glyphs")) -> None:
+def render_and_save_hangul_glyphs(
+    font_path: Path, image_dir: Path = Path("glyphs")
+) -> None:
     """
     receive font_path, and directory to save hangul glyphs
     render hangul characters in font, save in folder
@@ -141,7 +155,7 @@ def get_hash_to_letter():
     """
     return hash: letter dictionary
     """
-    # TODO: 
+    # TODO:
     text = Path("hash_to_letter.json").read_text(encoding="utf-8")
     hash_to_letter = json.loads(text)
     # Path("glyphs").mkdir(parents=True, exist_ok=True)
@@ -152,9 +166,9 @@ def form_translation():
     """
     return glyph: letter translation dictionary
     """
-    list_of_dicts = process_all_fonts_mproc()    
+    list_of_dicts = process_all_fonts_mproc()
     hash_to_letter = get_hash_to_letter()
-    
+
     translation = {}
 
     for groups in list_of_dicts:
@@ -169,6 +183,5 @@ def form_translation():
             translation[glyph] = list(letters)[0]
         else:
             translation[glyph] = glyph
-    
-    return translation
 
+    return translation

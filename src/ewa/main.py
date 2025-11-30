@@ -3,7 +3,6 @@ import shlex
 from ewa.ui import console
 from ewa.loader import load_plugins
 from ewa.config import Settings
-import sys
 
 app = typer.Typer(name="ewa", help="Ewa CLI")
 settings = Settings()
@@ -40,6 +39,6 @@ def main():
     load_plugins(app)
     app()
 
+
 if __name__ == "__main__":
     main()
-

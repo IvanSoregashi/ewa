@@ -10,7 +10,7 @@ class ImageProcessorError(Exception):
 @dataclass
 class ImageData:
     path: Path
-    
+
     _size: int = 0
     _dimensions: tuple[int, int] = (0, 0)
     _mode: str = ""
@@ -56,12 +56,16 @@ class ImageData:
     @property
     def image(self) -> Image.Image:
         if not self.path.exists():
-            raise FileNotFoundError(f"ImageData.image: image {self.path} does not exist")
+            raise FileNotFoundError(
+                f"ImageData.image: image {self.path} does not exist"
+            )
         if not self._image:
             try:
                 self._image = Image.open(self.path)
             except Exception as e:
-                raise ImageProcessorError(f"ImageData.image: error opening image {self.path}: {e}")
+                raise ImageProcessorError(
+                    f"ImageData.image: error opening image {self.path}: {e}"
+                )
         return self._image
 
     @image.setter
@@ -79,7 +83,7 @@ class ImageData:
             self.image = self.image.convert(self.mode)
         if self.image.size != self.dimensions:
             self.image = self.image.resize(self.dimensions, Image.Resampling.LANCZOS)
-   
+
     def optimize_and_save(self, quality: int = 80) -> None:
         """Optimize image and save to path,
         converting to RGB if necessary,

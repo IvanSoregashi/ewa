@@ -1,5 +1,4 @@
 from pathlib import Path
-from bs4 import BeautifulSoup
 
 
 def translate_text_file(filepath: Path, translation: dict[str, str]):

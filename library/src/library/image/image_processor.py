@@ -2,15 +2,9 @@ import logging
 import time
 
 from dataclasses import dataclass
-from pathlib import Path
 from packages.ewa import ImageData
 
 logger = logging.getLogger(__name__)
-
-
-
-
-
 
 
 @dataclass
@@ -28,7 +22,9 @@ class ImageProcessingResult:
         self.error = "Image is not eligible for processing"
         return self
 
-    def success_result(self, start_time: float, new_image: ImageData) -> "ImageProcessingResult":
+    def success_result(
+        self, start_time: float, new_image: ImageData
+    ) -> "ImageProcessingResult":
         self.success = True
         self.time_taken = time.time() - start_time
         self.new_image = new_image
@@ -64,11 +60,11 @@ class ImageProcessingResult:
     @property
     def savings(self) -> int:
         return self.ori_image.size - self.new_image.size
-    
+
     @property
     def resized(self) -> bool:
         return self.ori_image.dimensions != self.new_image.dimensions
-    
+
     @property
     def converted(self) -> bool:
         return self.new_image.mode == "RGB"
@@ -89,25 +85,23 @@ class ImageProcessingResult:
             "savings": self.savings,
             "error": self.error,
         }
-  
-    
-@dataclass
-class ImageProcessor:
-    settings: "ImageSettings"
-
-    def optimize_image(self, path: Path) -> ImageProcessingResult:
-        start_time = time.time()
-        ori_image = ImageData(path)
-        eligible = self.settings.evaluate(ori_image)
-        result = ImageProcessingResult(ori_image=ori_image)
-        if not eligible:
-            return result.not_eligible_result(start_time)
-        try:
-            new_image = self.settings.construct_new_image(ori_image)
-            new_image.optimize_and_save(self.settings.quality)
-            ori_image.delete_file_if_size_is_same()
-            return result.success_result(start_time, new_image)
-        except Exception as e:
-            return result.failure_result(start_time, str(e))
 
 
+# @dataclass
+# class ImageProcessor:
+#     settings: "ImageSettings"
+#
+#     def optimize_image(self, path: Path) -> ImageProcessingResult:
+#         start_time = time.time()
+#         ori_image = ImageData(path)
+#         eligible = self.settings.evaluate(ori_image)
+#         result = ImageProcessingResult(ori_image=ori_image)
+#         if not eligible:
+#             return result.not_eligible_result(start_time)
+#         try:
+#             new_image = self.settings.construct_new_image(ori_image)
+#             new_image.optimize_and_save(self.settings.quality)
+#             ori_image.delete_file_if_size_is_same()
+#             return result.success_result(start_time, new_image)
+#         except Exception as e:
+#             return result.failure_result(start_time, str(e))

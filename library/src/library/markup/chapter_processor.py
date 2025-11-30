@@ -8,6 +8,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from bs4 import BeautifulSoup, Tag
 from bs4 import XMLParsedAsHTMLWarning
+
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,9 @@ class ChapterProcessor:
             src = str(img.get("src"))
             expected_folder = "../Images/"
             if not src.startswith(expected_folder):
-                self.warnings.append(f"Chapter {self.path.name} has image reference {src} that is not in the Images directory")
+                self.warnings.append(
+                    f"Chapter {self.path.name} has image reference {src} that is not in the Images directory"
+                )
                 continue
             list_of_refs.append(src.replace(expected_folder, ""))
         return list_of_refs
@@ -61,7 +64,7 @@ class ChapterProcessor:
                 if img_name in replacers:
                     img["src"] = src.replace(img_name, replacers[img_name])
                     self.references_updated += 1
-            
+
             if self.references_updated > 0:
                 self.write_chapter()
             return True
@@ -84,9 +87,11 @@ class ChapterProcessor:
 class EpubChapters:
     def __init__(self, epub_temp_dir: Path):
         self.epub_temp_dir = epub_temp_dir
-        self.chapter_processors: list[ChapterProcessor] = list(map(ChapterProcessor, self.iter_chapter_paths()))
+        self.chapter_processors: list[ChapterProcessor] = list(
+            map(ChapterProcessor, self.iter_chapter_paths())
+        )
         self.image_references: dict[int, list[str]] | None = None
-        
+
         self.update_time: float = 0
 
     def __len__(self) -> int:
@@ -101,7 +106,9 @@ class EpubChapters:
             return self.image_references
         result = {}
         with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-            refs = executor.map(ChapterProcessor.get_linked_image_names, self.chapter_processors)
+            refs = executor.map(
+                ChapterProcessor.get_linked_image_names, self.chapter_processors
+            )
         for i, refs in enumerate(refs):
             if refs:
                 result[i] = refs
@@ -109,7 +116,7 @@ class EpubChapters:
         return result
 
     @property
-    def with_images(self) -> list[ChapterProcessor]:            
+    def with_images(self) -> list[ChapterProcessor]:
         return [self.chapter_processors[i] for i in self.map_image_references()]
 
     @property
@@ -120,7 +127,9 @@ class EpubChapters:
     def updated(self) -> int:
         return len([ch for ch in self.chapter_processors if ch.references_updated > 0])
 
-    def cross_reference_images(self, images: list[str]) -> tuple[bool, list[tuple[int, list[str]]], list[str]]:
+    def cross_reference_images(
+        self, images: list[str]
+    ) -> tuple[bool, list[tuple[int, list[str]]], list[str]]:
         """
         Cross reference images
         Args:
@@ -141,9 +150,7 @@ class EpubChapters:
                 for i, refs in self.map_image_references().items()
                 if not all(ref in images for ref in refs)
             ]
-            imgs_without_refs = [
-                img for img in images if img not in all_refs
-            ]
+            imgs_without_refs = [img for img in images if img not in all_refs]
             return False, ch_with_orphans, imgs_without_refs
         return True, [], []
 
@@ -162,7 +169,7 @@ class EpubChapters:
             results = executor.map(
                 ChapterProcessor.update_image_references,
                 chapters_with_images,
-                list_of_replacers
+                list_of_replacers,
             )
         self.update_time = time.time() - start_time
         return all(results)
@@ -174,7 +181,8 @@ class EpubChapters:
         }
 
     def detailed_report(self) -> list[dict]:
-        return [ch.to_dict()
-                for ch in self.chapter_processors
-                if ch.error is not None
-                or ch.references_updated > 0]
+        return [
+            ch.to_dict()
+            for ch in self.chapter_processors
+            if ch.error is not None or ch.references_updated > 0
+        ]

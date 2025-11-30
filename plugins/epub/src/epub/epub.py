@@ -34,9 +34,13 @@ class UnpackedEPUB:
 
     def compress(self, destination_folder: Path) -> EPUB:
         if not destination_folder.exists() or not destination_folder.is_dir():
-            raise FileNotFoundError(f"UnpackedEPUB.compress: directory {destination_folder} does not exist")
+            raise FileNotFoundError(
+                f"UnpackedEPUB.compress: directory {destination_folder} does not exist"
+            )
         if not self.path.exists() or not self.path.is_dir():
-            raise FileNotFoundError(f"temporary_directory: temporary_directory {self.path} does not exist")
+            raise FileNotFoundError(
+                f"temporary_directory: temporary_directory {self.path} does not exist"
+            )
 
         path = destination_folder / self.name
         while path.exists():
@@ -46,9 +50,13 @@ class UnpackedEPUB:
             with ZipFile(path, "w") as zipf:
                 mimetype_file = self.path / "mimetype"
                 if mimetype_file.exists():
-                    zipf.write(mimetype_file, arcname="mimetype", compress_type=ZIP_STORED)
+                    zipf.write(
+                        mimetype_file, arcname="mimetype", compress_type=ZIP_STORED
+                    )
                 else:
-                    raise FileNotFoundError("Missing required 'mimetype' file for EPUB.")
+                    raise FileNotFoundError(
+                        "Missing required 'mimetype' file for EPUB."
+                    )
 
                 for file in self.path.rglob("*"):
                     if file.is_file() and file.name != "mimetype":
@@ -56,7 +64,9 @@ class UnpackedEPUB:
                         zipf.write(file, arcname=arcname, compress_type=ZIP_DEFLATED)
             return EPUB(path)
         except Exception as e:
-            logger.error(f"temporary_directory: failed to compress directory into EPUB: {e}")
+            logger.error(
+                f"temporary_directory: failed to compress directory into EPUB: {e}"
+            )
             raise e
         finally:
             self.delete()
@@ -83,7 +93,9 @@ class EPUB:
 
     def move_original(self, directory: Path) -> Path:
         if not self.path.exists() or not directory.exists():
-            raise FileNotFoundError(f"EPUBState.move_original: EPUB file {self.path} does not exist")
+            raise FileNotFoundError(
+                f"EPUBState.move_original: EPUB file {self.path} does not exist"
+            )
         path = directory / self.path.name
 
         while path.exists():
@@ -112,7 +124,8 @@ class EPUB:
             all_files = []
             hash_opf = None
             for info in zip_file.infolist():
-                if info.is_dir(): continue
+                if info.is_dir():
+                    continue
                 suffix = Path(info.filename).suffix
                 if suffix == ".opf":
                     with zip_file.open(info.filename) as file:
@@ -123,7 +136,7 @@ class EPUB:
                     "suffix": suffix,
                     "filesize": info.file_size,
                     "compress_size": info.compress_size,
-                    "datetime": datetime(*info.date_time).isoformat()
+                    "datetime": datetime(*info.date_time).isoformat(),
                 }
 
                 all_files.append(result)
@@ -136,7 +149,7 @@ class EPUB:
             result: dict[str, Any] = {
                 "path": self.path,
                 "size": self.path.stat().st_size,
-                "hash": self.hash()
+                "hash": self.hash(),
             }
             if opf_file is None:
                 for info in zip_file.infolist():
@@ -156,6 +169,8 @@ class EPUB:
                     result["creator_as"] = creator and creator.get("opf:file-as", "")
                     date = metadata.find("dc:date")
                     meta = metadata.find("opf:meta")
-                    timestamp = (date and date.text) or (meta and meta.get("content", ""))
+                    timestamp = (date and date.text) or (
+                        meta and meta.get("content", "")
+                    )
                     result["timestamp"] = timestamp
             return result

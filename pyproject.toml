@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "pydantic-settings>=2.12.0",
+    "sqlmodel>=0.0.27",
     "typer>=0.20.0",
 ]
 
@@ -21,6 +22,11 @@ members = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ewa"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.7",
+]
 
 [project.scripts]
 ewa = "ewa.main:main"
