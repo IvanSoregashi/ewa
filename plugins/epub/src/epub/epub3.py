@@ -11,28 +11,6 @@ app: Typer = make_typer_shell(prompt="epub> ", obj=EPUBUseCases())
 
 
 @app.command()
-def list(
-    ctx: Context,
-    size: bool = Option(False, "--size", "-s", help="Show size of each file"),
-    path: Path = Argument(None, help="Path to search for epub files"),
-    recursive: bool = Option(
-        False, "--recursive", "-r", help="Search recursively for epub files"
-    ),
-    chapters: bool = Option(
-        False, "--chapters", "-c", help="Parse name for chapters for each file"
-    ),
-):
-    """List all epub files in the current directory"""
-    use_cases: EPUBUseCases = ctx.obj
-    if path:
-        use_cases.set_path(path)
-    files = use_cases.form_table(recursive, size, chapters)
-    file_count = len(files)
-    logger.debug(f"located {file_count} files")
-    print_table(files, title="EPUB Files")
-
-
-@app.command()
 def select(ctx: Context, n: int = Argument(..., help="Number of the file to select")):
     """Select an epub file"""
     use_cases: EPUBUseCases = ctx.obj

@@ -5,14 +5,14 @@ import tempfile
 import logging
 
 from typing import Any
-from datetime import datetime
 from pathlib import Path
 from hashlib import md5
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 from bs4 import BeautifulSoup
 
-from epub_state import EpubIllustrations
+from epub.epub_state import EpubIllustrations
+from epub.tables import EpubContentData
 from library.image.image_optimization_settings import ImageSettings
 from library.markup.chapter_processor import EpubChapters
 
@@ -119,29 +119,19 @@ class EPUB:
             with zip_file.open(opf_file) as file:
                 return md5(file.read()).hexdigest()
 
-    def collect_file_info(self) -> list[dict]:
+    def collect_file_info(self) -> list[EpubContentData]:
         with ZipFile(self.path) as zip_file:
-            all_files = []
-            hash_opf = None
+            all_files: list[EpubContentData] = []
+            opf_hash = None
             for info in zip_file.infolist():
-                if info.is_dir():
-                    continue
-                suffix = Path(info.filename).suffix
-                if suffix == ".opf":
-                    with zip_file.open(info.filename) as file:
-                        hash_opf = md5(file.read()).hexdigest()
-
-                result = {
-                    "filename": info.filename,
-                    "suffix": suffix,
-                    "filesize": info.file_size,
-                    "compress_size": info.compress_size,
-                    "datetime": datetime(*info.date_time).isoformat(),
-                }
-
+                result = EpubContentData.from_zip_info(self.path, info)
                 all_files.append(result)
+                if result.suffix != ".opf":
+                    continue
+                with zip_file.open(info.filename) as file:
+                    opf_hash = md5(file.read()).hexdigest()
             for d in all_files:
-                d["hash.opf"] = hash_opf
+                d.opf_hash = opf_hash
             return all_files
 
     def file_info(self, opf_file: str | None = None) -> dict:

@@ -2,7 +2,7 @@ import logging
 import time
 
 from dataclasses import dataclass
-from packages.ewa import ImageData
+from library.image.image_data import ImageData
 
 logger = logging.getLogger(__name__)
 
@@ -105,3 +105,5 @@ class ImageProcessingResult:
 #             return result.success_result(start_time, new_image)
 #         except Exception as e:
 #             return result.failure_result(start_time, str(e))
+class ImageProcessor:
+    pass

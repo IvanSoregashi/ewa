@@ -2,6 +2,7 @@ from collections.abc import Iterable, Sequence
 from enum import StrEnum
 from queue import Queue
 from itertools import batched
+from threading import Thread
 from typing import Self
 
 from sqlmodel import SQLModel, create_engine, Session, select
@@ -67,9 +68,10 @@ class SQLModelTable:
     def write(
         self,
         records: Iterable | Queue,
-        batch: int = 0,
-        on_conflict: OnConflict = OnConflict.CONFLICT,
+        batch: int = 1000,
+        on_conflict: OnConflict = OnConflict.UPDATE,
     ) -> None:
+        print(f"start write {records, type(records)}")
         if isinstance(records, Queue):
             records = iter(records.get, TERMINATOR)
         batched_records = [records] if batch == 0 else batched(records, batch)
@@ -84,6 +86,14 @@ class SQLModelTable:
                     case self.OnConflict.IGNORE:
                         self.bulk_insert_or_ignore(session, batch_of_records)
                 session.commit()
+
+    def write_in_thread(
+        self,
+        records: Iterable | Queue,
+        batch: int = 1000,
+        on_conflict: OnConflict = OnConflict.UPDATE,
+    ) -> None:
+        Thread(target=self.write, args=(records, batch, on_conflict)).start()
 
     def count_rows(self) -> int:
         with self.engine.connect() as connection:

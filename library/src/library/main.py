@@ -1,5 +1,4 @@
 from typer import Typer, Context, Option
-from packages.plugins import discover_commands
 from rich.console import Console
 from rich.logging import RichHandler
 import logging
@@ -30,8 +29,8 @@ def callback(
 
 
 def main():
-    for name, command in discover_commands():
-        app.add_typer(command, name=name)
+#    for name, command in discover_commands():
+#        app.add_typer(command, name=name)
         # command.command("ls", help="List files in the current directory")(ls)
 
     app()

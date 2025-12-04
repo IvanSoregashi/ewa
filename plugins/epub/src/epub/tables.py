@@ -1,8 +1,12 @@
 from collections.abc import Iterable
+from datetime import datetime
 from typing import Any, Self, Generator
 from pathlib import Path
+from zipfile import ZipInfo
+
 from sqlmodel import SQLModel, Field
 from epub.utils import ts_to_dt, bt_to_mb
+from ewa.ui import print_error
 
 
 class EpubFileData(SQLModel, table=True):
@@ -50,10 +54,29 @@ class EpubFileData(SQLModel, table=True):
 
 
 class EpubContentData(SQLModel, table=True):
-    toc_hash: str = Field(primary_key=True, index=True)
-    filepath: str = Field(primary_key=True)
+    epub_filepath: str = Field(primary_key=True)
+    opf_hash: str = Field(default=None)
+    filepath: str = Field(primary_key=True, index=True)
     filename: str
     suffix: str
     filesize: int
     compressed_size: int
-    datetime: int
+    timestamp: float
+
+    @classmethod
+    def from_zip_info(cls, epub_filename: Path, zip_info: ZipInfo):
+        zip_path = Path(zip_info.filename)
+        try:
+            timestamp = datetime(*zip_info.date_time).timestamp()
+        except Exception as e:
+            print_error(f"Error parsing date_time {zip_info.date_time}: {e}")
+            timestamp = 0
+        return cls(
+            epub_filepath=str(epub_filename),
+            filepath=zip_info.filename,
+            filename=zip_path.stem,
+            suffix=zip_path.suffix,
+            filesize=zip_info.file_size,
+            compressed_size=zip_info.compress_size,
+            timestamp=timestamp,
+        )

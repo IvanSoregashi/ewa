@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from packages.ewa import ImageData
+from library.image.image_data import ImageData
 
 
 @dataclass

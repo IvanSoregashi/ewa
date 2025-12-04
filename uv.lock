@@ -71,13 +71,13 @@ version = "0.1.0"
 source = { editable = "plugins/epub" }
 dependencies = [
     { name = "ewa" },
-    { name = "library", extra = ["db", "docs"] },
+    { name = "library", extra = ["db", "docs", "image"] },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "ewa", editable = "." },
-    { name = "library", extras = ["db", "docs"], editable = "library" },
+    { name = "library", extras = ["db", "docs", "image"], editable = "library" },
 ]
 
 [[package]]
