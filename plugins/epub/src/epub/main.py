@@ -8,6 +8,7 @@ from ewa.ui import print_table, print_success, print_error
 from ewa.main import settings
 from ewa.sqlmodel_table import SQLModelTable, TERMINATOR
 from epub.tables import EpubContentData, EpubFileData
+from epub.tables2 import scan_file
 from epub.epub_classes import EPUB
 
 app = typer.Typer(help="Epub Plugin")
@@ -57,13 +58,10 @@ def scan_contents():
 
 @app.command()
 def test():
-    table = SQLModelTable(EpubFileData, echo=False)
-    # q = Queue()
-    # Thread(target=lambda: list(map(q.put, itertools.chain(map(EpubFileData.from_path, settings.current_dir.rglob("*.epub")), (None,))))).start()
-    start_time = time.time()
-    # table.write_from_queue(q, on_conflict=table.OnConflict.UPDATE)
-    print_success(f"{table.count_rows()} total rows")
-    print_success(f"[{time.time() - start_time:>7.2f}] write finished")
+    q = Queue()
+    for path in settings.current_dir.rglob("*.epub"):
+        scan_file(path, q)
+
 
 
 @app.command()
