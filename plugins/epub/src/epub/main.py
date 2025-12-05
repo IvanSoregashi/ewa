@@ -63,7 +63,6 @@ def test():
         scan_file(path, q)
 
 
-
 @app.command()
 def count(
     files: bool = typer.Option(False, "-f", "--files"),
@@ -100,8 +99,7 @@ def drop(
 def list_scanned_files(
     files: bool = typer.Option(False, "-f", "--files"),
     contents: bool = typer.Option(False, "-c", "--contents"),
-    largest: str = typer.Option("", "-l", "--largest", ),
-
+    largest: str = typer.Option("", "-l", "--largest"),
 ):
     """Lists all scanned books."""
     if files:

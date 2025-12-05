@@ -29,9 +29,9 @@ def callback(
 
 
 def main():
-#    for name, command in discover_commands():
-#        app.add_typer(command, name=name)
-        # command.command("ls", help="List files in the current directory")(ls)
+    #    for name, command in discover_commands():
+    #        app.add_typer(command, name=name)
+    # command.command("ls", help="List files in the current directory")(ls)
 
     app()
 

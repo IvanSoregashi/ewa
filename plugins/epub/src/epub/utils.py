@@ -1,7 +1,7 @@
-import zipfile
 from datetime import datetime
 from hashlib import md5
 from zipfile import ZipInfo
+
 
 def ts_to_dt(ts: float) -> str:
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
@@ -19,5 +19,5 @@ def string_to_int_hash(string: str) -> int:
 def timestamp_from_zip_info(zip_info: ZipInfo) -> int:
     try:
         return int(datetime(*zip_info.date_time).timestamp())
-    except Exception as e:
+    except Exception:
         return 0

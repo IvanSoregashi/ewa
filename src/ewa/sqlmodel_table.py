@@ -24,10 +24,11 @@ class SQLModelTable:
         self.engine = create_engine(url or settings.database_url, **kwargs)
         with self.engine.connect() as connection:
             connection.execute(text("PRAGMA journal_mode=WAL;"))
+            connection.execute(text("PRAGMA synchronous=NORMAL;"))
+            connection.execute(text("PRAGMA cache_size=-64000;"))
             connection.commit()
         self.table_model: type[SQLModel] = table
         self.table = table.__table__
-        # self.drop()
         self.create()
         self.primary_keys = [column.name for column in self.table.primary_key.columns]
         self.columns = [column.name for column in self.table.columns]
