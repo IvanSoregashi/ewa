@@ -1,15 +1,15 @@
 from hashlib import md5
 from typing import Any
 from pathlib import Path
-from zipfile import ZipInfo, ZipFile
-from queue import Queue
+from zipfile import ZipInfo
 
 from bs4 import BeautifulSoup
 from sqlmodel import SQLModel, Field, Relationship
 from epub.utils import timestamp_from_zip_info, string_to_int_hash
+from ewa.sqlite_model_table import SQLiteModelTable
 
 
-class EpubBook(SQLModel, table=True):
+class EpubBookModel(SQLModel, table=True):
     id: int | None = Field(primary_key=True)
     filepath: str = Field(index=True)
     filesize: int
@@ -20,10 +20,10 @@ class EpubBook(SQLModel, table=True):
     title: str | None = None
     creator: str | None = None
 
-    contents: list[EpubContents] = Relationship(back_populates="book")
+    contents: list[EpubContentsModel] = Relationship(back_populates="book")
 
     @classmethod
-    def from_path(cls, path: Path) -> EpubBook:
+    def from_path(cls, path: Path) -> EpubBookModel:
         stat = path.stat()
         return cls(
             id=string_to_int_hash(str(path)),
@@ -43,18 +43,26 @@ class EpubBook(SQLModel, table=True):
             creator = metadata.find("dc:creator")
             self.creator = creator and creator.text
 
+    def as_dict(self) -> dict[str, Any]:
+        return self.model_dump()  # TODO: proper formatting
 
-class EpubContents(SQLModel, table=True):
-    book_id: int = Field(primary_key=True, foreign_key="epubbook.id")
+    def as_list(self) -> list:
+        return list(map(str, self.as_dict().values()))  # TODO: proper formatting
+
+    def as_epub(self): ...
+
+
+class EpubContentsModel(SQLModel, table=True):
+    book_id: int = Field(primary_key=True, foreign_key="epubbookmodel.id")
     filepath: str = Field(primary_key=True)
     filesize: int
     compressed_size: int
     timestamp: int
 
-    book: EpubBook = Relationship(back_populates="contents")
+    book: EpubBookModel = Relationship(back_populates="contents")
 
     @staticmethod
-    def dict_from_zip_info(book_id: int, zip_info: ZipInfo) -> dict[str, Any]:
+    def dict_from_zip_info(zip_info: ZipInfo, book_id: int) -> dict[str, Any]:
         return {
             "book_id": book_id,
             "filepath": zip_info.filename,
@@ -64,7 +72,7 @@ class EpubContents(SQLModel, table=True):
         }
 
     @classmethod
-    def from_zip_info(cls, book_id: int, zip_info: ZipInfo) -> EpubContents:
+    def from_zip_info(cls, zip_info: ZipInfo, book_id: int) -> EpubContentsModel:
         return cls(
             book_id=book_id,
             filepath=zip_info.filename,
@@ -74,14 +82,7 @@ class EpubContents(SQLModel, table=True):
         )
 
 
-def scan_file(path: Path, q: Queue) -> EpubBook:
-    book = EpubBook.from_path(path)
-    with ZipFile(path) as zip_file:
-        for info in zip_file.infolist():
-            q.put(EpubContents.dict_from_zip_info(book.book_id, info))
-            if not info.filename.endswith(".opf"):
-                continue
-            with zip_file.open(info.filename) as file:
-                opf_bytes = file.read()
-                book.update_from_opf_file(opf_bytes)
-    return book
+class EpubBookTable(SQLiteModelTable[EpubBookModel]): ...
+
+
+class EpubContentsTable(SQLiteModelTable[EpubContentsModel]): ...

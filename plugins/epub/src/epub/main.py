@@ -4,11 +4,10 @@ from concurrent.futures.thread import ThreadPoolExecutor
 import typer
 import time
 from pathlib import Path
-from ewa.ui import print_table, print_success, print_error
+from ewa.ui import print_table, print_success, print_error, print_table_from_models
 from ewa.main import settings
-from ewa.sqlmodel_table import SQLModelTable, TERMINATOR
-from epub.tables import EpubContentData, EpubFileData
-from epub.tables2 import scan_file
+from ewa.sqlite_model_table import TERMINATOR
+from epub.tables import EpubBookModel, EpubBookTable, EpubContentsTable
 from epub.epub_classes import EPUB
 
 app = typer.Typer(help="Epub Plugin")
@@ -21,25 +20,23 @@ def setup():
 
 
 @app.command("scanf")
-def scan_files(path: Path = typer.Argument(Path("../.."), help="Directory to scan")):
+def scan_files():
     """Scans a directory for .epub files."""
     path = settings.current_dir
     print_success(f"Scanning {path}...")
     start_time = time.time()
     total_len = len(list(path.rglob("*.epub")))
-    if total_len == 0:
-        print_error(f"[{time.time() - start_time:>7.2f}] 0 epub files fount")
-        return
     print_success(f"[{time.time() - start_time:>7.2f}] scanning {total_len} files")
-    table = SQLModelTable(EpubFileData)
-    table.write(map(EpubFileData.from_path, path.rglob("*.epub")))
+    table = EpubBookTable()
+    table.insert_rows(map(EpubBookModel.from_path, path.rglob("*.epub")))
     print_success(f"[{time.time() - start_time:>7.2f}] Finished scanning.")
 
 
 @app.command("scanc")
 def scan_contents():
     """Scans a directory for .epub files, reads contents of epub files."""
-    table = SQLModelTable(EpubContentData)
+    table = EpubContentsTable()
+    row = table.read_row()
     path = settings.current_dir
     print_success(f"Scanning {path}...")
     start_time = time.time()
@@ -58,9 +55,11 @@ def scan_contents():
 
 @app.command()
 def test():
-    q = Queue()
-    for path in settings.current_dir.rglob("*.epub"):
-        scan_file(path, q)
+    table = EpubBookTable()
+    row = table.read_row(id=-9222855734309247887)
+    print(row)
+    row = table.read_row(filesize=3889488)
+    print(row)
 
 
 @app.command()
@@ -73,10 +72,8 @@ def count(
         count = len(tuple(Path(settings.current_dir).rglob("*.epub")))
         print_success(f"{count} epub files found")
     if rows:
-        table = SQLModelTable(EpubContentData, echo=False)
-        print_success(
-            f"Counting epub file records in {table.table_model.__tablename__} SQL table..."
-        )
+        table = EpubContentsTable(echo=False)
+        print_success(f"Counting epub file records in {table.table_model.__tablename__} SQL table...")
         print_success(f"{table.count_rows()} total rows found")
 
 
@@ -86,11 +83,11 @@ def drop(
     contents: bool = typer.Option(False, "-c", "--contents"),
 ):
     if files:
-        table = SQLModelTable(EpubFileData)
+        table = EpubBookTable()
         table.drop()
         print_success(f"dropped table {table.table_model.__tablename__}")
     if contents:
-        table = SQLModelTable(EpubContentData)
+        table = EpubContentsTable()
         table.drop()
         print_success(f"dropped table {table.table_model.__tablename__}")
 
@@ -103,13 +100,12 @@ def list_scanned_files(
 ):
     """Lists all scanned books."""
     if files:
-        table = SQLModelTable(EpubFileData)
+        table = EpubBookTable()
         raw_rows = table.read_rows(limit=10)
         if not raw_rows:
             print_error(f"Table {table.table_model.__tablename__} is empty")
             return
-        columns = list(raw_rows[0].as_dict().keys())
-        print_table("My Library", columns, list(map(lambda x: x.as_list(), raw_rows)))
+        print_table_from_models("My Library", raw_rows)
     if contents:
         print_error("Not Implemented")
 

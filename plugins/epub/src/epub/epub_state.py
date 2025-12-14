@@ -46,11 +46,7 @@ class ZipMixin:
 
     def _collect_file_stats(self) -> None:
         with ZipFile(self.ziplike_path) as zip_file:
-            self.file_stats = [
-                FileStat.from_zip_info(info)
-                for info in zip_file.infolist()
-                if not info.is_dir()
-            ]
+            self.file_stats = [FileStat.from_zip_info(info) for info in zip_file.infolist() if not info.is_dir()]
 
     def iterate(self) -> Iterator[ZipInfo]:
         with ZipFile(self.ziplike_path) as zip_file:
@@ -114,9 +110,7 @@ class UnpackedEpub(ZipMixin):
 
     def _compact_epub(self, directory: Path) -> Path:
         if not directory.exists() or not directory.is_dir():
-            raise FileNotFoundError(
-                f"UnpackedEpub._compact: directory {directory} does not exist"
-            )
+            raise FileNotFoundError(f"UnpackedEpub._compact: directory {directory} does not exist")
         if not self.unpacked_directory.exists() or not self.unpacked_directory.is_dir():
             raise FileNotFoundError(
                 f"temporary_directory: temporary_directory {self.unpacked_directory} does not exist"
@@ -128,13 +122,9 @@ class UnpackedEpub(ZipMixin):
             with ZipFile(path, "w") as zipf:
                 mimetype_file = self.unpacked_directory / "mimetype"
                 if mimetype_file.exists():
-                    zipf.write(
-                        mimetype_file, arcname="mimetype", compress_type=ZIP_STORED
-                    )
+                    zipf.write(mimetype_file, arcname="mimetype", compress_type=ZIP_STORED)
                 else:
-                    raise FileNotFoundError(
-                        "Missing required 'mimetype' file for EPUB."
-                    )
+                    raise FileNotFoundError("Missing required 'mimetype' file for EPUB.")
 
                 for file in self.unpacked_directory.rglob("*"):
                     if file.is_file() and file.name != "mimetype":
@@ -142,9 +132,7 @@ class UnpackedEpub(ZipMixin):
                         zipf.write(file, arcname=arcname, compress_type=ZIP_DEFLATED)
             return path
         except Exception as e:
-            logger.error(
-                f"temporary_directory: failed to compress directory into EPUB: {e}"
-            )
+            logger.error(f"temporary_directory: failed to compress directory into EPUB: {e}")
             raise e
         finally:
             self._teardown()
@@ -204,24 +192,16 @@ class UnpackedEpub(ZipMixin):
         try:
             self._extract()
             self.chapters = EpubChapters(self.unpacked_directory)
-            self.illustrations = EpubIllustrations(
-                self.unpacked_directory, image_settings
-            )
+            self.illustrations = EpubIllustrations(self.unpacked_directory, image_settings)
             result.optimization_results = self.illustrations.optimize_images_in_sync()
             result.optimization_time = self.illustrations.optimization_time
-            result.optimization_success = all(
-                op_result.success for op_result in result.optimization_results
-            )
+            result.optimization_success = all(op_result.success for op_result in result.optimization_results)
             assert result.optimization_success, "Some images failed to resize"
-            result.chapter_success = self.chapters.update_image_references(
-                result.image_rename_dict()
-            )
+            result.chapter_success = self.chapters.update_image_references(result.image_rename_dict())
             result.chapter_time = self.chapters.update_time
             result.chapter_report = self.chapters.detailed_report()
             assert result.chapter_report, "Failed to update image references"
-            result.resized_epub_path = self._compact_epub(
-                self.user_directory.resized_dir
-            )
+            result.resized_epub_path = self._compact_epub(self.user_directory.resized_dir)
             result.resized_epub_size = result.resized_epub_path.stat().st_size
             result.success = True
         except Exception as e:
@@ -238,14 +218,10 @@ class UnpackedEpub(ZipMixin):
         result.original_epub_size = self.ziplike_path.stat().st_size
         try:
             self._extract()
-            self.illustrations = EpubIllustrations(
-                self.unpacked_directory, image_settings
-            )
+            self.illustrations = EpubIllustrations(self.unpacked_directory, image_settings)
             result.optimization_results = self.illustrations.optimize_images_in_sync()
             result.optimization_time = self.illustrations.optimization_time
-            result.optimization_success = all(
-                op_result.success for op_result in result.optimization_results
-            )
+            result.optimization_success = all(op_result.success for op_result in result.optimization_results)
             result.success = True
         except Exception as e:
             result.error = str(e)
@@ -265,9 +241,7 @@ class Epub(ZipMixin):
 
     def move_original(self, directory: Path) -> Path:
         if not self.ziplike_path.exists() or not directory.exists():
-            raise FileNotFoundError(
-                f"EPUBState.move_original: EPUB file {self.ziplike_path} does not exist"
-            )
+            raise FileNotFoundError(f"EPUBState.move_original: EPUB file {self.ziplike_path} does not exist")
         path = directory / self.ziplike_path.name
         while path.exists():
             path = path.with_stem(path.stem + "+")
@@ -304,11 +278,7 @@ class OptimizeResult:
     resized_epub_size: float = 0
 
     def image_rename_dict(self) -> dict[str, str]:
-        return {
-            img.name: img.new_image.path.name
-            for img in self.optimization_results
-            if img.renamed
-        }
+        return {img.name: img.new_image.path.name for img in self.optimization_results if img.renamed}
 
     def report_line_success(self) -> dict:
         return {
@@ -362,9 +332,7 @@ class EpubIllustrations:
         start_time = time.time()
         processor = ImageProcessor(self.image_settings)
         with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-            results = list(
-                executor.map(processor.optimize_image, self.iter_image_paths())
-            )
+            results = list(executor.map(processor.optimize_image, self.iter_image_paths()))
         self.optimization_time = time.time() - start_time
         return results
 

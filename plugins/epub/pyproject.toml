@@ -1,6 +1,6 @@
 [project]
 name = "epub"
-version = "0.1.0"
+version = "0.1.4"
 description = "CLI plugin for working with epub files"
 readme = "README.md"
 requires-python = ">=3.14"
