@@ -22,9 +22,7 @@ class ImageProcessingResult:
         self.error = "Image is not eligible for processing"
         return self
 
-    def success_result(
-        self, start_time: float, new_image: ImageData
-    ) -> "ImageProcessingResult":
+    def success_result(self, start_time: float, new_image: ImageData) -> "ImageProcessingResult":
         self.success = True
         self.time_taken = time.time() - start_time
         self.new_image = new_image

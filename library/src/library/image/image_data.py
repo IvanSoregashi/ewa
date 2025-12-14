@@ -56,16 +56,12 @@ class ImageData:
     @property
     def image(self) -> Image.Image:
         if not self.path.exists():
-            raise FileNotFoundError(
-                f"ImageData.image: image {self.path} does not exist"
-            )
+            raise FileNotFoundError(f"ImageData.image: image {self.path} does not exist")
         if not self._image:
             try:
                 self._image = Image.open(self.path)
             except Exception as e:
-                raise ImageProcessorError(
-                    f"ImageData.image: error opening image {self.path}: {e}"
-                )
+                raise ImageProcessorError(f"ImageData.image: error opening image {self.path}: {e}")
         return self._image
 
     @image.setter

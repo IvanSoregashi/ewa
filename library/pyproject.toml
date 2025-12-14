@@ -1,6 +1,6 @@
 [project]
 name = "library"
-version = "0.1.0"
+version = "0.1.1"
 description = "Temporary EWA Library Package"
 readme = "README.md"
 requires-python = ">=3.14"

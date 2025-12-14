@@ -27,9 +27,7 @@ def render_letter(ch: str, font: FreeTypeFont, canvas_size: int) -> Image.Image:
     return img
 
 
-def render_centered_letter(
-    ch: str, font: FreeTypeFont, canvas_size: int
-) -> Image.Image:
+def render_centered_letter(ch: str, font: FreeTypeFont, canvas_size: int) -> Image.Image:
     """
     receive character, font and size
     returns rendered centered Image.Image of the character
@@ -50,9 +48,7 @@ def render_centered_letter(
     return img
 
 
-def character_to_hash_and_img(
-    char: str, font: FreeTypeFont, size: int
-) -> tuple[str, Image.Image]:
+def character_to_hash_and_img(char: str, font: FreeTypeFont, size: int) -> tuple[str, Image.Image]:
     """
     receive character, font and size
     render character in Image.Image, and take hash
@@ -63,9 +59,7 @@ def character_to_hash_and_img(
     return h, img
 
 
-def font_to_dict(
-    characters: Iterator[str], font_path: Path, size: int = 24
-) -> dict[str, list[str]]:
+def font_to_dict(characters: Iterator[str], font_path: Path, size: int = 24) -> dict[str, list[str]]:
     """
     receive collections of characters, path to a font file and size (of the font)
     iterate over collection,
@@ -84,9 +78,7 @@ def font_to_dict(
     return groups
 
 
-def render_glyphs(
-    characters: Iterator[str], font_path: Path, size: int = 24
-) -> dict[str, Image.Image]:
+def render_glyphs(characters: Iterator[str], font_path: Path, size: int = 24) -> dict[str, Image.Image]:
     """
     receive collections of characters, path to a font file and size (of the font)
     iterate over collection,
@@ -115,9 +107,7 @@ def font_to_hangul_dict(font_path: Path) -> dict[str, list[str]]:
     return font_to_dict(characters, font_path, 24)
 
 
-def render_and_save_hangul_glyphs(
-    font_path: Path, image_dir: Path = Path("glyphs")
-) -> None:
+def render_and_save_hangul_glyphs(font_path: Path, image_dir: Path = Path("glyphs")) -> None:
     """
     receive font_path, and directory to save hangul glyphs
     render hangul characters in font, save in folder

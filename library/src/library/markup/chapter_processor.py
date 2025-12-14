@@ -87,9 +87,7 @@ class ChapterProcessor:
 class EpubChapters:
     def __init__(self, epub_temp_dir: Path):
         self.epub_temp_dir = epub_temp_dir
-        self.chapter_processors: list[ChapterProcessor] = list(
-            map(ChapterProcessor, self.iter_chapter_paths())
-        )
+        self.chapter_processors: list[ChapterProcessor] = list(map(ChapterProcessor, self.iter_chapter_paths()))
         self.image_references: dict[int, list[str]] | None = None
 
         self.update_time: float = 0
@@ -106,9 +104,7 @@ class EpubChapters:
             return self.image_references
         result = {}
         with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-            refs = executor.map(
-                ChapterProcessor.get_linked_image_names, self.chapter_processors
-            )
+            refs = executor.map(ChapterProcessor.get_linked_image_names, self.chapter_processors)
         for i, refs in enumerate(refs):
             if refs:
                 result[i] = refs
@@ -127,9 +123,7 @@ class EpubChapters:
     def updated(self) -> int:
         return len([ch for ch in self.chapter_processors if ch.references_updated > 0])
 
-    def cross_reference_images(
-        self, images: list[str]
-    ) -> tuple[bool, list[tuple[int, list[str]]], list[str]]:
+    def cross_reference_images(self, images: list[str]) -> tuple[bool, list[tuple[int, list[str]]], list[str]]:
         """
         Cross reference images
         Args:
@@ -139,11 +133,7 @@ class EpubChapters:
             List of chapters with orphan images.
             List of images without references.
         """
-        all_refs = [
-            value
-            for sublist in self.map_image_references().values()
-            for value in sublist
-        ]
+        all_refs = [value for sublist in self.map_image_references().values() for value in sublist]
         if set(all_refs) != set(images):
             ch_with_orphans = [
                 (i, [ref for ref in refs if ref not in images])
@@ -181,8 +171,4 @@ class EpubChapters:
         }
 
     def detailed_report(self) -> list[dict]:
-        return [
-            ch.to_dict()
-            for ch in self.chapter_processors
-            if ch.error is not None or ch.references_updated > 0
-        ]
+        return [ch.to_dict() for ch in self.chapter_processors if ch.error is not None or ch.references_updated > 0]
