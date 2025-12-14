@@ -67,7 +67,7 @@ wheels = [
 
 [[package]]
 name = "epub"
-version = "0.1.0"
+version = "0.1.3"
 source = { editable = "plugins/epub" }
 dependencies = [
     { name = "ewa" },

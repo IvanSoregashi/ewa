@@ -1,3 +1,4 @@
+import os
 from typing import Any
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -11,6 +12,7 @@ class Settings(BaseSettings):
     current_dir: DirectoryPath = Path(".").absolute()
     database_file: FilePath | None = None
     database_url: str | None = None
+    is_windows: bool = os.name == "nt"
 
     def model_post_init(self, context: Any, /) -> None:
         if self.database_file is None:

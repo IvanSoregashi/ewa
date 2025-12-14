@@ -1,6 +1,6 @@
 [project]
 name = "ewa"
-version = "0.1.0"
+version = "0.1.1"
 description = "ewa core CLI application"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -31,3 +31,37 @@ dev = [
 [project.scripts]
 ewa = "ewa.main:main"
 
+[tool.ruff]
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+]
+
+line-length = 120
+indent-width = 4
+
+target-version = "py314"
