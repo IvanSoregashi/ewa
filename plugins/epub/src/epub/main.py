@@ -4,11 +4,11 @@ from concurrent.futures.thread import ThreadPoolExecutor
 import typer
 import time
 from pathlib import Path
-from ewa.ui import print_table, print_success, print_error, print_table_from_models
+from ewa.ui import print_success, print_error, print_table_from_models, DisplayProgress
 from ewa.main import settings
 from ewa.sqlite_model_table import TERMINATOR
-from epub.tables import EpubBookModel, EpubBookTable, EpubContentsTable
-from epub.epub_classes import EPUB
+from epub.tables import EpubBookTable, EpubContentsTable
+from epub.epub_classes import EPUB, ScanDirectoryEPUB
 
 app = typer.Typer(help="Epub Plugin")
 
@@ -24,19 +24,20 @@ def scan_files():
     """Scans a directory for .epub files."""
     path = settings.current_dir
     print_success(f"Scanning {path}...")
-    start_time = time.time()
-    total_len = len(list(path.rglob("*.epub")))
-    print_success(f"[{time.time() - start_time:>7.2f}] scanning {total_len} files")
-    table = EpubBookTable()
-    table.insert_rows(map(EpubBookModel.from_path, path.rglob("*.epub")))
-    print_success(f"[{time.time() - start_time:>7.2f}] Finished scanning.")
+    with DisplayProgress():
+        scanning = ScanDirectoryEPUB(path)
+        EpubContentsTable().write_from_queue_in_thread(scanning.queue)
+        book_list = scanning.do_scan_with_progress()
+        if not scanning.queue.empty():
+            time.sleep(1)
+        EpubBookTable().bulk_insert_models(book_list)
 
 
 @app.command("scanc")
 def scan_contents():
     """Scans a directory for .epub files, reads contents of epub files."""
     table = EpubContentsTable()
-    row = table.read_row()
+    # row = table.read_row()
     path = settings.current_dir
     print_success(f"Scanning {path}...")
     start_time = time.time()

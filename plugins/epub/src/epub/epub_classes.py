@@ -1,22 +1,16 @@
 from __future__ import annotations
 
-import os
 import shutil
 import tempfile
 import logging
 
 from queue import Queue
-from typing import Any, overload
 from pathlib import Path
-from hashlib import md5
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
-from functools import partial
 from collections.abc import Iterable, Generator
 from concurrent.futures.thread import ThreadPoolExecutor
 
-from bs4 import BeautifulSoup
-
-from ewa.main import settings
+from ewa.sqlite_model_table import TERMINATOR
 from ewa.ui import print_error
 from epub.epub_state import EpubIllustrations
 from epub.tables import EpubBookModel, EpubContentsModel
@@ -145,6 +139,7 @@ class ScanDirectoryEPUB:
     ) -> None:
         self.directory = directory
         self.mask = mask
+        self.paths: Iterable[Path] = directory.rglob(mask)
         self.workers = workers
         self.queue = queue
 
@@ -166,93 +161,26 @@ class ScanDirectoryEPUB:
         return book
 
     def _process_paths(self) -> Generator[EpubBookModel, None, None]:
-        iter_paths = self.directory.rglob(self.mask)
         if self.workers:
             with ThreadPoolExecutor(max_workers=self.workers) as executor:
-                yield from filter(None, executor.map(self.process_epub, iter_paths))
+                yield from filter(None, executor.map(self.process_epub, self.paths))
         else:
-            yield from filter(None, map(self.process_epub, iter_paths))
+            yield from filter(None, map(self.process_epub, self.paths))
+        self.queue.put(TERMINATOR)
 
     def do_scan(self):
-        yield from self._process_paths()
+        return list(self._process_paths())
 
-
-def content_dicts_from_path(
-    path: Path, book_id: int | None = None, q: Queue[dict] | None = None
-) -> tuple[bytes, list[dict]] | bytes:
-    if book_id is None:
-        book_id = string_to_int_hash(str(path))
-    contents = []
-    opf_bytes: bytes
-    with ZipFile(path) as zip_file:
-        for info in zip_file.infolist():
-            finfo = EpubContentsModel.dict_from_zip_info(info, book_id)
-            contents.append(finfo)
-            if info.filename.endswith(".opf"):
-                opf_bytes = zip_file.read(info.filename)
-    if q is not None:
-        for d in contents:
-            q.put(d)
-        return opf_bytes
-    return opf_bytes, contents
-
-
-def content_models_from_path(path: Path, book_id: int | None = None) -> tuple[bytes, list[EpubContentsModel]]:
-    if book_id is None:
-        book_id = string_to_int_hash(str(path))
-    contents = []
-    opf_bytes: bytes
-    with ZipFile(path) as zip_file:
-        for info in zip_file.infolist():
-            finfo = EpubContentsModel.from_zip_info(info, book_id)
-            contents.append(finfo)
-            if info.filename.endswith(".opf"):
-                opf_bytes = zip_file.read(info.filename)
-    return opf_bytes, contents
-
-
-def read_book_contents(book: EpubBookModel, q: Queue[dict] | None = None) -> EpubBookModel:
-    opf_bytes, contents = content_dicts_from_path(Path(book.filepath), book.id)
-    book.update_from_opf_file(opf_bytes)
-
-    return book
-
-
-def content_from_books_q(
-    books: Iterable[EpubBookModel], q: Queue[dict[str, str]]
-) -> Generator[EpubBookModel, None, None]:
-    for book in books:
-        with ZipFile(book.filepath) as zip_file:
-            for info in zip_file.infolist():
-                q.put(EpubContentsModel.dict_from_zip_info(book.book_id, info))
-                if info.filename.endswith(".opf"):
-                    book.update_from_opf_file(zip_file.read(info.filename))
-        yield book
-
-
-def book_content_in_thread(book: EpubBookModel) -> tuple[EpubBookModel, list[dict]]:
-    contents = []
-    with ZipFile(book.filepath) as zip_file:
-        for info in zip_file.infolist():
-            finfo = EpubContentsModel.dict_from_zip_info(book.book_id, info)
-            contents.append(finfo)
-            if info.filename.endswith(".opf"):
-                book.update_from_opf_file(zip_file.read(info.filename))
-    return book, contents
-
-
-def gen_content_from_book(book: EpubBookModel) -> Generator[dict, None, None]:
-    with ZipFile(book.filepath) as zip_file:
-        for info in zip_file.infolist():
-            yield EpubContentsModel.dict_from_zip_info(info, book.book_id)
-
-
-def gen_content_from_books(books: Iterable[EpubBookModel]) -> Generator[dict, None, None]:
-    for book in books:
-        yield from gen_content_from_book(book)
-
-
-def scan_directory(directory: Path, mask: str = "*.epub"):
-    iter_paths = directory.rglob(mask)
-    iter_models = map(EpubBookModel.from_path, iter_paths)
-    iter_content = gen_content_from_books(iter_models)
+    def do_scan_with_progress(self):
+        books = []
+        self.paths = list(self.paths)
+        total = len(self.paths)
+        current = 0
+        print("[green]Scanning...", current, total)
+        for book in self._process_paths():
+            books.append(book)
+            current += 1
+            if current % 25 == 0:
+                print("[green]Scanning...", current, total)
+        print("[green]Scanning...", current, total)
+        return books
