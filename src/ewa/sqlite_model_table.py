@@ -31,12 +31,21 @@ class SQLiteModelTable[TableType: SQLModel]:
             connection.execute(text("PRAGMA synchronous=NORMAL;"))
             connection.execute(text("PRAGMA cache_size=-64000;"))
             connection.commit()
+        self.session: Session | None = None
         self.table_model: type[TableType] = get_args(self.__orig_bases__[0])[0]
         self.table = self.table_model.__table__
         self.create()
         self.primary_keys = [column.name for column in self.table.primary_key.columns]
         self.columns = [column.name for column in self.table.columns]
         self.on_conflict = on_conflict
+        self.write_thread: Thread | None = None
+
+    def __enter__(self) -> Self:
+        self.session = Session(self.engine)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.session.close()
 
     def drop(self) -> Self:
         self.table.drop(self.engine)
@@ -45,6 +54,9 @@ class SQLiteModelTable[TableType: SQLModel]:
     def create(self, checkfirst: bool = True) -> Self:
         self.table.create(self.engine, checkfirst=checkfirst)
         return self
+
+    def create_all(self) -> Self:
+        self.table_model.metadata.create_all(self.engine)
 
     def read_row(self, **kwargs) -> TableType | None:
         filter_clauses = []
@@ -55,18 +67,15 @@ class SQLiteModelTable[TableType: SQLModel]:
             else:
                 print_error(f"Warning: '{key}' is not a valid column in {self.table_model.__name__}")
         query = select(self.table_model).where(*filter_clauses)
-        with Session(self.engine) as session:
-            result = session.exec(query)
-            return result.one_or_none()
+        return self.session.exec(query).one_or_none()
 
     def count_rows(self) -> int:
         with self.engine.connect() as connection:
             return connection.execute(text(f"SELECT COUNT(*) FROM {self.table_model.__tablename__}")).fetchone()[0]
 
     def read_rows(self, limit: int = 100) -> list[TableType]:
-        with Session(self.engine) as session:
-            statement = select(self.table_model).limit(limit)
-            return list(session.exec(statement).all())
+        statement = select(self.table_model).limit(limit)
+        return list(self.session.exec(statement).all())
 
     def bulk_insert_statement(self, records: Sequence[dict]) -> Insert:
         insert_stmt = sqlite_insert(self.table).values(records)
@@ -87,8 +96,8 @@ class SQLiteModelTable[TableType: SQLModel]:
 
     def insert_row(self, row: TableType) -> None:
         insert_stmt = self.bulk_insert_statement((row.model_dump(),))
-        with Session(self.engine) as session:
-            session.exec(insert_stmt)
+        self.session.exec(insert_stmt)
+        self.session.commit()
 
     def bulk_insert_dicts(
         self,
@@ -97,17 +106,16 @@ class SQLiteModelTable[TableType: SQLModel]:
         current_func: Callable[[], int],
         increment: Callable[[int], None],
     ) -> None:
-        task_name = f"[cyan]writing {self.table_model.__name__}..."
+        task_name = f"[cyan]writing {self.table_model.__tablename__}"
         start_time = time.time()
-        print(f"[cyan] Starting {self.table_model.__name__} bulk insert task...")
-        with Session(self.engine) as session:
-            for batch in batcher:
-                increment(len(batch))
-                print(task_name, current_func(), total_func())
-                batch_insert_stmt = self.bulk_insert_statement(batch)
-                session.exec(batch_insert_stmt)
-                session.commit()
-        print(f"[cyan] Finished {self.table_model.__name__} bulk insert task in {time.time() - start_time} seconds...")
+        print(f"[cyan] Starting {self.table_model.__tablename__} bulk insert task")
+        for batch in batcher:
+            increment(len(batch))
+            print(task_name, current_func(), total_func())
+            batch_insert_stmt = self.bulk_insert_statement(batch)
+            self.session.exec(batch_insert_stmt)
+            self.session.commit()
+        print(f"[cyan] Finished {self.table_model.__tablename__} bulk insert task in [{time.time() - start_time:>7.2f}s]")
 
     def bulk_insert_models(
         self,
@@ -127,7 +135,7 @@ class SQLiteModelTable[TableType: SQLModel]:
             increment=increment,
         )
 
-    def insert_from_queue(self, queue: Queue[dict]) -> None:
+    def write_from_queue(self, queue: Queue[dict]) -> None:
         current = 0
 
         def increment(count: int) -> None:
@@ -142,4 +150,12 @@ class SQLiteModelTable[TableType: SQLModel]:
         )
 
     def write_from_queue_in_thread(self, queue: Queue[dict]) -> None:
-        Thread(target=self.write_from_queue, args=(queue,)).start()
+        self.write_thread = Thread(target=self.write_from_queue, args=(queue,))
+        self.write_thread.start()
+
+    def await_write_completion(self):
+        if self.write_thread is None:
+            return
+        while self.write_thread.is_alive():
+            time.sleep(1)
+        self.write_thread = None
