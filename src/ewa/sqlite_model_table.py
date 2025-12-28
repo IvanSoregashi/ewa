@@ -115,7 +115,7 @@ class SQLiteModelTable[TableType: SQLModel]:
             batch_insert_stmt = self.bulk_insert_statement(batch)
             self.session.exec(batch_insert_stmt)
             self.session.commit()
-        print(f"[cyan] Finished {self.table_model.__tablename__} bulk insert task in [{time.time() - start_time:>7.2f}s]")
+        print(f"[cyan] Finished {self.table_model.__tablename__} bulk insert in [{time.time() - start_time:>7.2f}s]")
 
     def bulk_insert_models(
         self,
