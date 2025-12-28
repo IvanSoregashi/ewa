@@ -13,7 +13,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from ewa.sqlite_model_table import TERMINATOR
 from ewa.ui import print_error
 from epub.epub_state import EpubIllustrations
-from epub.tables import EpubBookModel, EpubContentsModel
+from epub.tables import EpubFileModel, EpubContentsModel, EpubBookTable
 from epub.utils import string_to_int_hash
 
 from library.image.image_optimization_settings import ImageSettings
@@ -71,11 +71,19 @@ class UnpackedEPUB:
 
 
 class EPUB:
-    def __init__(self, path: Path, book_id: int | None = None) -> None:
+    def __init__(self, path: Path, book_id: int | None = None, book_model: EpubFileModel | None = None) -> None:
         self.path = path
         self.book_id = book_id or string_to_int_hash(str(path))
-        self.book_model: EpubBookModel | None = None
+        self.book_model = book_model
         self.book_contents_models: list[EpubContentsModel] | None = None
+
+    @classmethod
+    def from_epub_model(cls, model: EpubFileModel):
+        return cls(
+            path=Path(model.filepath),
+            book_id=model.id,
+            book_model=model,
+        )
 
     def extract(self) -> UnpackedEPUB:
         unpacked_directory = Path(tempfile.mkdtemp())
@@ -113,7 +121,7 @@ class EPUB:
 
     def path_scan(self, overwrite: bool = True):
         if overwrite or self.book_model is None:
-            self.book_model = EpubBookModel.from_path(self.path)
+            self.book_model = EpubFileModel.from_path(self.path)
 
     def full_scan(self, overwrite: bool = True):
         self.path_scan()
@@ -121,15 +129,30 @@ class EPUB:
             self.book_contents_models = []
         with ZipFile(self.path) as zip_file:
             for info in zip_file.infolist():
-                self.book_contents_models.append(EpubContentsModel.from_zip_info(self.book_id, info))
+                self.book_contents_models.append(EpubContentsModel.from_zip_info(info, self.book_id))
                 if not info.filename.endswith(".opf"):
                     continue
                 with zip_file.open(info.filename) as file:
                     opf_bytes = file.read()
                     self.book_model.update_from_opf_file(opf_bytes)
 
+    def read_from_database(self, table: EpubBookTable):
+        self.book_model = table.read_row(id=self.book_id)
+        self.book_contents_models = self.book_model.contents
 
-class ScanDirectoryEPUB:
+
+class EncryptedSerenePandaEPUB(EPUB):
+    pass
+    # toc.ncx
+    # stylesheet.css
+    # page_styles.css
+    # mimetype
+    # fonts / SerenePanda.ttf
+    # content.opf
+    # META - INF / container.xml
+
+
+class ScanEpubsInDirectory:
     def __init__(
         self,
         directory: Path,
@@ -143,24 +166,25 @@ class ScanDirectoryEPUB:
         self.workers = workers
         self.queue = queue
 
-    def process_epub(self, path: Path) -> EpubBookModel | None:
+    def process_epub(self, path: Path) -> EpubFileModel | None:
         try:
-            book = EpubBookModel.from_path(path)
+            book = EpubFileModel.from_path(path)
             book_id = book.id
         except Exception as e:
             logger.error(f"process_epub({path}): failed to load book: {e}")
             return None
         try:
+            filenames = []
             with ZipFile(path) as zip_file:
                 for info in zip_file.infolist():
                     self.queue.put(EpubContentsModel.dict_from_zip_info(info, book_id))
-                    if info.filename.endswith(".opf"):
-                        book.update_from_opf_file(zip_file.read(info.filename))
+                    filenames.append(info.filename)
+            book.process_filenames(filenames)
         except Exception as e:
             logger.error(f"process_epub({path}): failed to process zipfile: {e}")
         return book
 
-    def _process_paths(self) -> Generator[EpubBookModel, None, None]:
+    def _process_paths(self) -> Generator[EpubFileModel, None, None]:
         if self.workers:
             with ThreadPoolExecutor(max_workers=self.workers) as executor:
                 yield from filter(None, executor.map(self.process_epub, self.paths))
