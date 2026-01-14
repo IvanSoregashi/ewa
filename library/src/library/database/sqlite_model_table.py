@@ -1,17 +1,16 @@
 import time
 from collections.abc import Iterable, Sequence, Collection, Callable
-from enum import StrEnum
 from queue import Queue
 from itertools import batched
 from typing import Self, get_args
 from threading import Thread
 
 from sqlmodel import SQLModel, create_engine, Session, select
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert, Insert
 from sqlalchemy import text
 
 from ewa.main import settings
 from ewa.ui import print_error
+from library.database.sqlite_utils import initialize_db
 
 TERMINATOR = object()  # Queue terminator
 
@@ -19,26 +18,21 @@ TERMINATOR = object()  # Queue terminator
 class SQLiteModelTable[TableType: SQLModel]:
     """Class is Parent class only, not meant for initialization of Objects, needs to be inherited from."""
 
-    class OnConflict(StrEnum):
-        CONFLICT = "CONFLICT"
-        UPDATE = "UPDATE"
-        IGNORE = "IGNORE"
+    def __init__(self, url: str | None = None, **kwargs):
+        url = url or settings.database_url
+        self.engine = create_engine(url, **kwargs)
 
-    def __init__(self, url: str | None = None, on_conflict: OnConflict = OnConflict.UPDATE, **kwargs):
-        self.engine = create_engine(url or settings.database_url, **kwargs)
-        with self.engine.connect() as connection:
-            connection.execute(text("PRAGMA journal_mode=WAL;"))
-            connection.execute(text("PRAGMA synchronous=NORMAL;"))
-            connection.execute(text("PRAGMA cache_size=-64000;"))
-            connection.commit()
+        initialize_db(self.engine)
+
         self.session: Session | None = None
+        self.write_thread: Thread | None = None
+        # Получаем генерик TableType SQLModel класса
         self.table_model: type[TableType] = get_args(self.__orig_bases__[0])[0]
+
         self.table = self.table_model.__table__
-        self.create()
+        self.create_all()
         self.primary_keys = [column.name for column in self.table.primary_key.columns]
         self.columns = [column.name for column in self.table.columns]
-        self.on_conflict = on_conflict
-        self.write_thread: Thread | None = None
 
     def __enter__(self) -> Self:
         self.session = Session(self.engine)
