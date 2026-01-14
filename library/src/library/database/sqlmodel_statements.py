@@ -1,17 +1,15 @@
+import os
 from typing import Literal, Any, TypeVar, Sequence
 import importlib
 from sqlalchemy import BinaryExpression, Insert, Update, bindparam
-from sqlmodel import SQLModel, select, insert, update
+from sqlmodel import SQLModel, select, update
 from sqlalchemy.orm import lazyload, selectinload
 from sqlmodel.sql.expression import Select, SelectOfScalar
 
-SQL_DIALECT = Literal["postgresql", "sqlite"]
+SQL_DIALECT = os.getenv("SQL_DIALECT", "sqlite")
+insert = importlib.import_module(f"sqlalchemy.dialects.{SQL_DIALECT}").insert
+
 ModelClass = TypeVar("ModelClass", bound=SQLModel)
-
-
-def import_insert(dialect: SQL_DIALECT) -> type[insert]:
-    insert = importlib.import_module(f"sqlalchemy.dialects.{dialect}").insert
-    return insert
 
 
 def select_query(
@@ -39,12 +37,10 @@ def select_query(
 
 def insert_statement(
     model: type[ModelClass],
-    dialect: SQL_DIALECT,
     rows: Sequence[dict],
     ignore_conflict: bool = False,
     primary_keys: list[str] | None = None,
 ) -> Insert:
-    insert = import_insert(dialect)
     statement = insert(model).values(rows)
 
     if ignore_conflict:
@@ -56,18 +52,15 @@ def insert_statement(
 
 def bulk_insert_statement(
     model: type[ModelClass],
-    dialect: SQL_DIALECT,
     ignore_conflict: bool = False,
-    primary_keys: list[str] | None = None,
 ) -> Insert:
-    insert = import_insert(dialect)
     table = model.__table__
     columns = [column.name for column in table.columns]
 
     statement = insert(model).values({column: bindparam(column) for column in columns})
 
     if ignore_conflict:
-        primary_keys = primary_keys or [column.name for column in table.primary_key.columns]
+        primary_keys = [column.name for column in table.primary_key.columns]
         statement = statement.on_conflict_do_nothing(index_elements=primary_keys)
 
     return statement
@@ -75,12 +68,10 @@ def bulk_insert_statement(
 
 def upsert_statement(
     model: type[ModelClass],
-    dialect: SQL_DIALECT,
     rows: Sequence[dict],
     primary_keys: list[str] | None = None,
     update_mapping: dict[str, Any] | None = None,
 ) -> Insert:
-    insert = import_insert(dialect)
     statement = insert(model).values(rows)
     return statement.on_conflict_do_update(
         index_elements=primary_keys or [column.name for column in model.__table__.primary_key.columns],
@@ -93,6 +84,21 @@ def upsert_statement(
     )
 
 
+def bulk_upsert_statement(
+    model: type[ModelClass],
+) -> Insert:
+    table = model.__table__
+    columns = [c.name for c in table.columns]
+    primary_keys = [column.name for column in table.primary_key.columns]
+    update_mapping = {column.name: bindparam(column.name) for column in table.columns if not column.primary_key}
+
+    statement = insert(model).values({column: bindparam(column) for column in columns})
+    return statement.on_conflict_do_update(
+        index_elements=primary_keys,
+        set_=update_mapping,
+    )
+
+
 def update_statement(
     model: type[ModelClass],
     *args: list[BinaryExpression],
@@ -102,8 +108,7 @@ def update_statement(
 
 
 def bulk_update_statement(model: type[ModelClass]) -> Update:
-    table = model.__table__
-    primary_keys = [column.name for column in table.primary_key.columns]
+    primary_keys = [column.name for column in model.__table__.primary_key.columns]
     statement = update(model)
     for primary_key in primary_keys:
         statement = statement.where(getattr(model, primary_key) == bindparam(primary_key))
