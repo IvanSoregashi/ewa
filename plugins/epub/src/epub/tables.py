@@ -3,8 +3,8 @@ from pathlib import Path
 from zipfile import ZipInfo
 
 from sqlmodel import SQLModel, Field, Relationship
-from epub.utils import timestamp_from_zip_info, string_to_int_hash
-from ewa.sqlite_model_table import SQLiteModelTable
+from epub.utils import timestamp_from_zip_info, string_to_int_hash, bt_to_mb
+from library.database.sqlite_model_table import SQLiteModelTable
 
 
 class EpubFileModel(SQLModel, table=True):
@@ -16,6 +16,11 @@ class EpubFileModel(SQLModel, table=True):
     mtime: int
     ctime: int
 
+    language: str | None = None
+    title: str | None = None
+    creator: str | None = None
+    identifier: str | None = None
+
     mimetype: bool = False
     container: bool = False
     content: bool = False
@@ -24,7 +29,6 @@ class EpubFileModel(SQLModel, table=True):
     ncx: str | None = None
     serene_panda: bool = False
     serene_panda_ttf: str | None = None
-
     contents: list[EpubContentsModel] = Relationship(back_populates="book")
 
     @classmethod
@@ -52,13 +56,31 @@ class EpubFileModel(SQLModel, table=True):
         if serene_panda:
             self.serene_panda_ttf = serene_panda[0]
 
+    def read_metadata(self, data: dict) -> None:
+        metadata = data.get("metadata", {})
+        self.language = str(metadata.get("language", "")) or None
+        self.title = str(metadata.get("title", "")) or None
+        self.creator = str(metadata.get("creator", "")) or None
+        self.identifier = str(metadata.get("identifier", "")) or None
+
+    def get_contents_tuples(self, fields: list[str]):
+        result = []
+        for item in self.contents:
+            dct = item.model_dump()
+            result.append(tuple(dct.get(field) for field in fields))
+        return result
+
+    def get_contents(self):
+        tuples = self.get_contents_tuples(["filepath", "filesize"])
+        return tuples
+
     def to_epub(self):
         from epub.epub_classes import EPUB
 
         return EPUB.from_epub_model(self)
 
     def as_dict(self) -> dict[str, Any]:
-        return self.model_dump()  # TODO: proper formatting
+        return {"filepath": self.filepath, "filesize": bt_to_mb(self.filesize), "creator": self.creator}
 
     def as_list(self) -> list:
         return list(map(str, self.as_dict().values()))  # TODO: proper formatting
@@ -73,34 +95,37 @@ class EpubContentsModel(SQLModel, table=True):
     compressed_size: int
     timestamp: int
 
+    item_id: str | None = None
+    media_type: str | None = None
+    chapter: str | None = None
+
     book: EpubFileModel = Relationship(back_populates="contents")
 
     @staticmethod
-    def dict_from_zip_info(zip_info: ZipInfo, book_id: int) -> dict[str, Any]:
+    def dict_from_zip_info(zip_info: ZipInfo, book_id: int, data: dict) -> dict[str, Any]:
         return {
             "book_id": book_id,
             "filepath": zip_info.filename,
             "filesize": zip_info.file_size,
             "compressed_size": zip_info.compress_size,
             "timestamp": timestamp_from_zip_info(zip_info),
+            "item_id": data.get("item_id"),
+            "media_type": data.get("media_type"),
+            "chapter": data.get("chapter"),
         }
 
     @classmethod
-    def from_zip_info(cls, zip_info: ZipInfo, book_id: int) -> EpubContentsModel:
+    def from_zip_info(cls, zip_info: ZipInfo, book_id: int, data: dict) -> EpubContentsModel:
         return cls(
             book_id=book_id,
             filepath=zip_info.filename,
             filesize=zip_info.file_size,
             compressed_size=zip_info.compress_size,
             timestamp=timestamp_from_zip_info(zip_info),
+            item_id=data.get("item_id"),
+            media_type=data.get("media_type"),
+            chapter=data.get("chapter"),
         )
-
-
-class EpubTableOfContentsModel(SQLModel, table=True):
-    __tablename__ = "table_of_contents"
-
-    book_id: int = Field(primary_key=True, foreign_key="epub_files.id")
-    filesize: int
 
 
 class EpubBookTable(SQLiteModelTable[EpubFileModel]): ...

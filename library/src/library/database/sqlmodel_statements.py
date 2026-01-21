@@ -1,7 +1,10 @@
 import os
 from typing import Literal, Any, TypeVar, Sequence
 import importlib
+
+from lxml.objectify import NoneElement
 from sqlalchemy import BinaryExpression, Insert, Update, bindparam
+from sqlalchemy.sql.functions import func
 from sqlmodel import SQLModel, select, update
 from sqlalchemy.orm import lazyload, selectinload
 from sqlmodel.sql.expression import Select, SelectOfScalar
@@ -15,24 +18,36 @@ ModelClass = TypeVar("ModelClass", bound=SQLModel)
 def select_query(
     model: type[ModelClass],
     *args: list[BinaryExpression],
-    strategy: Literal["lazy", "selectin"] | None = None,
-    relationships: list[str] | None = None,
+    lazy: bool = True,
+    relationships: list | None = None,
     offset: int | None = None,
     limit: int | None = None,
     **kwargs: dict[str, Any],
 ) -> Select | SelectOfScalar:
     statement = select(model).filter(*args).filter_by(**kwargs).offset(offset).limit(limit)
+    load_strategy = lazyload if lazy else selectinload
 
-    if not strategy:
-        return statement
+    return statement.options(*map(load_strategy, relationships))
 
-    if relationships is None:
-        relationships = list(model.__sqlmodel_relationships__.keys())
 
-    rels = [getattr(model, key) for key in relationships]
-    load_strategy = selectinload if strategy == "selectin" else lazyload
+def most_common_query(
+    group_fields: list,
+    *args: list[BinaryExpression],
+    more_then: int | None = None,
+    less_than: int | None = None,
+    equal_to: int | None = None,
+):
+    having = None
+    if equal_to is not None:
+        having = func.count() == equal_to
+    if less_than is not None:
+        having = func.count() < less_than
+    if more_then is not None:
+        having = func.count() > more_then
+    if having is None:
+        having = func.count() > -1
 
-    return statement.options(*map(load_strategy, rels))
+    return select(*group_fields).where(*args).group_by(*group_fields).having(having)
 
 
 def insert_statement(
@@ -111,5 +126,5 @@ def bulk_update_statement(model: type[ModelClass]) -> Update:
     primary_keys = [column.name for column in model.__table__.primary_key.columns]
     statement = update(model)
     for primary_key in primary_keys:
-        statement = statement.where(getattr(model, primary_key) == bindparam(primary_key))
+        statement = statement.where(getattr(model, primary_key) == bindparam(f"pk_{primary_key}"))
     return statement

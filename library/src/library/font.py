@@ -1,5 +1,6 @@
 """
 Module for working with epubs encoded via TrueType Font
+Requires: PIL, ... (Image extra)
 """
 
 import logging

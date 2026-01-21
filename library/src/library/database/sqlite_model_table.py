@@ -2,7 +2,7 @@ import time
 from collections.abc import Iterable, Sequence, Collection, Callable
 from queue import Queue
 from itertools import batched
-from typing import Self, get_args
+from typing import Self, get_args, Literal
 from threading import Thread
 
 from sqlmodel import SQLModel, create_engine, Session, select
@@ -11,6 +11,13 @@ from sqlalchemy import text
 from ewa.main import settings
 from ewa.ui import print_error
 from library.database.sqlite_utils import initialize_db
+from library.database.sqlmodel_statements import (
+    bulk_insert_statement,
+    bulk_upsert_statement,
+    bulk_update_statement,
+    select_query,
+    most_common_query,
+)
 
 TERMINATOR = object()  # Queue terminator
 
@@ -26,13 +33,21 @@ class SQLiteModelTable[TableType: SQLModel]:
 
         self.session: Session | None = None
         self.write_thread: Thread | None = None
-        # Получаем генерик TableType SQLModel класса
-        self.table_model: type[TableType] = get_args(self.__orig_bases__[0])[0]
 
-        self.table = self.table_model.__table__
-        self.create_all()
-        self.primary_keys = [column.name for column in self.table.primary_key.columns]
+        # Получаем генерик TableType SQLModel класса
+        model: type[TableType] = get_args(self.__orig_bases__[0])[0]
+        self.model = model
+        self.table = self.model.__table__
+
+        self.bulk_insert_statement = bulk_insert_statement(model)
+        self.bulk_upsert_statement = bulk_upsert_statement(model)
+        self.bulk_update_statement = bulk_update_statement(model)
+
         self.columns = [column.name for column in self.table.columns]
+        self.primary_keys = [column.name for column in self.table.primary_key.columns]
+        self.relationships = [getattr(model, key) for key in model.__sqlmodel_relationships__.keys()]
+
+        self.create_all()
 
     def __enter__(self) -> Self:
         self.session = Session(self.engine)
@@ -50,101 +65,79 @@ class SQLiteModelTable[TableType: SQLModel]:
         return self
 
     def create_all(self) -> Self:
-        self.table_model.metadata.create_all(self.engine)
-
-    def read_row(self, **kwargs) -> TableType | None:
-        filter_clauses = []
-        for key, value in kwargs.items():
-            column = getattr(self.table_model, key, None)
-            if column is not None:
-                filter_clauses.append(column == value)
-            else:
-                print_error(f"Warning: '{key}' is not a valid column in {self.table_model.__name__}")
-        query = select(self.table_model).where(*filter_clauses)
-        return self.session.exec(query).one_or_none()
+        self.model.metadata.create_all(self.engine)
 
     def count_rows(self) -> int:
         with self.engine.connect() as connection:
-            return connection.execute(text(f"SELECT COUNT(*) FROM {self.table_model.__tablename__}")).fetchone()[0]
+            return connection.execute(text(f"SELECT COUNT(*) FROM {self.model.__tablename__}")).fetchone()[0]
 
-    def read_rows(self, limit: int = 100) -> list[TableType]:
-        statement = select(self.table_model).limit(limit)
-        return list(self.session.exec(statement).all())
+    def get_one(self, *args, lazy: bool = True, **kwargs) -> TableType | None:
+        query = select_query(self.model, *args, lazy=lazy, relationships=self.relationships, **kwargs)
+        return self.session.exec(query).first()
 
-    def bulk_insert_statement(self, records: Sequence[dict]) -> Insert:
-        insert_stmt = sqlite_insert(self.table).values(records)
-        match self.on_conflict:
-            case self.OnConflict.CONFLICT:
-                return insert_stmt
-            case self.OnConflict.IGNORE:
-                return insert_stmt.on_conflict_do_nothing(index_elements=self.primary_keys)
-            case self.OnConflict.UPDATE:
-                update_mapping = {
-                    column.name: getattr(insert_stmt.excluded, column.name)
-                    for column in self.table.columns
-                    if not column.primary_key
-                }
-                return insert_stmt.on_conflict_do_update(index_elements=self.primary_keys, set_=update_mapping)
-            case _:
-                raise ValueError(f"Unrecognized on_conflict value {self.on_conflict}")
+    def get_many(self, *args, lazy: bool = True, limit: int = 100, offset: int = 0, **kwargs) -> list[TableType]:
+        query = select_query(
+            self.model, *args, lazy=lazy, limit=limit, offset=offset, relationships=self.relationships, **kwargs
+        )
+        return list(self.session.exec(query).all())
 
-    def insert_row(self, row: TableType) -> None:
-        insert_stmt = self.bulk_insert_statement((row.model_dump(),))
-        self.session.exec(insert_stmt)
+    def get_most_common(
+        self,
+        group_fields: list,
+        *args: list,
+        more_then: int | None = None,
+        less_than: int | None = None,
+        equal_to: int | None = None,
+    ):
+        for i in range(len(group_fields)):
+            if isinstance(group_fields[i], str):
+                group_fields[i] = getattr(self.model, group_fields[i])
+        query = most_common_query(group_fields, *args, more_then=more_then, less_than=less_than, equal_to=equal_to)
+        return list(self.session.exec(query).all())
+
+    def insert_one(self, row: TableType) -> None:
+        self.session.add(row)
         self.session.commit()
 
-    def bulk_insert_dicts(
-        self,
-        batcher: Iterable[tuple[dict]],
-        total_func: Callable[[], int],
-        current_func: Callable[[], int],
-        increment: Callable[[int], None],
-    ) -> None:
-        task_name = f"[cyan]writing {self.table_model.__tablename__}"
-        start_time = time.time()
-        print(f"[cyan] Starting {self.table_model.__tablename__} bulk insert task")
+    def insert_many(self, rows: list[TableType]) -> None:
+        self.session.add_all(rows)
+        self.session.commit()
+
+    def upsert_many(self, rows: list[TableType]) -> None:
+        self.upsert_many_dicts(rows)
+
+    def delete_one(self, row: TableType) -> None:
+        self.session.delete(row)
+        self.session.commit()
+
+    def insert_many_dicts(self, batcher: Iterable[tuple[dict]]) -> None:
         for batch in batcher:
-            increment(len(batch))
-            print(task_name, current_func(), total_func())
-            batch_insert_stmt = self.bulk_insert_statement(batch)
-            self.session.exec(batch_insert_stmt)
+            self.session.exec(self.bulk_insert_statement, params=batch)
             self.session.commit()
-        print(f"[cyan] Finished {self.table_model.__tablename__} bulk insert in [{time.time() - start_time:>7.2f}s]")
 
-    def bulk_insert_models(
-        self,
-        records: Collection[TableType] | None = None,
+    def upsert_many_dicts(self, batcher: Iterable[tuple[dict]]) -> None:
+        for batch in batcher:
+            self.session.exec(self.bulk_upsert_statement, params=batch)
+            self.session.commit()
+
+    def update_many_dicts(self, batcher: Iterable[tuple[dict]]) -> None:
+        for batch in batcher:
+            self.session.bulk_update_mappings(self.model, batch)
+            self.session.commit()
+
+    def write_from_queue_in_thread(
+        self, batcher: Iterable[tuple[dict, ...]], method: Literal["insert", "upsert", "update"] = "upsert"
     ) -> None:
-        current = 0
+        func = self.insert_many_dicts
+        match method:
+            case "insert":
+                func = self.insert_many_dicts
+            case "upsert":
+                func = self.upsert_many_dicts
+            case "update":
+                func = self.update_many_dicts
 
-        def increment(count: int) -> None:
-            nonlocal current
-            current += count
-
-        total = len(records)
-        self.bulk_insert_dicts(
-            batcher=batched(map(lambda x: x.model_dump(), records), 1000),
-            total_func=lambda: total,
-            current_func=lambda: current,
-            increment=increment,
-        )
-
-    def write_from_queue(self, queue: Queue[dict]) -> None:
-        current = 0
-
-        def increment(count: int) -> None:
-            nonlocal current
-            current += count
-
-        self.bulk_insert_dicts(
-            batcher=batched(iter(queue.get, TERMINATOR), 1000),
-            total_func=lambda: current + queue.qsize(),
-            current_func=lambda: current,
-            increment=increment,
-        )
-
-    def write_from_queue_in_thread(self, queue: Queue[dict]) -> None:
-        self.write_thread = Thread(target=self.write_from_queue, args=(queue,))
+        self.write_thread = Thread(target=func, args=(batcher,))
         self.write_thread.start()
 
     def await_write_completion(self):

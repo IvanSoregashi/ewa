@@ -10,11 +10,13 @@ from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 from collections.abc import Iterable, Generator
 from concurrent.futures.thread import ThreadPoolExecutor
 
-from ewa.sqlite_model_table import TERMINATOR
+from epub.constants import quarantine_dir
+from library.database.sqlite_model_table import TERMINATOR
 from ewa.ui import print_error
 from epub.epub_state import EpubIllustrations
 from epub.tables import EpubFileModel, EpubContentsModel, EpubBookTable
 from epub.utils import string_to_int_hash
+from epub.file_parsing import parse_epub_xml
 
 from library.image.image_optimization_settings import ImageSettings
 from library.markup.chapter_processor import EpubChapters
@@ -137,7 +139,7 @@ class EPUB:
                     self.book_model.update_from_opf_file(opf_bytes)
 
     def read_from_database(self, table: EpubBookTable):
-        self.book_model = table.read_row(id=self.book_id)
+        self.book_model = table.get_one(id=self.book_id)
         self.book_contents_models = self.book_model.contents
 
 
@@ -162,7 +164,7 @@ class ScanEpubsInDirectory:
     ) -> None:
         self.directory = directory
         self.mask = mask
-        self.paths: Iterable[Path] = directory.rglob(mask)
+        self.paths: Iterable[Path] = (path for path in directory.rglob(mask) if not quarantine_dir in path.parents)
         self.workers = workers
         self.queue = queue
 
@@ -176,12 +178,19 @@ class ScanEpubsInDirectory:
         try:
             filenames = []
             with ZipFile(path) as zip_file:
+                parsed_data = parse_epub_xml(zipfile=zip_file)
+                book.read_metadata(parsed_data)
+                data = parsed_data.get("data", {})
+
                 for info in zip_file.infolist():
-                    self.queue.put(EpubContentsModel.dict_from_zip_info(info, book_id))
+                    fdata = data.get(info.filename, {})
+                    self.queue.put(EpubContentsModel.dict_from_zip_info(info, book_id, fdata))
                     filenames.append(info.filename)
+
             book.process_filenames(filenames)
         except Exception as e:
-            logger.error(f"process_epub({path}): failed to process zipfile: {e}")
+            logger.error(f"process_epub({path}): failed to process zipfile, quarantining: {e}")
+            path.rename(quarantine_dir / path.name)
         return book
 
     def _process_paths(self) -> Generator[EpubFileModel, None, None]:
@@ -208,3 +217,8 @@ class ScanEpubsInDirectory:
                 print("[green]Scanning...", current, total)
         print("[green]Scanning...", current, total)
         return books
+
+
+class SerenePandaEpubs:
+    def __init__(self, epubs: list[EpubFileModel]) -> None:
+        self.epubs = epubs

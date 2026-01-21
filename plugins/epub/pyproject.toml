@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "ewa",
-    "library[db, docs, image]",
+    "library[db, documents, image, strings]",
 ]
 
 [tool.uv.sources]
@@ -22,3 +22,8 @@ packages = ["src/epub"]
 
 [project.entry-points."ewa.plugins"]
 epub = "epub.main:app"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.7",
+]
