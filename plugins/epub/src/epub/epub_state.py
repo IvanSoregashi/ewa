@@ -6,7 +6,7 @@ import logging
 import time
 import os
 
-from typing import Any, Iterator, Generator
+from typing import Iterator, Generator
 from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -25,7 +25,6 @@ logger = logging.getLogger(__name__)
 class ZipMixin:
     ziplike_path: Path
     unpacked_directory: Path | None = None
-    file_stats: list[FileStat] = field(default_factory=list)
 
     def _extract(self, directory: Path | None = None) -> None:
         if self.ziplike_path is None:
@@ -44,59 +43,10 @@ class ZipMixin:
             shutil.rmtree(self.unpacked_directory)
             self.unpacked_directory = None
 
-    def _collect_file_stats(self) -> None:
-        with ZipFile(self.ziplike_path) as zip_file:
-            self.file_stats = [FileStat.from_zip_info(info) for info in zip_file.infolist() if not info.is_dir()]
-
     def iterate(self) -> Iterator[ZipInfo]:
         with ZipFile(self.ziplike_path) as zip_file:
             for info in zip_file.infolist():
                 yield info
-
-
-@dataclass
-class FileStat:
-    path: Path
-    size: int
-    suffix: str
-    name: str
-    directory: Path
-
-    @classmethod
-    def from_zip_info(cls, info: ZipInfo) -> FileStat:
-        return cls(
-            path=Path(info.filename),
-            size=info.file_size,
-            suffix=info.filename.split(".")[-1],
-            name=Path(info.filename).name,
-            directory=Path(info.filename).parent,
-        )
-
-    @classmethod
-    def from_path(cls, path: Path, relative_directory: Path) -> FileStat:
-        return cls(
-            path=path,
-            size=path.stat().st_size,
-            suffix=path.suffix.lower(),
-            name=path.stem,
-            directory=path.parent.relative_to(relative_directory),
-        )
-
-
-@dataclass
-class StatReport:
-    name: str
-    files: int
-    size: float
-    percentage: float
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "name": str(self.name),
-            "files": int(self.files),
-            "size": f"{float(self.size)} mb",
-            "percentage": f"{float(self.percentage)}%",
-        }
 
 
 @dataclass
@@ -136,53 +86,6 @@ class UnpackedEpub(ZipMixin):
             raise e
         finally:
             self._teardown()
-
-    def _collect_file_stats(self) -> None:
-        if not self.unpacked_directory.exists() or not self.unpacked_directory.is_dir():
-            super()._collect_file_stats()
-        else:
-            self.file_stats = [
-                FileStat.from_path(filepath, self.unpacked_directory)
-                for filepath in self.unpacked_directory.rglob("*")
-                if filepath.is_file()
-            ]
-
-    # def file_report(self) -> list[dict]:
-    #     if not self.file_stats:
-    #         self._collect_file_stats()
-    #
-    #     df = pd.DataFrame([stat.__dict__ for stat in self.file_stats])
-    #     total_size = df["size"].sum()
-    #
-    #     report = [StatReport(
-    #         name="TOTAL",
-    #         files=len(df),
-    #         size=round(total_size / (1024 * 1024), 2),
-    #         percentage=100.0
-    #     ).to_dict()]
-    #
-    #     for directory in sorted(df["directory"].unique()):
-    #         dir_data = df[df["directory"] == directory]
-    #         dir_size = dir_data["size"].sum()
-    #
-    #         report.append(StatReport(
-    #             name=str(directory),
-    #             files=len(dir_data),
-    #             size=round(dir_size / (1024 * 1024), 2),
-    #             percentage=round(dir_size / total_size * 100, 2)
-    #         ).to_dict())
-    #
-    #         for suffix in sorted(dir_data["suffix"].unique()):
-    #             suffix_data = dir_data[dir_data["suffix"] == suffix]
-    #             suffix_size = suffix_data["size"].sum()
-    #             report.append(StatReport(
-    #                 name=f" {suffix}",
-    #                 files=len(suffix_data),
-    #                 size=round(suffix_size / (1024 * 1024), 2),
-    #                 percentage=round(suffix_size / total_size * 100, 2)
-    #             ).to_dict())
-    #
-    #     return report
 
     def optimize(self, image_settings: ImageSettings) -> OptimizeResult:
         start_time = time.time()
@@ -229,25 +132,6 @@ class UnpackedEpub(ZipMixin):
         self._teardown()
         result.total_time = time.time() - start_time
         return result
-
-
-@dataclass
-class Epub(ZipMixin):
-    """State for EPUB processing"""
-
-    # Paths
-    output_path: Path | None = None
-    # user_directory: EpubUserDirectory = field(default_factory=EpubUserDirectory)
-
-    def move_original(self, directory: Path) -> Path:
-        if not self.ziplike_path.exists() or not directory.exists():
-            raise FileNotFoundError(f"EPUBState.move_original: EPUB file {self.ziplike_path} does not exist")
-        path = directory / self.ziplike_path.name
-        while path.exists():
-            path = path.with_stem(path.stem + "+")
-        self.ziplike_path.rename(path)
-        self.ziplike_path = path
-        return self.ziplike_path
 
 
 @dataclass
