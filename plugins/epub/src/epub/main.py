@@ -1,17 +1,23 @@
+import logging
 from collections import Counter
 
 import typer
 from pathlib import Path
-from ewa.ui import print_success, print_error, print_table_from_models
+
+from epub.serene_panda import compose_strings_df, join_dfs
+from ewa.ui import print_success, print_error, print_table_from_models, print_df
 from ewa.cli.progress import DisplayProgress, track_batch_queue, track_batch_sized
 from ewa.main import settings
 from epub.tables import EpubBookTable, EpubContentsTable
 from epub.epub_classes import ScanEpubsInDirectory, EPUB
 from epub.constants import duplicates_dir, epub_dir
 from library.database.sqlite_model_table import TERMINATOR
+from library.database.string_grouper import group_similar_strings
 from library.utils import sanitize_filename
 
 app = typer.Typer(help="Epub Plugin")
+
+logger = logging.getLogger("EPUB")
 
 
 @app.callback()
@@ -61,7 +67,14 @@ def dups(move: bool = typer.Option(False, "-m", "--move"), cleanup: bool = typer
 
 @app.command()
 def test():
-    pass
+    with EpubBookTable() as table:
+        df = table.get_df(table.model.serene_panda == True)
+        df = join_dfs(df, group_similar_strings(compose_strings_df(df), max_n_matches=100, min_similarity=0.7))
+        df = df[["id", "filepath", "filesize", "group_rep_index", "group_rep_filepath"]]
+        print_df(df.head())
+        for index, group in df[:50].groupby("group_rep_index"):
+            if len(group) > 1:
+                print_df(group)
 
 
 @app.command()

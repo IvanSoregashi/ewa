@@ -1,3 +1,4 @@
+import re
 from typing import Any
 from pathlib import Path
 from zipfile import ZipInfo
@@ -84,6 +85,14 @@ class EpubFileModel(SQLModel, table=True):
 
     def as_list(self) -> list:
         return list(map(str, self.as_dict().values()))  # TODO: proper formatting
+
+    def comparable_string(self) -> str:
+        string = Path(self.filepath).stem + " " + self.title
+        string = string.replace("_", " ").replace("+", " ").replace("  ", " ").strip()
+        string = re.sub(r"\[.*?\]|\(.*?\)", "", string)
+        string = re.sub(r"\d+-\d+", "", string)
+        string = "".join(map(lambda x: x if x.isalnum() else " ", string)).replace("  ", " ")
+        return string.strip().lower()
 
 
 class EpubContentsModel(SQLModel, table=True):

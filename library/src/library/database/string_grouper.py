@@ -105,7 +105,7 @@ def match_most_similar(
     master_id: pd.Series | None = None,
     duplicates_id: pd.Series | None = None,
     **kwargs,
-) ->  pd.DataFrame | pd.Series:
+) -> pd.DataFrame | pd.Series:
     """
     If no IDs ('master_id' and 'duplicates_id') are given, returns a Series of strings of the same length
     as 'duplicates' where for each string in duplicates the most similar string in 'master' is returned.
@@ -488,7 +488,7 @@ class StringGrouper(object):
             right = right.iloc[matches_list.dupe_side].reset_index(drop=drop_index)
             return left, (right if isinstance(right, pd.Series) else right[right.columns[::-1]])
 
-        def prefix_column_names(data:  pd.Series | pd.DataFrame, prefix: str):
+        def prefix_column_names(data: pd.Series | pd.DataFrame, prefix: str):
             if isinstance(data, pd.DataFrame):
                 return data.rename(columns={c: f"{prefix}{c}" for c in data.columns})
             else:
@@ -538,9 +538,7 @@ class StringGrouper(object):
             )
 
     @validate_is_fit
-    def get_groups(
-        self, ignore_index: bool | None = None, replace_na: bool | None = None
-    ) ->  pd.DataFrame | pd.Series:
+    def get_groups(self, ignore_index: bool | None = None, replace_na: bool | None = None) -> pd.DataFrame | pd.Series:
         """If there is only a master Series of strings, this will return a Series of 'master' strings.
          A single string in a group of near duplicates is chosen as 'master' and is returned for each string
          in the master Series.
@@ -595,7 +593,7 @@ class StringGrouper(object):
         master_id: pd.Series | None = None,
         duplicates_id: pd.Series | None = None,
         **kwargs,
-    ) ->  pd.DataFrame | pd.Series:
+    ) -> pd.DataFrame | pd.Series:
         """
         If no IDs ('master_id' and 'duplicates_id') are given, returns, without rebuilding the corpus, a
         Series of strings of the same length as 'duplicates' where for each string in duplicates the most
@@ -623,7 +621,7 @@ class StringGrouper(object):
 
     def group_similar_strings(
         self, strings_to_group: pd.Series, string_ids: pd.Series | None = None, **kwargs
-    ) ->  pd.DataFrame | pd.Series:
+    ) -> pd.DataFrame | pd.Series:
         """
         If 'string_ids' is not given, finds all similar strings in 'strings_to_group' without rebuilding the
         corpus and returns a Series of strings of the same length as 'strings_to_group'. For each group of
@@ -797,7 +795,7 @@ class StringGrouper(object):
         missing_pairs["similarity"] = 0
         return missing_pairs
 
-    def _get_nearest_matches(self, ignore_index=False, replace_na=False) ->  pd.DataFrame | pd.Series:
+    def _get_nearest_matches(self, ignore_index=False, replace_na=False) -> pd.DataFrame | pd.Series:
         prefix = MOST_SIMILAR_PREFIX
         master_label = f"{prefix}{self._master.name if self._master.name else DEFAULT_MASTER_NAME}"
         master = self._master.rename(master_label).reset_index(drop=ignore_index)
@@ -868,7 +866,7 @@ class StringGrouper(object):
         output.index = self._duplicates.index
         return output.squeeze(axis=1)
 
-    def _deduplicate(self, ignore_index=False) ->  pd.DataFrame | pd.Series:
+    def _deduplicate(self, ignore_index=False) -> pd.DataFrame | pd.Series:
         pairs = self._matches_list
         # rebuild graph adjacency matrix from already found matches:
         n = len(self._master)

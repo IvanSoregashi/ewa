@@ -1,38 +1,92 @@
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 
-from rapidfuzz import fuzz
+import numpy as np
+from rapidfuzz import process, fuzz
+from typing import TypeVar
+from sklearn.cluster import DBSCAN
+
+DataType = TypeVar("DataType")
 
 
-def group_by_score(all_data: list[str], key: Callable, score: int):
-    page_list = []
-    used_list = []
+def group_items_by_string_score(
+    data: list[DataType],
+    score: int = 80,
+    processor: Callable[[DataType], str] | None = None,
+    comparer: Callable[..., int] = fuzz.token_set_ratio,
+) -> Generator[tuple[str, list[DataType]], None, None]:
+    """HIGH PERFORMANCE ATTEMPT1"""
+    processed_indices = []
+    for i, current_item in enumerate(data):
+        if i in processed_indices:
+            continue
 
-    for i, data in enumerate(all_data):
-        if i not in used_list:
-            lis = []
+        current_group_indices = []
 
-            for j, sec_data in enumerate(all_data):
-                isTrue = []
+        for j, candidate_item in enumerate(data):
+            if j in processed_indices:
+                continue
+            if i == j:
+                current_group_indices.append(j)
+                continue
+            if comparer(current_item, candidate_item, processor=processor) > score:
+                current_group_indices.append(j)
 
-                for k in range(len(key(all_data[0]))):
-                    first_text = key(data)[k]
-                    sec_text = key(sec_data)[k]
+        processed_indices.extend(current_group_indices)
+        yield processor(current_item), [data[idx] for idx in current_group_indices]
 
-                    if isinstance(first_text, str) and isinstance(sec_text, str):
-                        isTrue.append(fuzz.partial_ratio(first_text.lower(), sec_text.lower()) > score)
-                    elif isinstance(first_text, int) and isinstance(sec_text, int):
-                        isTrue.append(first_text == sec_text)
 
-                if all(isTrue) and i not in page_list and j not in page_list:
-                    lis.append(j)
-                    used_list.append(j)
+def group_items_by_string_distance(
+    data: list[DataType],
+    score: int = 80,
+    processor: Callable[[DataType], str] | None = None,
+    comparer: Callable[..., int] = fuzz.token_set_ratio,
+) -> Generator[tuple[str, list[DataType]], None, None]:
+    """HIGH PERFORMANCE ATTEMPT2"""
 
-            non_page_list = sorted(set(lis))
+    similarity_matrix = process.cdist(
+        data,
+        data,
+        scorer=comparer,
+        processor=processor,
+        workers=-1,
+        dtype=np.uint8
+    )
 
-            if len(non_page_list) > 1:
-                page_list.extend(non_page_list)
-                all_page_list = [all_data[pg] for pg in non_page_list]
-                yield key(data), all_page_list
-            else:
-                yield key(data), [data]
+    distance_matrix = 100 - similarity_matrix
+    eps = 100 - score
+    db = DBSCAN(eps=eps, min_samples=1, metric="precomputed").fit(distance_matrix)
 
+    grouped_objects = {}
+    for idx, label in enumerate(db.labels_):
+        grouped_objects.setdefault(label, []).append(data[idx])
+    for key, values in grouped_objects.items():
+        yield key, values
+
+
+def group_items_by_string_distance_v2(
+    data: list[DataType],
+    score: int = 80,
+    processor: Callable[[DataType], str] | None = None,
+    comparer: Callable[..., int] = fuzz.token_set_ratio,
+) -> Generator[tuple[str, list[DataType]], None, None]:
+    """HIGH PERFORMANCE ATTEMPT3"""
+
+    normalized_strings = [processor(obj) for obj in data]
+    similarity_matrix = process.cdist(
+        normalized_strings,
+        normalized_strings,
+        scorer=comparer,
+        score_cutoff=score,
+        workers=-1,
+        dtype=np.uint8
+    )
+
+    distance_matrix = 100 - similarity_matrix
+    eps = 100 - score
+    db = DBSCAN(eps=eps, min_samples=1, metric="precomputed").fit(distance_matrix)
+
+    grouped_objects = {}
+    for idx, label in enumerate(db.labels_):
+        grouped_objects.setdefault(label, []).append(data[idx])
+    for key, values in grouped_objects.items():
+        yield key, values

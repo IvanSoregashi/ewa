@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Any
 
@@ -12,6 +13,8 @@ class Settings(BaseSettings):
     current_dir: DirectoryPath = Path(".").absolute()
     database_file: FilePath | None = None
     database_url: str | None = None
+    log_level_name: str = "INFO"
+    log_level: int = 10
     is_windows: bool = os.name == "nt"
 
     def model_post_init(self, context: Any, /) -> None:
@@ -19,3 +22,4 @@ class Settings(BaseSettings):
             self.database_file = self.profile_dir / "database.db"
         if self.database_url is None:
             self.database_url = f"sqlite:///{self.database_file}"
+        self.log_level = logging.getLevelName(self.log_level_name)

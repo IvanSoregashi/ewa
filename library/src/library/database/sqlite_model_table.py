@@ -2,8 +2,9 @@ import time
 from collections.abc import Iterable, Sequence, Collection, Callable
 from queue import Queue
 from itertools import batched
-from typing import Self, get_args, Literal
+from typing import Self, get_args, Literal, TypeVar
 from threading import Thread
+import pandas as pd
 
 from sqlmodel import SQLModel, create_engine, Session, select
 from sqlalchemy import text
@@ -20,9 +21,10 @@ from library.database.sqlmodel_statements import (
 )
 
 TERMINATOR = object()  # Queue terminator
+TableType = TypeVar("TableType", bound=SQLModel)
 
 
-class SQLiteModelTable[TableType: SQLModel]:
+class SQLiteModelTable[TableType]:
     """Class is Parent class only, not meant for initialization of Objects, needs to be inherited from."""
 
     def __init__(self, url: str | None = None, **kwargs):
@@ -81,6 +83,17 @@ class SQLiteModelTable[TableType: SQLModel]:
         )
         return list(self.session.exec(query).all())
 
+    def get_df(
+        self, *args, lazy: bool = True, limit: int | None = None, offset: int | None = None, **kwargs
+    ) -> pd.DataFrame:
+        query = select_query(
+            self.model, *args, lazy=lazy, limit=limit, offset=offset, relationships=self.relationships, **kwargs
+        )
+        return pd.read_sql(query, self.engine)
+
+    def df_to_models(self, df: pd.DataFrame) -> list[TableType]:
+        return [self.model(**row) for row in df.to_dict(orient="records")]
+
     def get_most_common(
         self,
         group_fields: list,
@@ -106,9 +119,13 @@ class SQLiteModelTable[TableType: SQLModel]:
     def upsert_many(self, rows: list[TableType]) -> None:
         self.upsert_many_dicts(rows)
 
-    def delete_one(self, row: TableType) -> None:
-        self.session.delete(row)
-        self.session.commit()
+    def insert_df(self, df: pd.DataFrame, batch_size: int = 1000) -> None:
+        records = df.to_dict(orient="records")
+        self.insert_many_dicts(batched(records, batch_size))
+
+    def upsert_df(self, df: pd.DataFrame, batch_size: int = 1000) -> None:
+        records = df.to_dict(orient="records")
+        self.upsert_many_dicts(batched(records, batch_size))
 
     def insert_many_dicts(self, batcher: Iterable[tuple[dict]]) -> None:
         for batch in batcher:
@@ -124,6 +141,10 @@ class SQLiteModelTable[TableType: SQLModel]:
         for batch in batcher:
             self.session.bulk_update_mappings(self.model, batch)
             self.session.commit()
+
+    def delete_one(self, row: TableType) -> None:
+        self.session.delete(row)
+        self.session.commit()
 
     def write_from_queue_in_thread(
         self, batcher: Iterable[tuple[dict, ...]], method: Literal["insert", "upsert", "update"] = "upsert"
@@ -146,3 +167,7 @@ class SQLiteModelTable[TableType: SQLModel]:
         while self.write_thread.is_alive():
             time.sleep(1)
         self.write_thread = None
+
+
+def models_to_df(models: Iterable[TableType]) -> pd.DataFrame:
+    return pd.DataFrame([model.model_dump() for model in models])

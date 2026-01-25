@@ -3,6 +3,7 @@ from rich.table import Table
 from rich.prompt import Prompt, Confirm
 from typing import Any
 from sqlmodel import SQLModel
+import pandas as pd
 
 console = Console()
 
@@ -34,6 +35,29 @@ def print_table_from_models(title: str, models: list[SQLModel]):
             return row.model_dump()
 
     print_table_from_dicts(title, list(map(func, models)))
+
+
+def print_df(
+    df: pd.DataFrame,
+    title: str = "",
+    truncate: bool = False,
+    columns: list[str] | None = None,
+):
+    if columns:
+        df = df[columns]
+
+    table = Table(title=title)
+
+    for col in df.columns:
+        if truncate:
+            table.add_column(str(col), no_wrap=True, overflow="ellipsis", max_width=50)
+        else:
+            table.add_column(str(col))
+
+    for row in df.itertuples(index=False, name=None):
+        table.add_row(*map(str, row))
+
+    console.print(table)
 
 
 def ask_user(question: str, default: str = None) -> str:

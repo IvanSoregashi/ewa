@@ -76,7 +76,7 @@ version = "0.1.4"
 source = { editable = "plugins/epub" }
 dependencies = [
     { name = "ewa" },
-    { name = "library", extra = ["db", "documents", "experimental", "image"] },
+    { name = "library", extra = ["db", "documents", "image", "strings"] },
 ]
 
 [package.dev-dependencies]
@@ -87,7 +87,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "ewa", editable = "." },
-    { name = "library", extras = ["db", "documents", "image", "experimental"], editable = "library" },
+    { name = "library", extras = ["db", "documents", "image", "strings"], editable = "library" },
 ]
 
 [package.metadata.requires-dev]
@@ -158,14 +158,6 @@ documents = [
     { name = "ebooklib" },
     { name = "lxml" },
 ]
-experimental = [
-    { name = "numpy" },
-    { name = "pandas" },
-    { name = "rapidfuzz" },
-    { name = "scikit-learn" },
-    { name = "sparse-dot-topn" },
-    { name = "thefuzz" },
-]
 image = [
     { name = "pillow" },
 ]
@@ -189,25 +181,19 @@ requires-dist = [
     { name = "beautifulsoup4", marker = "extra == 'documents'", specifier = ">=4.14.2" },
     { name = "ebooklib", marker = "extra == 'documents'", specifier = ">=0.20" },
     { name = "lxml", marker = "extra == 'documents'", specifier = ">=6.0.2" },
-    { name = "numpy", marker = "extra == 'experimental'", specifier = "==2.4.1" },
-    { name = "numpy", marker = "extra == 'strings'" },
-    { name = "pandas", marker = "extra == 'db'" },
-    { name = "pandas", marker = "extra == 'experimental'", specifier = "==3.0.0" },
-    { name = "pandas", marker = "extra == 'strings'" },
+    { name = "numpy", marker = "extra == 'strings'", specifier = "==2.4.1" },
+    { name = "pandas", marker = "extra == 'db'", specifier = "==3.0.0" },
+    { name = "pandas", marker = "extra == 'strings'", specifier = "==3.0.0" },
     { name = "pillow", marker = "extra == 'image'", specifier = ">=12.0.0" },
-    { name = "rapidfuzz", marker = "extra == 'experimental'" },
     { name = "rapidfuzz", marker = "extra == 'strings'" },
-    { name = "scikit-learn", marker = "extra == 'experimental'" },
     { name = "scikit-learn", marker = "extra == 'strings'" },
     { name = "scipy", marker = "extra == 'strings'" },
-    { name = "sparse-dot-topn", marker = "extra == 'experimental'", specifier = "==1.2.0" },
-    { name = "sparse-dot-topn", marker = "extra == 'strings'" },
+    { name = "sparse-dot-topn", marker = "extra == 'strings'", specifier = "==1.2.0" },
     { name = "sqlitedict", marker = "extra == 'db'", specifier = ">=2.1.0" },
     { name = "sqlmodel", marker = "extra == 'db'", specifier = ">=0.0.31" },
-    { name = "thefuzz", marker = "extra == 'experimental'" },
     { name = "thefuzz", marker = "extra == 'strings'" },
 ]
-provides-extras = ["db", "documents", "data", "image", "strings", "experimental"]
+provides-extras = ["db", "documents", "data", "image", "strings"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "ruff", specifier = ">=0.14.7" }]

@@ -3,9 +3,11 @@ import shlex
 from ewa.ui import console
 from ewa.loader import load_plugins
 from ewa.config import Settings
+from ewa.logger_config import setup_logging
 
 app = typer.Typer(name="ewa", help="Ewa CLI")
 settings = Settings()
+setup_logging(level=settings.log_level)
 
 
 @app.command()
