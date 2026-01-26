@@ -16,19 +16,23 @@ def bt_to_mb(size_in_bytes: int) -> str:
     return f"{size_in_bytes / (1024 * 1024):.2f} mb"
 
 
-def string_to_int_hash_old(string: str) -> int:
+def string_to_int_hash64(data: str | bytes) -> int:
     """returns a 64-bit integer hash"""
-    int_hash = int(md5(string.encode("utf-8")).hexdigest(), 16)
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    int_hash = int(md5(data).hexdigest(), 16)
     return int_hash % SQLITE_MAX_INT
 
 
-def string_to_int_hash(string: str) -> int:
+def string_to_int_hash(data: str | bytes) -> int:
     """
     Generates a 64-bit signed integer hash from a string,
     utilizing the full SQLite INTEGER range (positive and negative).
     """
     # 1. Generate the 128-bit MD5 hash
-    hash_digest = md5(string.encode("utf-8")).digest()
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    hash_digest = md5(data).digest()
 
     # 2. Unpack the first 8 bytes (64 bits) of the hash as a signed 64-bit integer
     # '>' means big-endian, 'q' means signed long long (64-bit integer)

@@ -4,8 +4,9 @@ from collections import Counter
 import typer
 from pathlib import Path
 
-from epub.serene_panda import compose_strings_df, join_dfs
-from ewa.ui import print_success, print_error, print_table_from_models, print_df
+from epub.serene_panda import compose_strings_df
+from ewa.ui import print_success, print_error
+from ewa.cli.print_table import print_table_from_models, print_df
 from ewa.cli.progress import DisplayProgress, track_batch_queue, track_batch_sized
 from ewa.main import settings
 from epub.tables import EpubBookTable, EpubContentsTable
@@ -54,7 +55,7 @@ def dups(move: bool = typer.Option(False, "-m", "--move"), cleanup: bool = typer
                     i.rmdir()
         return
     with EpubBookTable() as table:
-        title_list = table.get_most_common([table.model.title], table.model.serene_panda == 1, more_then=1)
+        title_list = table.get_most_common([table.model.title], table.model.serene_panda == True, more_then=1)
         for title in title_list:
             new_dir = duplicates_dir / sanitize_filename(title)
             new_dir.mkdir(parents=True, exist_ok=True)
@@ -68,13 +69,7 @@ def dups(move: bool = typer.Option(False, "-m", "--move"), cleanup: bool = typer
 @app.command()
 def test():
     with EpubBookTable() as table:
-        df = table.get_df(table.model.serene_panda == True)
-        df = join_dfs(df, group_similar_strings(compose_strings_df(df), max_n_matches=100, min_similarity=0.7))
-        df = df[["id", "filepath", "filesize", "group_rep_index", "group_rep_filepath"]]
-        print_df(df.head())
-        for index, group in df[:50].groupby("group_rep_index"):
-            if len(group) > 1:
-                print_df(group)
+        df = table.get_encrypted_epubs()
 
 
 @app.command()

@@ -176,6 +176,8 @@ cython_debug/
 .pypirc
 
 **/*.epub
+**/*.opf
+**/*.xml
 **/*.html
 **/*.jpg
 **/*.png

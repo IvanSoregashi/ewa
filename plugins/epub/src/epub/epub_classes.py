@@ -10,13 +10,13 @@ from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 from collections.abc import Iterable, Generator
 from concurrent.futures.thread import ThreadPoolExecutor
 
-from epub.constants import quarantine_dir
 from library.database.sqlite_model_table import TERMINATOR
 from ewa.ui import print_error
 from epub.epub_state import EpubIllustrations
 from epub.tables import EpubFileModel, EpubContentsModel, EpubBookTable
 from epub.utils import string_to_int_hash
 from epub.file_parsing import parse_epub_xml
+from epub.constants import quarantine_dir
 
 from library.image.image_optimization_settings import ImageSettings
 from library.markup.chapter_processor import EpubChapters
@@ -94,6 +94,15 @@ class EPUB:
             zip_file.extractall(unpacked_directory)
         return UnpackedEPUB(unpacked_directory, self.path.name)
 
+    def extract_file(self, destination_dir: str, filepath: str):
+        with ZipFile(self.path) as zip_file:
+            font_bytes = zip_file.read(filepath)
+            hash_num = string_to_int_hash(font_bytes)
+            new_filename = f"{hash_num}_{Path(filepath).name}"
+            new_filepath = Path(destination_dir) / new_filename
+            if not new_filepath.exists():
+                new_filepath.write_bytes(font_bytes)
+
     def delete_file(self):
         self.path.unlink(missing_ok=True)
 
@@ -141,17 +150,6 @@ class EPUB:
     def read_from_database(self, table: EpubBookTable):
         self.book_model = table.get_one(id=self.book_id)
         self.book_contents_models = self.book_model.contents
-
-
-class EncryptedSerenePandaEPUB(EPUB):
-    pass
-    # toc.ncx
-    # stylesheet.css
-    # page_styles.css
-    # mimetype
-    # fonts / SerenePanda.ttf
-    # content.opf
-    # META - INF / container.xml
 
 
 class ScanEpubsInDirectory:
@@ -217,8 +215,3 @@ class ScanEpubsInDirectory:
                 print("[green]Scanning...", current, total)
         print("[green]Scanning...", current, total)
         return books
-
-
-class SerenePandaEpubs:
-    def __init__(self, epubs: list[EpubFileModel]) -> None:
-        self.epubs = epubs

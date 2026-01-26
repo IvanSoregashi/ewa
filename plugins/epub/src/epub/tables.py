@@ -2,8 +2,8 @@ import re
 from typing import Any
 from pathlib import Path
 from zipfile import ZipInfo
-
 from sqlmodel import SQLModel, Field, Relationship
+
 from epub.utils import timestamp_from_zip_info, string_to_int_hash, bt_to_mb
 from library.database.sqlite_model_table import SQLiteModelTable
 
@@ -137,7 +137,9 @@ class EpubContentsModel(SQLModel, table=True):
         )
 
 
-class EpubBookTable(SQLiteModelTable[EpubFileModel]): ...
+class EpubBookTable(SQLiteModelTable[EpubFileModel]):
+    def get_encrypted_epubs(self):
+        return self.get_many(self.model.serene_panda == True)
 
 
 class EpubContentsTable(SQLiteModelTable[EpubContentsModel]): ...
