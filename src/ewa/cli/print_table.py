@@ -1,10 +1,65 @@
-from typing import Any
-from rich.console import Console
-from rich.table import Table
 import shutil
+import pandas as pd
+
+from typing import Any
+from rich.table import Table
+from sqlmodel import SQLModel
+from ewa.ui import console
 
 
-def print_table(data: list[dict[str, Any]], title: str | None = None, enum: bool = True) -> None:
+def print_table(title: str, columns: list[str], rows: list[list]):
+    """Prints a styled table."""
+    table = Table(title=title)
+    for col in columns:
+        table.add_column(col)
+    for row in rows:
+        table.add_row(*map(str, row))
+    console.print(table)
+
+
+def print_table_from_dicts(title: str, dicts: list[dict[str, Any]]):
+    columns = list(dicts[0].keys())
+    rows = []
+    for row in dicts:
+        assert list(row.keys()) == columns, "Not all keys present in dict"
+        rows.append(list(row.values()))
+    print_table(title, columns, rows)
+
+
+def print_table_from_models(title: str, models: list[SQLModel]):
+    def func(row: SQLModel) -> dict:
+        if hasattr(row, "as_dict"):
+            return row.as_dict()
+        else:
+            return row.model_dump()
+
+    print_table_from_dicts(title, list(map(func, models)))
+
+
+def print_df(
+    df: pd.DataFrame,
+    title: str = "",
+    truncate: bool = False,
+    columns: list[str] | None = None,
+):
+    if columns:
+        df = df[columns]
+
+    table = Table(title=title)
+
+    for col in df.columns:
+        if truncate:
+            table.add_column(str(col), no_wrap=True, overflow="ellipsis", max_width=50)
+        else:
+            table.add_column(str(col))
+
+    for row in df.itertuples(index=False, name=None):
+        table.add_row(*map(str, row))
+
+    console.print(table)
+
+
+def print_table_old(data: list[dict[str, Any]], title: str | None = None, enum: bool = True) -> None:
     """
     Print a list of dictionaries as a pretty table.
 
@@ -18,7 +73,6 @@ def print_table(data: list[dict[str, Any]], title: str | None = None, enum: bool
     if enum:
         data = [{"N": i, **dt} for i, dt in enumerate(data)]
 
-    console = Console()
     table = Table(
         title=title,
         show_header=True,
