@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import shutil
 import tempfile
 import logging
@@ -10,11 +8,14 @@ from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 from collections.abc import Iterable, Generator
 from concurrent.futures.thread import ThreadPoolExecutor
 
+
+from ewa.cli.progress import track_sized
 from library.database.sqlite_model_table import TERMINATOR
-from ewa.ui import print_error
+from ewa.ui import print_error, print_success
+from ewa.main import settings
 from epub.epub_state import EpubIllustrations
 from epub.tables import EpubFileModel, EpubContentsModel, EpubBookTable
-from epub.utils import string_to_int_hash
+from epub.utils import string_to_int_hash, string_to_int_hash64
 from epub.file_parsing import parse_epub_xml
 from epub.constants import quarantine_dir
 
@@ -94,14 +95,9 @@ class EPUB:
             zip_file.extractall(unpacked_directory)
         return UnpackedEPUB(unpacked_directory, self.path.name)
 
-    def extract_file(self, destination_dir: str, filepath: str):
+    def get_file_bytes(self, filepath: str):
         with ZipFile(self.path) as zip_file:
-            font_bytes = zip_file.read(filepath)
-            hash_num = string_to_int_hash(font_bytes)
-            new_filename = f"{hash_num}_{Path(filepath).name}"
-            new_filepath = Path(destination_dir) / new_filename
-            if not new_filepath.exists():
-                new_filepath.write_bytes(font_bytes)
+            return zip_file.read(filepath)
 
     def delete_file(self):
         self.path.unlink(missing_ok=True)
@@ -162,7 +158,7 @@ class ScanEpubsInDirectory:
     ) -> None:
         self.directory = directory
         self.mask = mask
-        self.paths: Iterable[Path] = (path for path in directory.rglob(mask) if not quarantine_dir in path.parents)
+        self.paths: Iterable[Path] = (path for path in directory.rglob(mask) if quarantine_dir not in path.parents)
         self.workers = workers
         self.queue = queue
 
@@ -215,3 +211,27 @@ class ScanEpubsInDirectory:
                 print("[green]Scanning...", current, total)
         print("[green]Scanning...", current, total)
         return books
+
+
+def extract_to_destination(book: EpubFileModel) -> bool:
+    try:
+        font_bytes = book.to_epub().get_file_bytes(book.serene_panda_ttf)
+        hash_num = string_to_int_hash64(font_bytes)
+        new_filename = f"{hash_num}_{Path(book.serene_panda_ttf).name}"
+        new_filepath = settings.profile_dir / "epub" / "serene_panda" / "fonts" / new_filename
+        if not new_filepath.exists():
+            new_filepath.write_bytes(font_bytes)
+    except Exception as e:
+        logger.error(f"extract_to_destination: {e}")
+        return True
+    return False
+
+
+def extract_font_files(table: EpubBookTable):
+    path = settings.profile_dir / "epub" / "serene_panda" / "fonts"
+    path.mkdir(parents=True, exist_ok=True)
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        errs = list(executor.map(extract_to_destination, track_sized(table.get_encrypted_epubs())))
+        print_error(str(sum(errs)))
+        print_success(str(len(errs)))
+

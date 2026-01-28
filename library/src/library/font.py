@@ -5,17 +5,21 @@ Requires: PIL, ... (Image extra)
 
 import logging
 import hashlib
-import time
 import json
 
 from concurrent.futures import ProcessPoolExecutor
-from collections.abc import Iterator
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 from PIL.ImageFont import FreeTypeFont
 
 logger = logging.getLogger(__name__)
+
+HANGUL_START = 0xAC00
+HANGUL_END = 0xD7AF
+HANGUL_CHARS = map(chr, range(HANGUL_START, HANGUL_END + 1))
+RENDER_SIZE = 24
+ALPHABET_PATH = Path("~/.ewa/epub/serene_panda/alpha").expanduser().absolute()
 
 
 def render_letter(ch: str, font: FreeTypeFont, canvas_size: int) -> Image.Image:
@@ -42,85 +46,35 @@ def render_centered_letter(ch: str, font: FreeTypeFont, canvas_size: int) -> Ima
     y = (canvas_size - h) / 2 - top
     draw.text((x, y), ch, font=font, fill=0)
 
-    bbox = img.getbbox()
-    if bbox:
-        img = img.crop(bbox).resize((32, 32))
+    # bbox = img.getbbox()
+    # if bbox:
+    #     img = img.crop(bbox).resize((32, 32))
 
     return img
 
 
-def character_to_hash_and_img(char: str, font: FreeTypeFont, size: int) -> tuple[str, Image.Image]:
-    """
-    receive character, font and size
-    render character in Image.Image, and take hash
-    returns hash and image
-    """
-    img = render_letter(char, font, size)
-    h = hashlib.md5(img.tobytes()).hexdigest()
-    return h, img
-
-
-def font_to_dict(characters: Iterator[str], font_path: Path, size: int = 24) -> dict[str, list[str]]:
-    """
-    receive collections of characters, path to a font file and size (of the font)
-    iterate over collection,
-    compose dictionary hash of render to a list of characters
-    returns dictionary
-    """
-    start = time.time()
-    font = ImageFont.truetype(font_path, size)
-    groups = {}
-    for char in characters:
-        h, img = character_to_hash_and_img(char, font, size)
-        groups.setdefault(h, []).append(char)
-    logger.debug(
-        f"Font {font_path} {font_path.stat().st_size / 1024 / 1024:.1f} mb collected dict in {time.time() - start:.1f} s"
-    )
-    return groups
-
-
-def render_glyphs(characters: Iterator[str], font_path: Path, size: int = 24) -> dict[str, Image.Image]:
-    """
-    receive collections of characters, path to a font file and size (of the font)
-    iterate over collection,
-    compose dictionary: hash of render to a rendered image
-    returns dictionary
-    """
-    start = time.time()
+def render_hangul_in_font(font_path: Path, size: int = RENDER_SIZE) -> tuple[dict[str, list[str]], dict[str, Image.Image]]:
     font = ImageFont.truetype(font_path, size)
     images = {}
-    for char in characters:
-        h, img = character_to_hash_and_img(char, font, size)
-        if h not in images:
-            images[h] = img
-    logger.debug(
-        f"Font {font_path} {font_path.stat().st_size / 1024 / 1024:.1f} mb rendered glyphs in {time.time() - start:.1f} s"
-    )
-    return images
+    characters = {}
+    for char in HANGUL_CHARS:
+        img = render_centered_letter(char, font, size)
+        _hash = hashlib.md5(img.tobytes()).hexdigest()
+        characters.setdefault(_hash, []).append(char)
+        images.setdefault(_hash, img)
+    return characters, images
 
 
-def font_to_hangul_dict(font_path: Path) -> dict[str, list[str]]:
-    """
-    receive path to a font
-    run font_to_dict with collection of hangul characters
-    """
-    characters = map(chr, range(0xAC00, 0xD7AF + 1))
-    return font_to_dict(characters, font_path, 24)
-
-
-def render_and_save_hangul_glyphs(font_path: Path, image_dir: Path = Path("glyphs")) -> None:
-    """
-    receive font_path, and directory to save hangul glyphs
-    render hangul characters in font, save in folder
-    no return
-    """
-    characters = map(chr, range(0xAC00, 0xD7AF + 1))
-    image_dir.mkdir(parents=True, exist_ok=True)
-    images = render_glyphs(characters, font_path, 24)
+def process_font(font_path: Path, alphabet_path: Path = ALPHABET_PATH):
+    json_path = font_path.with_suffix(".json")
+    if json_path.exists():
+        return
+    characters, images = render_hangul_in_font(font_path)
+    json_path.write_text(json.dumps(characters, ensure_ascii=False), encoding="utf-8")
     for h, img in images.items():
-        image_path = image_dir / f"{h}.png"
-        if not image_path.exists():
-            img.save(image_path)
+        filepath = alphabet_path / f"{h}.png"
+        if not filepath.exists():
+            img.save(filepath)
 
 
 def process_all_fonts_sync(fonts: str = "fonts"):
@@ -129,7 +83,7 @@ def process_all_fonts_sync(fonts: str = "fonts"):
     process all fonts in the folder synchronously
     """
     fonts_dir = Path(fonts)
-    return list(map(font_to_hangul_dict, fonts_dir.glob("*.ttf")))
+    return list(map(process_font, fonts_dir.glob("*.ttf")))
 
 
 def process_all_fonts_mproc(fonts: str = "fonts"):
@@ -138,8 +92,8 @@ def process_all_fonts_mproc(fonts: str = "fonts"):
     process all fonts in the folder in multiple processes
     """
     fonts_dir = Path(fonts)
-    with ProcessPoolExecutor() as exec:
-        return list(exec.map(font_to_hangul_dict, fonts_dir.glob("*.ttf")))
+    with ProcessPoolExecutor() as executor:
+        return list(executor.map(process_font, fonts_dir.glob("*.ttf")))
 
 
 def get_hash_to_letter():

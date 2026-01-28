@@ -1,19 +1,16 @@
 import logging
-from collections import Counter
 
 import typer
 from pathlib import Path
 
-from epub.serene_panda import compose_strings_df
 from ewa.ui import print_success, print_error
-from ewa.cli.print_table import print_table_from_models, print_df
+from ewa.cli.print_table import print_table_from_models
 from ewa.cli.progress import DisplayProgress, track_batch_queue, track_batch_sized
 from ewa.main import settings
 from epub.tables import EpubBookTable, EpubContentsTable
-from epub.epub_classes import ScanEpubsInDirectory, EPUB
+from epub.epub_classes import ScanEpubsInDirectory, EPUB, extract_font_files
 from epub.constants import duplicates_dir, epub_dir
 from library.database.sqlite_model_table import TERMINATOR
-from library.database.string_grouper import group_similar_strings
 from library.utils import sanitize_filename
 
 app = typer.Typer(help="Epub Plugin")
@@ -68,8 +65,8 @@ def dups(move: bool = typer.Option(False, "-m", "--move"), cleanup: bool = typer
 
 @app.command()
 def test():
-    with EpubBookTable() as table:
-        df = table.get_encrypted_epubs()
+    with DisplayProgress(), EpubBookTable() as table:
+        extract_font_files(table)
 
 
 @app.command()

@@ -4,7 +4,6 @@ from typing import Literal, Any, TypeVar
 from sqlalchemy import BinaryExpression, Sequence
 from sqlmodel import Session, SQLModel
 from library.database.sqlmodel_statements import (
-    SQL_DIALECT,
     select_query,
     insert_statement,
     upsert_statement,

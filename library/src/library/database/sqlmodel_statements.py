@@ -1,8 +1,7 @@
 import os
-from typing import Literal, Any, TypeVar, Sequence
+from typing import Any, TypeVar, Sequence
 import importlib
 
-from lxml.objectify import NoneElement
 from sqlalchemy import BinaryExpression, Insert, Update, bindparam
 from sqlalchemy.sql.functions import func
 from sqlmodel import SQLModel, select, update

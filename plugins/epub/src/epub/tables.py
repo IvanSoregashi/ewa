@@ -139,7 +139,7 @@ class EpubContentsModel(SQLModel, table=True):
 
 class EpubBookTable(SQLiteModelTable[EpubFileModel]):
     def get_encrypted_epubs(self):
-        return self.get_many(self.model.serene_panda == True)
+        return self.get_many(self.model.serene_panda == True, limit=10000)
 
 
 class EpubContentsTable(SQLiteModelTable[EpubContentsModel]): ...

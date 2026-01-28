@@ -4,10 +4,12 @@ from itertools import batched
 from queue import Queue
 
 from rich.progress import Progress, TextColumn, TimeElapsedColumn, BarColumn, MofNCompleteColumn, TaskProgressColumn
-from typing import Self, Literal, Iterable, Collection
+from typing import Self, Literal, Iterable, Collection, TypeVar
 from types import TracebackType
 from ewa.ui import console
 
+
+T = TypeVar("T")
 
 class DisplayProgress(Progress):
     def __init__(self, *args, **kwargs):
@@ -69,8 +71,8 @@ class DisplayProgress(Progress):
 
 
 def track_batch_queue(
-    queue: Queue, terminator: object, name: str = "queue", batch_size: int = 1000
-) -> Iterable[tuple[dict]]:
+    queue: Queue[T], terminator: object, name: str = "queue", batch_size: int = 1000
+) -> Iterable[tuple[T]]:
     task_name = f"[cyan]Writing {name}"
     processed = 0
     start_time = time.time()
@@ -83,8 +85,8 @@ def track_batch_queue(
 
 
 def track_batch_sized(
-    collection: Collection[dict], name: str = "collection", batch_size: int = 100
-) -> Iterable[tuple[dict]]:
+    collection: Collection[T], name: str = "collection", batch_size: int = 100
+) -> Iterable[tuple[T, ...]]:
     task_name = f"[cyan]Writing {name}"
     processed = 0
     total = len(collection)
@@ -95,3 +97,13 @@ def track_batch_sized(
         yield batch
         print(task_name, processed, total)
     print(f"[cyan]Finished processing {name} task in [{time.time() - start_time:>7.2f}s]")
+
+
+def track_sized(collection: Collection[T], name: str = "collection") -> Iterable[T]:
+    task_name = f"[cyan]Processing {name}"
+    total = len(collection)
+    for i, item in enumerate(collection):
+        yield item
+        print(task_name, i+1, total)
+
+

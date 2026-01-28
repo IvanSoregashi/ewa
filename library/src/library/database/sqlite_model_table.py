@@ -1,16 +1,14 @@
 import time
-from collections.abc import Iterable, Sequence, Collection, Callable
-from queue import Queue
+from collections.abc import Iterable
 from itertools import batched
 from typing import Self, get_args, Literal, TypeVar
 from threading import Thread
 import pandas as pd
 
-from sqlmodel import SQLModel, create_engine, Session, select
+from sqlmodel import SQLModel, create_engine, Session
 from sqlalchemy import text
 
 from ewa.main import settings
-from ewa.ui import print_error
 from library.database.sqlite_utils import initialize_db
 from library.database.sqlmodel_statements import (
     bulk_insert_statement,
@@ -97,7 +95,7 @@ class SQLiteModelTable[TableType]:
     def get_most_common(
         self,
         group_fields: list,
-        *args: list,
+        *args,
         more_then: int | None = None,
         less_than: int | None = None,
         equal_to: int | None = None,
