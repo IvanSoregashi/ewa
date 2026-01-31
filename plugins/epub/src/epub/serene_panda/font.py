@@ -13,13 +13,16 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from PIL.ImageFont import FreeTypeFont
 
+from ewa.ui import print_error
+
 logger = logging.getLogger(__name__)
 
 HANGUL_START = 0xAC00
 HANGUL_END = 0xD7AF
-HANGUL_CHARS = map(chr, range(HANGUL_START, HANGUL_END + 1))
+HANGUL_CHARS = list(map(chr, range(HANGUL_START, HANGUL_END + 1)))
 RENDER_SIZE = 24
 ALPHABET_PATH = Path("~/.ewa/epub/serene_panda/alpha").expanduser().absolute()
+ALPHABET_PATH.mkdir(parents=True, exist_ok=True)
 
 
 def render_letter(ch: str, font: FreeTypeFont, canvas_size: int) -> Image.Image:
@@ -69,64 +72,13 @@ def process_font(font_path: Path, alphabet_path: Path = ALPHABET_PATH):
     json_path = font_path.with_suffix(".json")
     if json_path.exists():
         return
-    characters, images = render_hangul_in_font(font_path)
-    json_path.write_text(json.dumps(characters, ensure_ascii=False), encoding="utf-8")
+    try:
+        characters, images = render_hangul_in_font(font_path)
+        json_path.write_text(json.dumps(characters, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:
+        print_error(f"{e}")
+        return
     for h, img in images.items():
         filepath = alphabet_path / f"{h}.png"
         if not filepath.exists():
             img.save(filepath)
-
-
-def process_all_fonts_sync(fonts: str = "fonts"):
-    """
-    receive path to a folder
-    process all fonts in the folder synchronously
-    """
-    fonts_dir = Path(fonts)
-    return list(map(process_font, fonts_dir.glob("*.ttf")))
-
-
-def process_all_fonts_mproc(fonts: str = "fonts"):
-    """
-    receive path to a folder
-    process all fonts in the folder in multiple processes
-    """
-    fonts_dir = Path(fonts)
-    with ProcessPoolExecutor() as executor:
-        return list(executor.map(process_font, fonts_dir.glob("*.ttf")))
-
-
-def get_hash_to_letter():
-    """
-    return hash: letter dictionary
-    """
-    # TODO:
-    text = Path("hash_to_letter.json").read_text(encoding="utf-8")
-    hash_to_letter = json.loads(text)
-    # Path("glyphs").mkdir(parents=True, exist_ok=True)
-    return hash_to_letter
-
-
-def form_translation():
-    """
-    return glyph: letter translation dictionary
-    """
-    list_of_dicts = process_all_fonts_mproc()
-    hash_to_letter = get_hash_to_letter()
-
-    translation = {}
-
-    for groups in list_of_dicts:
-        for h, glyph_lst in groups.items():
-            for glyph in glyph_lst:
-                letter = hash_to_letter[h]
-                if letter not in ["#", " ", ""]:
-                    translation.setdefault(glyph, set()).add(letter)
-
-    for glyph, letters in (translation.copy()).items():
-        if len(letters) == 1:
-            translation[glyph] = list(letters)[0]
-        else:
-            translation[glyph] = glyph
-
-    return translation

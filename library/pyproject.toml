@@ -8,9 +8,9 @@ dependencies = []
 
 [project.optional-dependencies]
 db = ["sqlitedict>=2.1.0", "sqlmodel>=0.0.31", "pandas==3.0.0"]
-documents = ["beautifulsoup4>=4.14.2","lxml>=6.0.2","ebooklib>=0.20",]
+documents = ["beautifulsoup4>=4.14.3","lxml>=6.0.2","ebooklib>=0.20",]
 data = []
-image = ["pillow>=12.0.0",]
+image = ["pillow>=12.1.0", "pytesseract"]
 strings = ["numpy==2.4.1", "pandas==3.0.0", "sparse-dot-topn==1.2.0", "scipy", "scikit-learn", "rapidfuzz", "thefuzz",]
 
 [build-system]
@@ -22,5 +22,5 @@ packages = ["src/library"]
 
 [dependency-groups]
 dev = [
-    "ruff>=0.14.7",
+    "ruff>=0.14.14",
 ]

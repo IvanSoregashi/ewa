@@ -9,7 +9,7 @@ from collections.abc import Iterable, Generator
 from concurrent.futures.thread import ThreadPoolExecutor
 
 
-from ewa.cli.progress import track_sized
+from ewa.cli.progress import track_sized, track_unknown
 from library.database.sqlite_model_table import TERMINATOR
 from ewa.ui import print_error, print_success
 from ewa.main import settings
@@ -231,7 +231,7 @@ def extract_font_files(table: EpubBookTable):
     path = settings.profile_dir / "epub" / "serene_panda" / "fonts"
     path.mkdir(parents=True, exist_ok=True)
     with ThreadPoolExecutor(max_workers=12) as executor:
-        errs = list(executor.map(extract_to_destination, track_sized(table.get_encrypted_epubs())))
+        errs = list(track_unknown(executor.map(extract_to_destination, track_sized(table.get_encrypted_epubs()))))
         print_error(str(sum(errs)))
         print_success(str(len(errs)))
 

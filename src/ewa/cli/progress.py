@@ -1,5 +1,6 @@
 import builtins
 import time
+from collections.abc import Iterator
 from itertools import batched
 from queue import Queue
 
@@ -107,3 +108,8 @@ def track_sized(collection: Collection[T], name: str = "collection") -> Iterable
         print(task_name, i+1, total)
 
 
+def track_unknown(iterator: Iterator[T], name: str = "collection", total: int = 0) -> Iterator[T]:
+    task_name = f"[cyan]Processing {name}"
+    for i, item in enumerate(iterator):
+        yield item
+        print(task_name, i+1, total)
