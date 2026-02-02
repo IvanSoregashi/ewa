@@ -1,12 +1,40 @@
 import json
-from concurrent.futures import ProcessPoolExecutor
+import logging
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from pathlib import Path
 
 from epub.serene_panda.font import process_font
+from epub.tables import EpubFileModel, EpubBookTable
+from epub.utils import string_to_int_hash64
 from ewa.cli.progress import DisplayProgress, track_unknown, track_sized
 from ewa.main import settings
 from ewa.ui import print_success, print_error
 from library.image.ocr import recognize_letter
+
+logger = logging.getLogger(__name__)
+
+
+def extract_to_destination(book: EpubFileModel) -> bool:
+    try:
+        font_bytes = book.to_epub().get_file_bytes(book.serene_panda_ttf)
+        hash_num = string_to_int_hash64(font_bytes)
+        new_filename = f"{hash_num}_{Path(book.serene_panda_ttf).name}"
+        new_filepath = settings.profile_dir / "epub" / "serene_panda" / "fonts" / new_filename
+        if not new_filepath.exists():
+            new_filepath.write_bytes(font_bytes)
+    except Exception as e:
+        logger.error(f"extract_to_destination: {e}")
+        return True
+    return False
+
+
+def extract_font_files(table: EpubBookTable):
+    path = settings.profile_dir / "epub" / "serene_panda" / "fonts"
+    path.mkdir(parents=True, exist_ok=True)
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        errs = list(track_unknown(executor.map(extract_to_destination, track_sized(table.get_encrypted_epubs()))))
+        print_error(str(sum(errs)))
+        print_success(str(len(errs)))
 
 
 def process_all_fonts_sync(fonts: str = "fonts"):
@@ -38,7 +66,6 @@ def recognize_letters(letters_dir: str):
         for letter in track_sized(letters):
             text = recognize_letter(letter)
             letters_dict[letter.stem] = text
-            #print_success(str(letter))
     print(letters_dict)
     filepath = Path(letters_dir) / "letters.json"
     filepath.write_text(json.dumps(letters_dict, indent=4), encoding="utf-8")
@@ -70,3 +97,13 @@ def form_translation():
             translation[glyph] = glyph
 
     translation_path.write_text(json.dumps(translation, indent=4, ensure_ascii=False), encoding="utf-8")
+
+
+def translate_htmls(directory: Path):
+    translation_path = settings.profile_dir / "epub" / "serene_panda" / "translator.json"
+    translation_dict = json.loads(translation_path.read_text(encoding="utf-8"))
+    dictionary = str.maketrans(translation_dict)
+    for p in directory.glob("*.html"):
+        html = p.read_text(encoding="utf-8")
+        html = html.translate(dictionary)
+        p.with_stem(p.stem + "_tr").write_text(html, encoding="utf-8")

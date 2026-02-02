@@ -8,19 +8,16 @@ from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 from collections.abc import Iterable, Generator
 from concurrent.futures.thread import ThreadPoolExecutor
 
-
-from ewa.cli.progress import track_sized, track_unknown
 from library.database.sqlite_model_table import TERMINATOR
-from ewa.ui import print_error, print_success
-from ewa.main import settings
+from ewa.ui import print_error
 from epub.epub_state import EpubIllustrations
-from epub.tables import EpubFileModel, EpubContentsModel, EpubBookTable
-from epub.utils import string_to_int_hash, string_to_int_hash64
+from epub.tables import EpubFileModel, EpubContentsModel, EpubBookTable, EpubContentsTable
+from epub.utils import string_to_int_hash
 from epub.file_parsing import parse_epub_xml
 from epub.constants import quarantine_dir
 
 from library.image.image_optimization_settings import ImageSettings
-from library.markup.chapter_processor import EpubChapters
+from epub.chapter_processor import EpubChapters
 
 logger = logging.getLogger(__name__)
 
@@ -135,18 +132,29 @@ class EPUB:
         if overwrite or self.book_contents_models is None:
             self.book_contents_models = []
         with ZipFile(self.path) as zip_file:
+            parsed_data = parse_epub_xml(zipfile=zip_file)
+            self.book_model.read_metadata(parsed_data)
+            data = parsed_data.get("data", {})
+            filenames = []
             for info in zip_file.infolist():
-                self.book_contents_models.append(EpubContentsModel.from_zip_info(info, self.book_id))
-                if not info.filename.endswith(".opf"):
-                    continue
-                with zip_file.open(info.filename) as file:
-                    opf_bytes = file.read()
-                    self.book_model.update_from_opf_file(opf_bytes)
+                fdata = data.get(info.filename, {})
+                self.book_contents_models.append(EpubContentsModel.from_zip_info(info, self.book_id, fdata))
+                filenames.append(info.filename)
+
+            self.book_model.process_filenames(filenames)
 
     def read_from_database(self, table: EpubBookTable):
         self.book_model = table.get_one(id=self.book_id)
         self.book_contents_models = self.book_model.contents
 
+    def save_to_database(self, epub_table: EpubBookTable, content_table: EpubContentsTable):
+        epub_table.upsert_many([self.book_model])
+        content_table.upsert_many(self.book_contents_models)
+
+    def delete_from_database(self, epub_table: EpubBookTable, content_table: EpubContentsTable):
+        epub_table.delete_one(self.book_model)
+        for file_model in self.book_contents_models:
+            content_table.delete_one(file_model)
 
 class ScanEpubsInDirectory:
     def __init__(
@@ -212,26 +220,4 @@ class ScanEpubsInDirectory:
         print("[green]Scanning...", current, total)
         return books
 
-
-def extract_to_destination(book: EpubFileModel) -> bool:
-    try:
-        font_bytes = book.to_epub().get_file_bytes(book.serene_panda_ttf)
-        hash_num = string_to_int_hash64(font_bytes)
-        new_filename = f"{hash_num}_{Path(book.serene_panda_ttf).name}"
-        new_filepath = settings.profile_dir / "epub" / "serene_panda" / "fonts" / new_filename
-        if not new_filepath.exists():
-            new_filepath.write_bytes(font_bytes)
-    except Exception as e:
-        logger.error(f"extract_to_destination: {e}")
-        return True
-    return False
-
-
-def extract_font_files(table: EpubBookTable):
-    path = settings.profile_dir / "epub" / "serene_panda" / "fonts"
-    path.mkdir(parents=True, exist_ok=True)
-    with ThreadPoolExecutor(max_workers=12) as executor:
-        errs = list(track_unknown(executor.map(extract_to_destination, track_sized(table.get_encrypted_epubs()))))
-        print_error(str(sum(errs)))
-        print_success(str(len(errs)))
 

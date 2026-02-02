@@ -16,7 +16,7 @@ from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile, ZipInfo
 
 from library.image.image_processor import ImageProcessingResult, ImageProcessor
 from library.image.image_optimization_settings import ImageSettings
-from library.markup.chapter_processor import EpubChapters
+from epub.chapter_processor import EpubChapters
 
 logger = logging.getLogger(__name__)
 

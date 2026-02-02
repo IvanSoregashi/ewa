@@ -14,10 +14,11 @@ warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 logger = logging.getLogger(__name__)
 
 
-class ChapterProcessor:
+class EpubChapter:
     def __init__(self, path: Path):
         self.path: Path = path
-        self.soup: BeautifulSoup | None = None
+        self._text: str | None = None
+        self._soup: BeautifulSoup | None = None
         self.references_updated: int = 0
 
         self.warnings: list[str] = []
@@ -27,20 +28,32 @@ class ChapterProcessor:
         return hash(self.path)
 
     def __eq__(self, other):
-        if not isinstance(other, ChapterProcessor):
+        if not isinstance(other, EpubChapter):
             return False
         return self.path == other.path
 
-    def read_chapter(self) -> None:
-        """Read the chapter from the file into the soup"""
-        self.soup = BeautifulSoup(self.path.read_text(encoding="utf-8"), "lxml")
+    @property
+    def text(self) -> str:
+        if self._text is None:
+            self._text = self.path.read_text(encoding="utf-8")
+        return self._text
 
-    def write_chapter(self) -> None:
-        self.path.write_bytes(self.soup.prettify(encoding="utf-8"))
+    @text.setter
+    def text(self, text: str) -> None:
+        self._text = text
+        self._soup = None
+        self.path.write_text(text, encoding="utf-8")
+
+    @property
+    def soup(self) -> BeautifulSoup:
+        if self._soup is None:
+            self._soup = BeautifulSoup(self.text, "lxml")
+        return self._soup
+
+    def translate(self, table: dict) -> None:
+        self.text = self.text.translate(table)
 
     def image_tags(self) -> Generator[Tag, None, None]:
-        if self.soup is None:
-            self.read_chapter()
         yield from self.soup.find_all("img")
 
     def get_linked_image_names(self) -> list[str]:
@@ -66,7 +79,7 @@ class ChapterProcessor:
                     self.references_updated += 1
 
             if self.references_updated > 0:
-                self.write_chapter()
+                self.path.write_bytes(self._soup.prettify(encoding="utf-8"))
             return True
         except Exception as e:
             self.error = f"{self.path.name}: {e}"
@@ -74,7 +87,7 @@ class ChapterProcessor:
             logger.error(self.error)
             return False
         finally:
-            self.soup = None
+            self._soup = None
 
     def to_dict(self) -> dict:
         return {
@@ -87,7 +100,7 @@ class ChapterProcessor:
 class EpubChapters:
     def __init__(self, epub_temp_dir: Path):
         self.epub_temp_dir = epub_temp_dir
-        self.chapter_processors: list[ChapterProcessor] = list(map(ChapterProcessor, self.iter_chapter_paths()))
+        self.chapter_processors: list[EpubChapter] = list(map(EpubChapter, self.iter_chapter_paths()))
         self.image_references: dict[int, list[str]] | None = None
 
         self.update_time: float = 0
@@ -104,7 +117,7 @@ class EpubChapters:
             return self.image_references
         result = {}
         with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-            refs = executor.map(ChapterProcessor.get_linked_image_names, self.chapter_processors)
+            refs = executor.map(EpubChapter.get_linked_image_names, self.chapter_processors)
         for i, refs in enumerate(refs):
             if refs:
                 result[i] = refs
@@ -112,7 +125,7 @@ class EpubChapters:
         return result
 
     @property
-    def with_images(self) -> list[ChapterProcessor]:
+    def with_images(self) -> list[EpubChapter]:
         return [self.chapter_processors[i] for i in self.map_image_references()]
 
     @property
@@ -157,7 +170,7 @@ class EpubChapters:
         list_of_replacers = [replacers] * len(chapters_with_images)
         with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
             results = executor.map(
-                ChapterProcessor.update_image_references,
+                EpubChapter.update_image_references,
                 chapters_with_images,
                 list_of_replacers,
             )

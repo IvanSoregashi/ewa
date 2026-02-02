@@ -57,7 +57,7 @@ def parse_container_xml(zipfile: ZipFile) -> str | None:
 
 
 # ---------------------------
-# OPF parsing (the truth)
+# OPF parsing
 # ---------------------------
 
 
@@ -131,3 +131,9 @@ def parse_toc_ncx(zipfile: ZipFile, opf_data: dict):
 
         if src and src[0] in data:
             data[src[0]]["chapter"] = label[0] if label else None
+
+
+# ---------------------------
+# CHAPTER
+# ---------------------------
+

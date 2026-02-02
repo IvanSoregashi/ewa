@@ -4,7 +4,7 @@ import typer
 from pathlib import Path
 
 from epub.serene_panda.orchestration import process_all_fonts_mproc, process_all_fonts_sync, recognize_letters, \
-    form_translation
+    form_translation, translate_htmls
 from ewa.ui import print_success, print_error
 from ewa.cli.print_table import print_table_from_models
 from ewa.cli.progress import DisplayProgress, track_batch_queue, track_batch_sized
@@ -67,6 +67,11 @@ def dups(move: bool = typer.Option(False, "-m", "--move"), cleanup: bool = typer
 
 @app.command()
 def test():
+    translate_htmls(settings.current_dir)
+
+
+@app.command("formt")
+def form_translation():
     form_translation()
 
 
