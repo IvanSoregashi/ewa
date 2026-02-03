@@ -1,6 +1,7 @@
 import warnings
 import logging
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Generator
 import time
@@ -98,26 +99,38 @@ class EpubChapter:
 
 
 class EpubChapters:
-    def __init__(self, epub_temp_dir: Path):
-        self.epub_temp_dir = epub_temp_dir
-        self.chapter_processors: list[EpubChapter] = list(map(EpubChapter, self.iter_chapter_paths()))
+    def __init__(self, unpacked_epub_dir: Path):
+        self.unpacked_epub_dir = unpacked_epub_dir
+        self.chapters_dir = unpacked_epub_dir / "EPUB" / "chapters"
+        self.chapters: list[EpubChapter] = list(map(EpubChapter, self.iter_chapter_paths()))
         self.image_references: dict[int, list[str]] | None = None
+        print(unpacked_epub_dir, self.chapters_dir, len(self.chapters), list(self.chapters_dir.glob("*")))
 
         self.update_time: float = 0
 
     def __len__(self) -> int:
-        return len(self.chapter_processors)
+        return len(self.chapters)
+
+    def __iter__(self):
+        return iter(self.chapters)
 
     def iter_chapter_paths(self) -> Generator[Path, None, None]:
-        for path in self.epub_temp_dir.glob("EPUB/chapters/*.*html"):
+        for path in self.chapters_dir.glob("*.*html"):
             yield path
+
+    def apply(self, method: Callable, *args, **kwargs):
+        results = []
+        for chapter in self.chapters:
+            result = method(chapter, *args, **kwargs)
+            results.append(result)
+        return results
 
     def map_image_references(self, update: bool = False) -> dict[int, list[str]]:
         if not update and self.image_references is not None:
             return self.image_references
         result = {}
         with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-            refs = executor.map(EpubChapter.get_linked_image_names, self.chapter_processors)
+            refs = executor.map(EpubChapter.get_linked_image_names, self.chapters)
         for i, refs in enumerate(refs):
             if refs:
                 result[i] = refs
@@ -126,7 +139,7 @@ class EpubChapters:
 
     @property
     def with_images(self) -> list[EpubChapter]:
-        return [self.chapter_processors[i] for i in self.map_image_references()]
+        return [self.chapters[i] for i in self.map_image_references()]
 
     @property
     def errors(self) -> list[str] | None:
@@ -134,7 +147,7 @@ class EpubChapters:
 
     @property
     def updated(self) -> int:
-        return len([ch for ch in self.chapter_processors if ch.references_updated > 0])
+        return len([ch for ch in self.chapters if ch.references_updated > 0])
 
     def cross_reference_images(self, images: list[str]) -> tuple[bool, list[tuple[int, list[str]]], list[str]]:
         """
@@ -184,4 +197,4 @@ class EpubChapters:
         }
 
     def detailed_report(self) -> list[dict]:
-        return [ch.to_dict() for ch in self.chapter_processors if ch.error is not None or ch.references_updated > 0]
+        return [ch.to_dict() for ch in self.chapters if ch.error is not None or ch.references_updated > 0]

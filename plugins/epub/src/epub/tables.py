@@ -108,6 +108,8 @@ class EpubContentsModel(SQLModel, table=True):
     media_type: str | None = None
     chapter: str | None = None
 
+    orphan: bool = False
+
     book: EpubFileModel = Relationship(back_populates="contents")
 
     @staticmethod
@@ -121,6 +123,21 @@ class EpubContentsModel(SQLModel, table=True):
             "item_id": data.get("item_id"),
             "media_type": data.get("media_type"),
             "chapter": data.get("chapter"),
+            "orphan": False,
+        }
+
+    @staticmethod
+    def from_orphaned_dict(filename: str, book_id: int, data: dict) -> dict[str, Any]:
+        return {
+            "book_id": book_id,
+            "filepath": filename,
+            "filesize": 0,
+            "compressed_size": 0,
+            "timestamp": 0,
+            "item_id": data.get("item_id"),
+            "media_type": data.get("media_type"),
+            "chapter": data.get("chapter"),
+            "orphan": True,
         }
 
     @classmethod
@@ -136,6 +153,19 @@ class EpubContentsModel(SQLModel, table=True):
             chapter=data.get("chapter"),
         )
 
+    @classmethod
+    def from_orphan(cls, filename: str, book_id: int, data: dict) -> EpubContentsModel:
+        return cls(
+            book_id=book_id,
+            filepath=filename,
+            filesize=0,
+            compressed_size=0,
+            timestamp=0,
+            item_id=data.get("item_id"),
+            media_type=data.get("media_type"),
+            chapter=data.get("chapter"),
+            orphan=True,
+        )
 
 class EpubBookTable(SQLiteModelTable[EpubFileModel]):
     def get_encrypted_epubs(self):

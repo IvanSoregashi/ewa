@@ -4,12 +4,13 @@ import logging
 
 from queue import Queue
 from pathlib import Path
+from typing import Self
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 from collections.abc import Iterable, Generator
 from concurrent.futures.thread import ThreadPoolExecutor
 
 from library.database.sqlite_model_table import TERMINATOR
-from ewa.ui import print_error
+from ewa.ui import print_error, print_success
 from epub.epub_state import EpubIllustrations
 from epub.tables import EpubFileModel, EpubContentsModel, EpubBookTable, EpubContentsTable
 from epub.utils import string_to_int_hash
@@ -17,7 +18,7 @@ from epub.file_parsing import parse_epub_xml
 from epub.constants import quarantine_dir
 
 from library.image.image_optimization_settings import ImageSettings
-from epub.chapter_processor import EpubChapters
+from epub.chapter_processor import EpubChapters, EpubChapter
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ class UnpackedEPUB:
 
     @property
     def chapters(self) -> EpubChapters:
-        return EpubChapters(self.path / "EPUB" / "chapters")
+        return EpubChapters(self.path)
 
     @property
     def images(self) -> EpubIllustrations:
@@ -65,9 +66,28 @@ class UnpackedEPUB:
             self.delete()
 
     def delete(self) -> None:
+        print_success(f"deleting {self.path}")
         if self.path.exists():
             shutil.rmtree(self.path)
             self.path = None
+
+    def remove_font(self):
+        font_dir = self.path / "fonts"
+        if font_dir.exists() and font_dir.is_dir():
+            shutil.rmtree(font_dir)
+        else:
+            for path in self.path.rglob("*.ttf"):
+                path.unlink()
+
+    def translate(self, table: dict) -> Self:
+        for chapter in self.chapters:
+            chapter.translate(table)
+        self.remove_font()
+        if "encrypted" in self.path.stem.lower():
+            self.path = self.path.with_stem(self.path.stem.replace("(Encrypted)", ""))
+        if "encoded" in self.path.stem.lower():
+            self.path = self.path.with_stem(self.path.stem.replace("(Encoded)", ""))
+        return self
 
 
 class EPUB:
@@ -85,6 +105,42 @@ class EPUB:
             book_model=model,
         )
 
+    def read_from_database(self, table: EpubBookTable):
+        self.book_model = table.get_one(id=self.book_id)
+        self.book_contents_models = self.book_model.contents
+
+    def save_to_database(self, epub_table: EpubBookTable, content_table: EpubContentsTable):
+        epub_table.upsert_many([self.book_model])
+        content_table.upsert_many(self.book_contents_models)
+
+    def delete_from_database(self, epub_table: EpubBookTable, content_table: EpubContentsTable):
+        epub_table.delete_one(self.book_model)
+        for file_model in self.book_contents_models:
+            content_table.delete_one(file_model)
+
+    def delete_file(self):
+        self.path.unlink(missing_ok=True)
+
+    def path_scan(self, overwrite: bool = True):
+        if overwrite or self.book_model is None:
+            self.book_model = EpubFileModel.from_path(self.path)
+
+    def full_scan(self, overwrite: bool = True):
+        self.path_scan()
+        if overwrite or self.book_contents_models is None:
+            self.book_contents_models = []
+        with ZipFile(self.path) as zip_file:
+            parsed_data = parse_epub_xml(zipfile=zip_file)
+            self.book_model.read_metadata(parsed_data)
+            data = parsed_data.get("data", {})
+            filenames = []
+            for info in zip_file.infolist():
+                fdata = data.get(info.filename, {})
+                self.book_contents_models.append(EpubContentsModel.from_zip_info(info, self.book_id, fdata))
+                filenames.append(info.filename)
+
+            self.book_model.process_filenames(filenames)
+
     def extract(self) -> UnpackedEPUB:
         unpacked_directory = Path(tempfile.mkdtemp())
         unpacked_directory.mkdir(parents=True, exist_ok=True)
@@ -95,9 +151,6 @@ class EPUB:
     def get_file_bytes(self, filepath: str):
         with ZipFile(self.path) as zip_file:
             return zip_file.read(filepath)
-
-    def delete_file(self):
-        self.path.unlink(missing_ok=True)
 
     def move_original_to(self, directory: Path, overwrite: bool = True, try_rename: bool = True) -> bool:
         path = directory / self.path.name
@@ -123,38 +176,10 @@ class EPUB:
             print_error(f"move_original: failed to copy file: {e}")
         return False
 
-    def path_scan(self, overwrite: bool = True):
-        if overwrite or self.book_model is None:
-            self.book_model = EpubFileModel.from_path(self.path)
-
-    def full_scan(self, overwrite: bool = True):
-        self.path_scan()
-        if overwrite or self.book_contents_models is None:
-            self.book_contents_models = []
+    def parse_metadata(self):
         with ZipFile(self.path) as zip_file:
             parsed_data = parse_epub_xml(zipfile=zip_file)
-            self.book_model.read_metadata(parsed_data)
-            data = parsed_data.get("data", {})
-            filenames = []
-            for info in zip_file.infolist():
-                fdata = data.get(info.filename, {})
-                self.book_contents_models.append(EpubContentsModel.from_zip_info(info, self.book_id, fdata))
-                filenames.append(info.filename)
-
-            self.book_model.process_filenames(filenames)
-
-    def read_from_database(self, table: EpubBookTable):
-        self.book_model = table.get_one(id=self.book_id)
-        self.book_contents_models = self.book_model.contents
-
-    def save_to_database(self, epub_table: EpubBookTable, content_table: EpubContentsTable):
-        epub_table.upsert_many([self.book_model])
-        content_table.upsert_many(self.book_contents_models)
-
-    def delete_from_database(self, epub_table: EpubBookTable, content_table: EpubContentsTable):
-        epub_table.delete_one(self.book_model)
-        for file_model in self.book_contents_models:
-            content_table.delete_one(file_model)
+        return parsed_data
 
 class ScanEpubsInDirectory:
     def __init__(
@@ -182,12 +207,15 @@ class ScanEpubsInDirectory:
             with ZipFile(path) as zip_file:
                 parsed_data = parse_epub_xml(zipfile=zip_file)
                 book.read_metadata(parsed_data)
-                data = parsed_data.get("data", {})
+                data = parsed_data.get("data", {}).copy()
 
                 for info in zip_file.infolist():
-                    fdata = data.get(info.filename, {})
+                    fdata = data.pop(info.filename, {})
                     self.queue.put(EpubContentsModel.dict_from_zip_info(info, book_id, fdata))
                     filenames.append(info.filename)
+
+                for filename, fdata in data.items():
+                    self.queue.put(EpubContentsModel.from_orphaned_dict(filename, book_id, fdata))
 
             book.process_filenames(filenames)
         except Exception as e:

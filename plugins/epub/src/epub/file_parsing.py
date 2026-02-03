@@ -46,13 +46,7 @@ def parse_container_xml(zipfile: ZipFile) -> str | None:
         return None
 
     root = etree.fromstring(xml)
-    ns = {"c": "urn:oasis:names:tc:opendocument:xmlns:container"}
-
-    result = root.xpath(
-        "//c:rootfile/@full-path",
-        namespaces=ns,
-    )
-
+    result = root.xpath("//c:rootfile/@full-path", namespaces={"c": "urn:oasis:names:tc:opendocument:xmlns:container"})
     return result[0] if result else None
 
 
@@ -65,14 +59,10 @@ def parse_content_opf(zipfile: ZipFile, opf_path: str) -> dict:
     xml = zipfile.read(opf_path)
     root = etree.fromstring(xml)
 
-    ns = {
-        "opf": "http://www.idpf.org/2007/opf",
-        "dc": "http://purl.org/dc/elements/1.1/",
-    }
-
+    ns = {"opf": "http://www.idpf.org/2007/opf", "dc": "http://purl.org/dc/elements/1.1/"}
     base_path = PurePosixPath(opf_path).parent
 
-    # ---- metadata (multi-value safe) ----
+    # ---- metadata ----
     metadata: dict[str, str | list[str]] = {}
 
     for elem in root.xpath("//dc:*", namespaces=ns):

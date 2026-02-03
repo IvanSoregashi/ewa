@@ -3,6 +3,8 @@ import logging
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from pathlib import Path
 
+from epub.chapter_processor import EpubChapter
+from epub.epub_classes import EPUB
 from epub.serene_panda.font import process_font
 from epub.tables import EpubFileModel, EpubBookTable
 from epub.utils import string_to_int_hash64
@@ -107,3 +109,29 @@ def translate_htmls(directory: Path):
         html = p.read_text(encoding="utf-8")
         html = html.translate(dictionary)
         p.with_stem(p.stem + "_tr").write_text(html, encoding="utf-8")
+
+
+def translate_epub(path: Path):
+    assert path.exists(), "path does not exist"
+    print_success(str(path))
+    translation_path = settings.profile_dir / "epub" / "serene_panda" / "translator.json"
+    translation_dict = json.loads(translation_path.read_text(encoding="utf-8"))
+    dictionary = str.maketrans(translation_dict)
+    EPUB(path).extract().translate(dictionary).compress(settings.current_dir)
+
+
+def translate_epubs_in_directory(directory: Path):
+    assert directory.is_dir(), "directory does not exist"
+    print_success(str(directory))
+    translation_path = settings.profile_dir / "epub" / "serene_panda" / "translator.json"
+    translation_dict = json.loads(translation_path.read_text(encoding="utf-8"))
+    dictionary = str.maketrans(translation_dict)
+    with DisplayProgress(), ThreadPoolExecutor() as executor:
+        for path in directory.glob("*.epub"):
+            EPUB(path).extract().translate(dictionary).compress(settings.current_dir)
+
+
+def translate_all_encrypted(table: EpubBookTable):
+    with DisplayProgress(), ThreadPoolExecutor() as executor:
+        for epub in table.get_encrypted_epubs():
+            pass
