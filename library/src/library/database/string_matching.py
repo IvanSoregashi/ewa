@@ -43,14 +43,7 @@ def group_items_by_string_distance(
 ) -> Generator[tuple[str, list[DataType]], None, None]:
     """HIGH PERFORMANCE ATTEMPT2"""
 
-    similarity_matrix = process.cdist(
-        data,
-        data,
-        scorer=comparer,
-        processor=processor,
-        workers=-1,
-        dtype=np.uint8
-    )
+    similarity_matrix = process.cdist(data, data, scorer=comparer, processor=processor, workers=-1, dtype=np.uint8)
 
     distance_matrix = 100 - similarity_matrix
     eps = 100 - score
@@ -73,12 +66,7 @@ def group_items_by_string_distance_v2(
 
     normalized_strings = [processor(obj) for obj in data]
     similarity_matrix = process.cdist(
-        normalized_strings,
-        normalized_strings,
-        scorer=comparer,
-        score_cutoff=score,
-        workers=-1,
-        dtype=np.uint8
+        normalized_strings, normalized_strings, scorer=comparer, score_cutoff=score, workers=-1, dtype=np.uint8
     )
 
     distance_matrix = 100 - similarity_matrix

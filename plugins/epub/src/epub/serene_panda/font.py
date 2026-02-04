@@ -7,7 +7,6 @@ import logging
 import hashlib
 import json
 
-from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -56,7 +55,9 @@ def render_centered_letter(ch: str, font: FreeTypeFont, canvas_size: int) -> Ima
     return img
 
 
-def render_hangul_in_font(font_path: Path, size: int = RENDER_SIZE) -> tuple[dict[str, list[str]], dict[str, Image.Image]]:
+def render_hangul_in_font(
+    font_path: Path, size: int = RENDER_SIZE
+) -> tuple[dict[str, list[str]], dict[str, Image.Image]]:
     font = ImageFont.truetype(font_path, size)
     images = {}
     characters = {}

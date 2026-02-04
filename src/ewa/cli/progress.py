@@ -12,6 +12,7 @@ from ewa.ui import console
 
 T = TypeVar("T")
 
+
 class DisplayProgress(Progress):
     def __init__(self, *args, **kwargs):
         if not args:
@@ -103,13 +104,13 @@ def track_batch_sized(
 def track_sized(collection: Collection[T], name: str = "collection") -> Iterable[T]:
     task_name = f"[cyan]Processing {name}"
     total = len(collection)
-    for i, item in enumerate(collection):
+    for i, item in enumerate(collection, start=1):
         yield item
-        print(task_name, i+1, total)
+        print(task_name, i, total)
 
 
 def track_unknown(iterator: Iterator[T], name: str = "collection", total: int = 0) -> Iterator[T]:
     task_name = f"[cyan]Processing {name}"
-    for i, item in enumerate(iterator):
+    for i, item in enumerate(iterator, start=1):
         yield item
-        print(task_name, i+1, total)
+        print(task_name, i, total)

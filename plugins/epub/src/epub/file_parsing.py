@@ -126,4 +126,3 @@ def parse_toc_ncx(zipfile: ZipFile, opf_data: dict):
 # ---------------------------
 # CHAPTER
 # ---------------------------
-

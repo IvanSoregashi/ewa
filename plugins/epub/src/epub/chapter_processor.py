@@ -104,7 +104,6 @@ class EpubChapters:
         self.chapters_dir = unpacked_epub_dir / "EPUB" / "chapters"
         self.chapters: list[EpubChapter] = list(map(EpubChapter, self.iter_chapter_paths()))
         self.image_references: dict[int, list[str]] | None = None
-        print(unpacked_epub_dir, self.chapters_dir, len(self.chapters), list(self.chapters_dir.glob("*")))
 
         self.update_time: float = 0
 

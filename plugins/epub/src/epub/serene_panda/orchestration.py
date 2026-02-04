@@ -1,13 +1,14 @@
 import json
 import logging
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from itertools import repeat
 from pathlib import Path
 
-from epub.chapter_processor import EpubChapter
 from epub.epub_classes import EPUB
 from epub.serene_panda.font import process_font
 from epub.tables import EpubFileModel, EpubBookTable
 from epub.utils import string_to_int_hash64
+from epub.constants import translated_directory, untranslated_directory
 from ewa.cli.progress import DisplayProgress, track_unknown, track_sized
 from ewa.main import settings
 from ewa.ui import print_success, print_error
@@ -93,45 +94,104 @@ def form_translation():
                     translation.setdefault(glyph, set()).add(letter)
 
     for glyph, letters in (translation.copy()).items():
-        if len(letters - {' ', '□'}) == 1:
-            translation[glyph] = next(iter(letters - {' ', '□'}))
+        if len(letters - {" ", "□"}) == 1:
+            translation[glyph] = next(iter(letters - {" ", "□"}))
         else:
             translation[glyph] = glyph
 
     translation_path.write_text(json.dumps(translation, indent=4, ensure_ascii=False), encoding="utf-8")
 
 
-def translate_htmls(directory: Path):
-    translation_path = settings.profile_dir / "epub" / "serene_panda" / "translator.json"
+def translation_dictionary(
+    translation_path: Path = settings.profile_dir / "epub" / "serene_panda" / "translator.json",
+) -> dict:
     translation_dict = json.loads(translation_path.read_text(encoding="utf-8"))
     dictionary = str.maketrans(translation_dict)
+    return dictionary
+
+
+def translate_htmls(directory: Path):
+    dictionary = translation_dictionary()
     for p in directory.glob("*.html"):
         html = p.read_text(encoding="utf-8")
         html = html.translate(dictionary)
         p.with_stem(p.stem + "_tr").write_text(html, encoding="utf-8")
 
 
-def translate_epub(path: Path):
-    assert path.exists(), "path does not exist"
-    print_success(str(path))
-    translation_path = settings.profile_dir / "epub" / "serene_panda" / "translator.json"
-    translation_dict = json.loads(translation_path.read_text(encoding="utf-8"))
-    dictionary = str.maketrans(translation_dict)
-    EPUB(path).extract().translate(dictionary).compress(settings.current_dir)
+def translate_epub(
+    epub: EPUB,
+    dictionary: dict,
+    translated_dir: Path = translated_directory,
+    untranslated_dir: Path = untranslated_directory,
+) -> EPUB:
+    new_stem = (
+        epub.path.stem.replace("(Encrypted)", "")
+        .replace("(Encoded)", "")
+        .replace("(encoded)", "")
+        .replace("+", "")
+        .strip()
+        .replace("  ", " ")
+    )
+    new_name = epub.path.with_stem(new_stem).name
+    new_epub = None
+    try:
+        new_epub = epub.extract().translate(dictionary).rename(new_name).compress(translated_dir)
+    except Exception as e:
+        print_error(str(e))
+    epub.move_original_to(untranslated_dir)
+    return new_epub
 
 
-def translate_epubs_in_directory(directory: Path):
-    assert directory.is_dir(), "directory does not exist"
-    print_success(str(directory))
-    translation_path = settings.profile_dir / "epub" / "serene_panda" / "translator.json"
-    translation_dict = json.loads(translation_path.read_text(encoding="utf-8"))
-    dictionary = str.maketrans(translation_dict)
+def translate_epub_path(
+    path: Path,
+    dictionary: dict,
+    translated_dir: Path = translated_directory,
+    untranslated_dir: Path = untranslated_directory,
+) -> EPUB:
+    return translate_epub(EPUB(path), dictionary, translated_dir, untranslated_dir)
+
+
+def translate_epub_model(
+    epub: EpubFileModel,
+    dictionary: dict,
+    translated_dir: Path = translated_directory,
+    untranslated_dir: Path = untranslated_directory,
+) -> EPUB:
+    return translate_epub(epub.to_epub(), dictionary, translated_dir, untranslated_dir)
+
+
+def translate_one_epub(path: Path):
+    dictionary = translation_dictionary()
+    return translate_epub_path(path, dictionary, translated_directory, untranslated_directory)
+
+
+def translate_epubs_in_directory(
+    directory: Path, translated_dir: Path = translated_directory, untranslated_dir: Path = untranslated_directory
+):
+    dictionary = translation_dictionary()
+    paths = list(directory.glob("*(Encoded)*.epub"))
     with DisplayProgress(), ThreadPoolExecutor() as executor:
-        for path in directory.glob("*.epub"):
-            EPUB(path).extract().translate(dictionary).compress(settings.current_dir)
+        list(
+            track_unknown(
+                executor.map(
+                    translate_epub_path, paths, repeat(dictionary), repeat(translated_dir), repeat(untranslated_dir)
+                ),
+                total=len(paths),
+            )
+        )
 
 
-def translate_all_encrypted(table: EpubBookTable):
+def translate_all_encrypted(
+    table: EpubBookTable, translated_dir: Path = translated_directory, untranslated_dir: Path = untranslated_directory
+):
+    dictionary = translation_dictionary()
+    epubs = table.get_encrypted_epubs()
     with DisplayProgress(), ThreadPoolExecutor() as executor:
-        for epub in table.get_encrypted_epubs():
-            pass
+        list(
+            track_unknown(
+                executor.map(
+                    translate_epub_model, epubs, repeat(dictionary), repeat(translated_dir), repeat(untranslated_dir)
+                ),
+                total=len(epubs),
+            )
+        )

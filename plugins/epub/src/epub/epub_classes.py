@@ -15,10 +15,10 @@ from epub.epub_state import EpubIllustrations
 from epub.tables import EpubFileModel, EpubContentsModel, EpubBookTable, EpubContentsTable
 from epub.utils import string_to_int_hash
 from epub.file_parsing import parse_epub_xml
-from epub.constants import quarantine_dir
+from epub.constants import quarantine_directory
 
 from library.image.image_optimization_settings import ImageSettings
-from epub.chapter_processor import EpubChapters, EpubChapter
+from epub.chapter_processor import EpubChapters
 
 logger = logging.getLogger(__name__)
 
@@ -83,10 +83,10 @@ class UnpackedEPUB:
         for chapter in self.chapters:
             chapter.translate(table)
         self.remove_font()
-        if "encrypted" in self.path.stem.lower():
-            self.path = self.path.with_stem(self.path.stem.replace("(Encrypted)", ""))
-        if "encoded" in self.path.stem.lower():
-            self.path = self.path.with_stem(self.path.stem.replace("(Encoded)", ""))
+        return self
+
+    def rename(self, new_name: str) -> Self:
+        self.name = new_name
         return self
 
 
@@ -181,6 +181,7 @@ class EPUB:
             parsed_data = parse_epub_xml(zipfile=zip_file)
         return parsed_data
 
+
 class ScanEpubsInDirectory:
     def __init__(
         self,
@@ -191,7 +192,9 @@ class ScanEpubsInDirectory:
     ) -> None:
         self.directory = directory
         self.mask = mask
-        self.paths: Iterable[Path] = (path for path in directory.rglob(mask) if quarantine_dir not in path.parents)
+        self.paths: Iterable[Path] = (
+            path for path in directory.rglob(mask) if quarantine_directory not in path.parents
+        )
         self.workers = workers
         self.queue = queue
 
@@ -220,7 +223,7 @@ class ScanEpubsInDirectory:
             book.process_filenames(filenames)
         except Exception as e:
             logger.error(f"process_epub({path}): failed to process zipfile, quarantining: {e}")
-            path.rename(quarantine_dir / path.name)
+            path.rename(quarantine_directory / path.name)
         return book
 
     def _process_paths(self) -> Generator[EpubFileModel, None, None]:
@@ -247,5 +250,3 @@ class ScanEpubsInDirectory:
                 print("[green]Scanning...", current, total)
         print("[green]Scanning...", current, total)
         return books
-
-

@@ -10,7 +10,7 @@ from ewa.cli.progress import DisplayProgress, track_batch_queue, track_batch_siz
 from ewa.main import settings
 from epub.tables import EpubBookTable, EpubContentsTable
 from epub.epub_classes import ScanEpubsInDirectory, EPUB
-from epub.constants import duplicates_dir, epub_dir
+from epub.constants import duplicates_directory, epub_dir
 from library.database.sqlite_model_table import TERMINATOR
 from library.utils import sanitize_filename
 
@@ -41,7 +41,7 @@ def scan_epubs_in_current_directory():
 @app.command()
 def dups(move: bool = typer.Option(False, "-m", "--move"), cleanup: bool = typer.Option(False, "-c", "--cleanup")):
     if cleanup:
-        for i in duplicates_dir.iterdir():
+        for i in duplicates_directory.iterdir():
             if i.is_dir():
                 files = list(i.glob("*.epub"))
                 if len(files) == 1:
@@ -53,9 +53,9 @@ def dups(move: bool = typer.Option(False, "-m", "--move"), cleanup: bool = typer
                     i.rmdir()
         return
     with EpubBookTable() as table:
-        title_list = table.get_most_common([table.model.title], table.model.serene_panda == True, more_then=1)
+        title_list = table.get_most_common([table.model.title], table.model.serene_panda == 1, more_then=1)
         for title in title_list:
-            new_dir = duplicates_dir / sanitize_filename(title)
+            new_dir = duplicates_directory / sanitize_filename(title)
             new_dir.mkdir(parents=True, exist_ok=True)
             items = table.get_many(table.model.title == title)
             print_table_from_models(title, items)
@@ -64,14 +64,25 @@ def dups(move: bool = typer.Option(False, "-m", "--move"), cleanup: bool = typer
                     item.to_epub().move_original_to(new_dir, overwrite=False)
 
 
-@app.command()
-def test():
-    pass
+@app.command("trall")
+def translate_this_directory():
+    with EpubBookTable() as table:
+        orchestration.translate_all_encrypted(table)
+
+
+@app.command("trthis")
+def translate_this_directory():
+    tr = settings.current_dir / "trans"
+    tr.mkdir(parents=True, exist_ok=True)
+    untr = settings.current_dir / "untrans"
+    untr.mkdir(parents=True, exist_ok=True)
+
+    orchestration.translate_epubs_in_directory(settings.current_dir, tr, untr)
 
 
 @app.command()
 def path(epub: Path = typer.Argument(None, exists=True)):
-    orchestration.test(epub)
+    orchestration.translate_one_epub(epub)
 
 
 @app.command("formt")
