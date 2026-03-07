@@ -1,12 +1,12 @@
 [project]
 name = "epub"
-version = "0.1.4"
+version = "0.1.5"
 description = "CLI plugin for working with epub files"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "ewa",
-    "library[db, documents, image, strings]",
+    "library[database_work, document_work, image_work, strings_work]",
 ]
 
 [tool.uv.sources]
