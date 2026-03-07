@@ -26,16 +26,9 @@ def setup():
 
 
 @app.command("scanf")
-def scan_epubs_in_current_directory():
+def scan_epubs_in_current_directory(path: Path = typer.Argument(None)):
     """Scans a directory for .epub files."""
-    path = settings.current_dir
-    print_success(f"Scanning {path}...")
-    with DisplayProgress(), EpubContentsTable() as contents_table, EpubBookTable() as book_table:
-        scanning = ScanEpubsInDirectory(path, workers=4)
-        contents_table.write_from_queue_in_thread(track_batch_queue(scanning.queue, TERMINATOR))
-        book_list = scanning.do_scan_with_progress()
-        contents_table.await_write_completion()
-        book_table.upsert_many_dicts(track_batch_sized([row.model_dump() for row in book_list]))
+    orchestration.scan_folder(path)
 
 
 @app.command()
@@ -62,6 +55,17 @@ def dups(move: bool = typer.Option(False, "-m", "--move"), cleanup: bool = typer
             if move:
                 for item in items:
                     item.to_epub().move_original_to(new_dir, overwrite=False)
+
+
+@app.command()
+def test():
+    orchestration.extract_nav_files()
+
+
+@app.command("rub")
+def return_untranslated_back():
+    with DisplayProgress(), EpubBookTable() as table:
+        orchestration.return_untranslated_back(table)
 
 
 @app.command("trall")
