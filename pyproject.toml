@@ -19,6 +19,7 @@ members = [
 
 [tool.uv.sources]
 library = { workspace = true }
+epub = { workspace = true }
 
 #[build-system]
 #requires = ["hatchling"]
@@ -32,6 +33,7 @@ dev = [
     "ruff",
     "pytest",
     "library[all]",
+    "epub"
 ]
 
 [project.scripts]

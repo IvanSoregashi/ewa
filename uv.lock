@@ -106,6 +106,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "epub" },
     { name = "library", extra = ["all"] },
     { name = "pytest" },
     { name = "ruff" },
@@ -121,6 +122,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "epub", editable = "plugins/epub" },
     { name = "library", extras = ["all"], editable = "library" },
     { name = "pytest" },
     { name = "ruff" },
