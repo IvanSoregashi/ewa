@@ -17,10 +17,10 @@ class EpubFileModel(SQLModel, table=True):
     mtime: int
     ctime: int
 
-    language: str | None = None
-    title: str | None = None
-    creator: str | None = None
-    identifier: str | None = None
+    # language: str | None = None
+    # title: str | None = None
+    # creator: str | None = None
+    # identifier: str | None = None
 
     mimetype: bool = False
     container: bool = False

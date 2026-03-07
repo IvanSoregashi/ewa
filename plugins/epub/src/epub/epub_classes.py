@@ -15,7 +15,7 @@ from epub.epub_state import EpubIllustrations
 from epub.tables import EpubFileModel, EpubContentsModel, EpubBookTable, EpubContentsTable
 from epub.utils import string_to_int_hash
 from epub.file_parsing import parse_epub_xml
-from epub.constants import quarantine_directory
+from epub.constants import quarantine_directory, untranslated_directory
 
 from library.image.image_optimization_settings import ImageSettings
 from epub.chapter_processor import EpubChapters
@@ -141,6 +141,17 @@ class EPUB:
 
             self.book_model.process_filenames(filenames)
 
+    def file_identities_dict(self):
+        with ZipFile(self.path) as zip_file:
+            return {info.filename: string_to_int_hash(zip_file.read(info.filename)) for info in zip_file.infolist()}
+
+    def file_identities_and_sizes_dict(self):
+        with ZipFile(self.path) as zip_file:
+            return {
+                info.filename: (info.file_size, string_to_int_hash(zip_file.read(info.filename)))
+                for info in zip_file.infolist()
+            }
+
     def extract(self) -> UnpackedEPUB:
         unpacked_directory = Path(tempfile.mkdtemp())
         unpacked_directory.mkdir(parents=True, exist_ok=True)
@@ -193,7 +204,9 @@ class ScanEpubsInDirectory:
         self.directory = directory
         self.mask = mask
         self.paths: Iterable[Path] = (
-            path for path in directory.rglob(mask) if quarantine_directory not in path.parents
+            path
+            for path in directory.rglob(mask)
+            if quarantine_directory not in path.parents  # and untranslated_directory not in path.parents
         )
         self.workers = workers
         self.queue = queue

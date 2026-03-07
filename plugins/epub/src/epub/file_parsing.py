@@ -75,17 +75,21 @@ def parse_content_opf(zipfile: ZipFile, opf_path: str) -> dict:
     manifest = {}
     data = {}
     ncx_path = None
+    navs = []
 
     for item in root.xpath("//opf:manifest/opf:item", namespaces=ns):
         item_id = item.get("id")
         href = str(base_path / item.get("href"))
         media_type = item.get("media-type")
+        properties = item.get("properties")
 
         manifest[item_id] = {"href": href, "media_type": media_type}
         data[href] = {"item_id": item_id, "media_type": media_type}
 
         if media_type == "application/x-dtbncx+xml":
             ncx_path = href
+        if properties and properties == "nav":
+            navs.append(href)
 
     # ---- spine ----
     spine = [item.get("idref") for item in root.xpath("//opf:spine/opf:itemref", namespaces=ns)]
@@ -96,6 +100,7 @@ def parse_content_opf(zipfile: ZipFile, opf_path: str) -> dict:
         "data": data,
         "spine": spine,
         "ncx_path": ncx_path,
+        "navs": navs,
     }
 
 
