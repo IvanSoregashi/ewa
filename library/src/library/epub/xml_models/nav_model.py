@@ -15,8 +15,8 @@ class CommonAttributes(BaseXmlModel, nsmap=NAV_NSMAP):
     epub_type: str | None = attr(name="type", ns=NamespacePrefix.EPUB, default=None)
     epub_prefix: str | None = attr(name="prefix", ns=NamespacePrefix.EPUB, default=None)
     role: str | None = attr(default=None)
-    value: str | None = attr(default=None)  # 1 
-    data_type: str | None = attr(name="data-type", default=None)  # 1 
+    value: str | None = attr(default=None)  # 1
+    data_type: str | None = attr(name="data-type", default=None)  # 1
 
 
 class Inline(CommonAttributes):
@@ -55,7 +55,9 @@ class NavListItem(CommonAttributes, tag="li", search_mode="unordered"):
 class NavList(CommonAttributes, tag="ol"):
     items: list[NavListItem] = element(tag="li", default=[])
 
-    def add_item(self, link: NavLink | None = None, span: NavInline | None = None, ol: "NavList | None" = None, **kwargs) -> NavListItem:
+    def add_item(
+        self, link: NavLink | None = None, span: NavInline | None = None, ol: "NavList | None" = None, **kwargs
+    ) -> NavListItem:
         new_item = NavListItem(link=link, span=span, ol=ol, **kwargs)
         self.items.append(new_item)
         return new_item

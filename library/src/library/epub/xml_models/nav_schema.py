@@ -12,8 +12,10 @@ from library.xml.descriptor_fields import AttrField, TextField, ChildField, Chil
 # Class Definitions (Structural Shells)
 # ---------------------------------------------------------------------------
 
+
 class CommonAttributes(XMLElement, ns=XMLNamespace.XHTML):
     """Base that many nav elements share."""
+
     ...
 
 
@@ -30,7 +32,9 @@ class NavListItem(CommonAttributes, tag="li"): ...
 
 
 class NavList(CommonAttributes, tag="ol"):
-    def add_item(self, link: "NavLink | None" = None, span: "NavInline | None" = None, ol: "NavList | None" = None, **kwargs) -> "NavListItem":
+    def add_item(
+        self, link: "NavLink | None" = None, span: "NavInline | None" = None, ol: "NavList | None" = None, **kwargs
+    ) -> "NavListItem":
         new_item = NavListItem.create(a=link, span=span, ol=ol, **kwargs)
         self.items = self.items + [new_item]
         return new_item

@@ -35,7 +35,7 @@ class XMLElement:
         if nsmap is not None:
             # lxml expects None for the default namespace prefix, not ""
             # TODO: make this better
-            cls.__nsmap__ = { (k if k != "" else None): v for k, v in nsmap.items() }
+            cls.__nsmap__ = {(k if k != "" else None): v for k, v in nsmap.items()}
 
     def __init__(self, elem: etree.Element | None = None):
         self._elem = elem

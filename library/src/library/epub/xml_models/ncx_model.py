@@ -78,7 +78,9 @@ class PageList(BaseXmlModel, tag="pageList", nsmap=NCX_NSMAP):
     nav_infos: list[TextElement] = element(tag="navInfo", default=[])
     page_targets: list[PageTarget] = element(tag="pageTarget", default=[])
 
-    def add_page_target(self, content: Content, id: str | None = None, value: str | None = None, type: str | None = None, **kwargs) -> PageTarget:
+    def add_page_target(
+        self, content: Content, id: str | None = None, value: str | None = None, type: str | None = None, **kwargs
+    ) -> PageTarget:
         new_target = PageTarget(content=content, id=id, value=value, type=type, **kwargs)
         self.page_targets.append(new_target)
         return new_target

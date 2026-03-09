@@ -12,6 +12,7 @@ from library.xml.descriptor_fields import AttrField, ChildField, ChildListField,
 # Class Definitions (Structural Shells)
 # ---------------------------------------------------------------------------
 
+
 class Meta(XMLElement, tag="meta", ns=XMLNamespace.NCX): ...
 
 
@@ -20,6 +21,7 @@ class Head(XMLElement, tag="head", ns=XMLNamespace.NCX): ...
 
 class TextElement(XMLElement, ns=XMLNamespace.NCX):
     """Wraps elements like <navLabel> or <docTitle> that contain a <text> child."""
+
     ...
 
 
@@ -56,7 +58,9 @@ class PageTarget(XMLElement, tag="pageTarget", ns=XMLNamespace.NCX): ...
 
 
 class PageList(XMLElement, tag="pageList", ns=XMLNamespace.NCX):
-    def add_page_target(self, content: "Content", id: str | None = None, value: str | None = None, type: str | None = None, **kwargs) -> "PageTarget":
+    def add_page_target(
+        self, content: "Content", id: str | None = None, value: str | None = None, type: str | None = None, **kwargs
+    ) -> "PageTarget":
         new_target = PageTarget.create(content=content, id=id, value=value, type=type, **kwargs)
         self.page_targets = self.page_targets + [new_target]
         return new_target

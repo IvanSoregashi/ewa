@@ -1,7 +1,7 @@
 import re
 import logging
 from pathlib import Path
-from typing import Callable, Literal, overload, Any
+from typing import Literal, overload, Any
 from collections import Counter
 from lxml import etree
 

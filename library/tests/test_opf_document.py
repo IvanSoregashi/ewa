@@ -1,10 +1,19 @@
-import random
 from pathlib import Path
 
 import pytest
 
-from library.epub.xml_models.opf_model import PackageDocument as PydanticPackageDocument, Metadata as PydanticMetadata, Manifest as PydanticManifest, Spine as PydanticSpine, Guide as PydanticGuide, Tours as PydanticTours
-from library.epub.xml_models.opf_schema import PackageDocument as CustomPackageDocument, Metadata as CustomMetadata, Manifest as CustomManifest, Spine as CustomSpine, Guide as CustomGuide, Tours as CustomTours
+from library.epub.xml_models.opf_model import (
+    PackageDocument as PydanticPackageDocument,
+    Metadata as PydanticMetadata,
+    Manifest as PydanticManifest,
+    Spine as PydanticSpine,
+)
+from library.epub.xml_models.opf_schema import (
+    PackageDocument as CustomPackageDocument,
+    Metadata as CustomMetadata,
+    Manifest as CustomManifest,
+    Spine as CustomSpine,
+)
 from library.xml.utils import compare_roundtrip
 
 SAMPLE_DIR = Path(__file__).parent / "samples" / "opf"
@@ -195,11 +204,11 @@ def test_opf_spine_edit(package_class):
 def test_opf_manifest_add_remove(package_class):
     doc = package_class.from_path(str(SAMPLE_OPF))
     initial_count = len(doc.manifest.items)
-    
+
     # Add
     doc.manifest.add_item(id="added-item", href="added.xhtml", media_type="application/xhtml+xml")
     assert len(doc.manifest.items) == initial_count + 1
-    
+
     # Remove
     doc.manifest.remove_item(id="added-item")
     assert len(doc.manifest.items) == initial_count
@@ -208,11 +217,11 @@ def test_opf_manifest_add_remove(package_class):
 def test_opf_spine_add_remove(package_class):
     doc = package_class.from_path(str(SAMPLE_OPF))
     initial_count = len(doc.spine.itemrefs)
-    
+
     # Add
     doc.spine.add_itemref(idref="added-ref", linear="yes")
     assert len(doc.spine.itemrefs) == initial_count + 1
-    
+
     # Remove
     doc.spine.remove_itemref(idref="added-ref")
     assert len(doc.spine.itemrefs) == initial_count
@@ -221,14 +230,14 @@ def test_opf_spine_add_remove(package_class):
 def test_opf_guide_add_remove(package_class):
     doc = package_class.from_path(str(SAMPLE_OPF))
     if doc.guide is None:
-        # If missing, we'd need a guide class to create it, 
+        # If missing, we'd need a guide class to create it,
         # but SAMPLE_OPF has a guide.
         pass
-    
+
     initial_count = len(doc.guide.references)
     added_ref = doc.guide.add_reference(type="title-page", href="title.xhtml", title="Title Page")
     assert len(doc.guide.references) == initial_count + 1
-    
+
     doc.guide.remove_reference(reference=added_ref)
     assert len(doc.guide.references) == initial_count
 
@@ -240,21 +249,21 @@ def test_opf_sections_missing_initial(package_class):
         '<?xml version="1.0" encoding="utf-8"?>'
         '<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="id">'
         '<metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">-</dc:identifier></metadata>'
-        '<manifest></manifest>'
-        '<spine></spine>'
-        '</package>'
+        "<manifest></manifest>"
+        "<spine></spine>"
+        "</package>"
     ).encode("utf-8")
-    
+
     doc = package_class.from_xml_bytes(minimal_xml)
-    
+
     # Verify these exist as empty lists/objects
     assert len(doc.manifest.items) == 0
     assert len(doc.spine.itemrefs) == 0
-    
+
     # Test adding to initially empty
     doc.manifest.add_item(id="item1", href="1.xhtml", media_type="text/html")
     doc.spine.add_itemref(idref="item1")
-    
+
     new_doc = package_class.from_xml_bytes(doc.to_xml_bytes())
     assert len(new_doc.manifest.items) == 1
     assert len(new_doc.spine.itemrefs) == 1
@@ -266,9 +275,9 @@ def test_opf_add_missing_sections(package_class):
         '<?xml version="1.0" encoding="utf-8"?>'
         '<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="id">'
         '<metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">-</dc:identifier></metadata>'
-        '</package>'
+        "</package>"
     ).encode("utf-8")
-    
+
     if package_class == PydanticPackageDocument:
         # Pydantic is strict and throws on missing mandatory sections during parse
         with pytest.raises(Exception):
@@ -278,14 +287,14 @@ def test_opf_add_missing_sections(package_class):
         doc = package_class.from_xml_bytes(minimal_xml)
         assert doc.manifest is None
         assert doc.spine is None
-        
+
         # We can add them manually
         doc.manifest = CustomManifest.create()
         doc.spine = CustomSpine.create()
-        
+
         doc.manifest.add_item(id="i1", href="h1.html", media_type="text/html")
         doc.spine.add_itemref(idref="i1")
-        
+
         # Verify
         new_doc = package_class.from_xml_bytes(doc.to_xml_bytes())
         assert len(new_doc.manifest.items) == 1
@@ -298,11 +307,7 @@ def test_opf_create_from_scratch(package_class):
         # Mandatory fields must be provided to constructor
         meta = PydanticMetadata()
         doc = PydanticPackageDocument(
-            version="2.0", 
-            unique_identifier="id", 
-            metadata=meta,
-            manifest=PydanticManifest(),
-            spine=PydanticSpine()
+            version="2.0", unique_identifier="id", metadata=meta, manifest=PydanticManifest(), spine=PydanticSpine()
         )
         doc.metadata.add_metadata("identifier", "978...", id="id")
     else:
@@ -315,7 +320,7 @@ def test_opf_create_from_scratch(package_class):
 
     doc.manifest.add_item(id="item1", href="1.xhtml", media_type="text/html")
     doc.spine.add_itemref(idref="item1")
-    
+
     xml = doc.to_xml_bytes()
     new_doc = package_class.from_xml_bytes(xml)
     assert len(new_doc.manifest.items) == 1

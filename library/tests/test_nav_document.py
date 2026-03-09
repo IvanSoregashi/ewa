@@ -10,6 +10,7 @@ ALL_SAMPLES = list(SAMPLE_DIR.glob("*.xhtml")) + list(SAMPLE_DIR.glob("*.html"))
 ALL_NAV_DIR = Path("~").expanduser() / ".ewa" / "epub" / "nav"
 ALL_NAV_PATHS = list(ALL_NAV_DIR.glob("*"))
 
+
 @pytest.fixture(params=ALL_SAMPLES)
 def nav_path(request: pytest.FixtureRequest) -> Path:
     return request.param
@@ -43,13 +44,13 @@ def test_read_nav(package_class):
 
 def test_nav_edit(package_class):
     doc = package_class.from_path(str(SAMPLE_XHTML))
-    
+
     # Edit title
     doc.head.title = "NEW TITLE"
-    
+
     # Edit nav heading
     doc.body.nav.h1.text = "NEW HEADING"
-    
+
     # Edit first list item
     item = doc.body.nav.ol.items[0]
     item.a.text = "UPDATED ITEM"
@@ -65,15 +66,15 @@ def test_nav_edit(package_class):
 
 def test_nav_remove(package_class):
     doc = package_class.from_path(str(SAMPLE_XHTML))
-    
+
     # Clear head metas and links
     doc.head.metas = []
     doc.head.links = []
-    
+
     # Clear nav items (empty list) by removing the first one (it usually has elements in the sample)
     if len(doc.body.nav.ol.items) > 0:
         doc.body.nav.ol.remove_item(item=doc.body.nav.ol.items[0])
-    
+
     # Verify after re-parsing
     reparsed = package_class.from_xml_bytes(doc.to_xml_bytes())
     assert len(reparsed.head.metas) == 0
@@ -83,17 +84,19 @@ def test_nav_remove(package_class):
 
 def test_nav_add(package_class):
     doc = package_class.from_path(str(SAMPLE_XHTML))
-    
+
     # Add via method
     if package_class == PydanticNavDocument:
         from library.epub.xml_models.nav_model import NavLink as PNavLink
+
         link = PNavLink(href="new.xhtml", text="NEW ITEM")
     else:
         from library.epub.xml_models.nav_schema import NavLink as CNavLink
+
         link = CNavLink.create(href="new.xhtml", text="NEW ITEM")
-        
+
     doc.body.nav.ol.add_item(link=link)
-    
+
     # Verify after re-parsing
     reparsed = package_class.from_xml_bytes(doc.to_xml_bytes())
     assert len(reparsed.body.nav.ol.items) >= 2

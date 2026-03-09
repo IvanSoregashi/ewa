@@ -91,6 +91,7 @@ class Metadata(XMLElement, tag="metadata", ns=XMLNamespace.OPF):
         self, tag: str | DCMetadataType, text: str | None = None, id: str | None = None, dc: bool = True
     ):
         """Uniform helper to remove metadata items."""
+
         def should_remove(item) -> bool:
             if text is None and id is None:
                 return True
