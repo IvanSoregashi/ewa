@@ -4,20 +4,27 @@ from library.epub.xml_models.nav_model import NavDocument as PydanticNavDocument
 from library.epub.xml_models.nav_schema import NavDocument as CustomNavDocument
 from library.xml.utils import compare_roundtrip
 
-SAMPLE_XHTML = Path(__file__).parent / "samples" / "sample.xhtml"
+SAMPLE_DIR = Path(__file__).parent / "samples"
+SAMPLE_XHTML = SAMPLE_DIR / "sample.xhtml"
+SAMPLE_XHTML_ISSUE = SAMPLE_DIR / "sample_nav_issues.html"
+ALL_NAV_DIR = Path("~").expanduser() / ".ewa" / "epub" / "nav"
+ALL_NAV_PATHS = list(ALL_NAV_DIR.glob("*"))
 
 
-@pytest.fixture(
-    params=[PydanticNavDocument, CustomNavDocument],
-    ids=["PydanticNavDocument", "CustomNavDocument"]
-)
+@pytest.fixture(params=ALL_NAV_PATHS)
+def nav_path(request: pytest.FixtureRequest) -> Path:
+    return request.param
+
+
+@pytest.fixture(params=[PydanticNavDocument, CustomNavDocument], ids=["PydanticNavDocument", "CustomNavDocument"])
 def package_class(request: pytest.FixtureRequest) -> PydanticNavDocument:
     p_class: PydanticNavDocument = request.param
     return p_class
 
 
-def test_nav_roundtrip(package_class):
-    assert compare_roundtrip(package_class, str(SAMPLE_XHTML))
+def test_nav_roundtrip(package_class) -> None:
+    assert compare_roundtrip(package_class, str(SAMPLE_XHTML_ISSUE))
+
 
 def test_nav_content(package_class):
     doc = package_class.from_path(str(SAMPLE_XHTML))

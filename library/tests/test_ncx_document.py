@@ -9,13 +9,11 @@ from library.xml.utils import compare_roundtrip
 SAMPLE_NCX = Path(__file__).parent / "samples" / "sample.ncx"
 
 
-@pytest.fixture(
-    params=[PydanticNCXDocument, CustomNCXDocument],
-    ids=["PydanticNCXDocument", "CustomNCXDocument"]
-)
+@pytest.fixture(params=[PydanticNCXDocument, CustomNCXDocument], ids=["PydanticNCXDocument", "CustomNCXDocument"])
 def package_class(request: pytest.FixtureRequest) -> PydanticNCXDocument:
     p_class: PydanticNCXDocument = request.param
     return p_class
+
 
 def test_ncx_roundtrip(package_class):
     assert compare_roundtrip(package_class, str(SAMPLE_NCX))

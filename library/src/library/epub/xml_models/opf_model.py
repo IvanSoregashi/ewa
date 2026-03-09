@@ -120,7 +120,9 @@ class Tours(BaseXmlModel, tag="tours", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     tours: list[Tour] = element(tag="tour", default=[])
 
 
-class PackageDocument(XMLDocumentModel, tag="package", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP, search_mode="unordered"):
+class PackageDocument(
+    XMLDocumentModel, tag="package", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP, search_mode="unordered"
+):
     version: str | None = attr(default=None)
     unique_identifier: str | None = attr(name="unique-identifier", default=None)
     id: str | None = attr(default=None)

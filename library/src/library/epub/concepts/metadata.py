@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class DCMetadataType(StrEnum):
     TITLE = "title"
     CREATOR = "creator"

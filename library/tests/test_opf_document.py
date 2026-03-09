@@ -13,14 +13,14 @@ ALL_SAMPLES = [p for p in SAMPLE_DIR.glob("*.opf") if not p.name.endswith(".form
 ALL_OPF_DIR = Path("~").expanduser() / ".ewa" / "epub" / "opf"
 ALL_OPF_PATHS = list(ALL_OPF_DIR.glob("*.opf"))
 
+
 @pytest.fixture(params=ALL_SAMPLES)
 def opf_path(request: pytest.FixtureRequest) -> Path:
     return request.param
 
 
 @pytest.fixture(
-    params=[PydanticPackageDocument, CustomPackageDocument],
-    ids=["PydanticPackageDocument", "CustomPackageDocument"]
+    params=[PydanticPackageDocument, CustomPackageDocument], ids=["PydanticPackageDocument", "CustomPackageDocument"]
 )
 def package_class(request: pytest.FixtureRequest) -> PydanticPackageDocument:
     p_class: PydanticPackageDocument = request.param
@@ -49,12 +49,13 @@ def test_opf_literal_comparison(package_class, opf_path):
             actual_content.splitlines(),
             fromfile="expected",
             tofile="actual",
-            lineterm=""
+            lineterm="",
         )
         print(f"\nLiteral diff for {opf_path.name} ({package_class.__name__}):")
         for line in diff:
             print(line)
         assert actual_content == expected_content
+
 
 def test_read_opf_metadata(package_class):
     doc: PydanticPackageDocument = package_class.from_path(str(SAMPLE_OPF))

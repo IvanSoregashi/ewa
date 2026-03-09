@@ -501,8 +501,6 @@ def extract_ncx_files():
         print_success(str(len(errs)))
 
 
-
-
 def analyze_metadata(metadata: Metadata):
     lengths = {
         "titles": len(metadata.titles),
@@ -546,8 +544,11 @@ def analyze_metadata(metadata: Metadata):
 
     return lengths, contents
 
+
 all_length = []
 all_contents = []
+
+
 def analize_opf_metadata(path: Path):
     doc = PackageDocument.from_path(path)
     lengths, contents = analyze_metadata(doc.metadata)
@@ -555,6 +556,7 @@ def analize_opf_metadata(path: Path):
     contents["file"] = path.name
     all_length.append(lengths)
     all_contents.append(contents)
+
 
 def parse_opf_metadata():
     source = settings.profile_dir / "epub" / "opf"

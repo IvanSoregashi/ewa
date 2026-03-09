@@ -27,10 +27,12 @@ def fix_invalid_ampersands(content: str) -> str:
     logger.warning("Invalid ampersands in xml")
     return re.sub(r"&(?!amp;|lt;|gt;|quot;|apos;|#x?|#)", "&amp;", content)
 
-def fix_opf_namespace(content:str) -> str:
+
+def fix_opf_namespace(content: str) -> str:
     """Add opf namespace to the package tag"""
     logger.warning("Lacking OPF namespace definition in xml")
     return re.sub(r"(<package[^>]+)>", r'\1 xmlns:opf="http://www.idpf.org/2007/opf">', content, count=1)
+
 
 def etree_from_bytes(xml_bytes: bytes) -> etree._Element:
     parser = etree.XMLParser(remove_blank_text=True, remove_comments=True)
@@ -94,8 +96,6 @@ def get_facts(
 
     walk(root, "")
     facts_counter = Counter(facts)
-    #for k, v in facts_counter.items():
-    #    print(k)
     return facts_counter
 
 

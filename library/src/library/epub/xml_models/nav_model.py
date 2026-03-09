@@ -4,8 +4,6 @@ from library.xml.document_pydantic import XMLDocumentModel
 from library.epub.epub_namespaces import NAV_NSMAP
 
 
-
-
 class CommonAttributes(BaseXmlModel, nsmap=NAV_NSMAP):
     id: str | None = attr(default=None)
     class_attr: str | None = attr(name="class", default=None)
@@ -17,11 +15,13 @@ class CommonAttributes(BaseXmlModel, nsmap=NAV_NSMAP):
     epub_type: str | None = attr(name="type", ns=NamespacePrefix.EPUB, default=None)
     epub_prefix: str | None = attr(name="prefix", ns=NamespacePrefix.EPUB, default=None)
     role: str | None = attr(default=None)
-    value: str | None = attr(default=None)  # 1 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
+    value: str | None = attr(default=None)
+    # 1 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
 
 
 class Inline(CommonAttributes):
     """Mixin to provide shared inline elements for NavInline, NavLink, and NavHeading."""
+
     spans: list[NavInline] = element(tag="span", default=[])  # 2
     is_: list[NavInline] = element(tag="i", default=[])  # 5
     bs: list[NavInline] = element(tag="b", default=[])  # 1
@@ -66,8 +66,7 @@ NavList.model_rebuild()
 class NavElement(CommonAttributes, tag="nav", search_mode="unordered"):
     h1: NavHeading | None = element(tag="h1", default=None)
     h2: NavHeading | None = element(tag="h2", default=None)
-    h3: NavHeading | None = element(tag="h3",
-                                    default=None)
+    h3: NavHeading | None = element(tag="h3", default=None)
     # 1 C:\Users\Ivan\.ewa\epub\nav\4b56dab32ef8d4e8a562e778b49da36f_toc.xhtml
     h4: NavHeading | None = element(tag="h4", default=None)  # 0
     h5: NavHeading | None = element(tag="h5", default=None)  # 0
@@ -79,8 +78,7 @@ class NavElement(CommonAttributes, tag="nav", search_mode="unordered"):
 class BlockElement(CommonAttributes):
     h1s: list[NavHeading] = element(tag="h1", default=[])  # 50+
     h2s: list[NavHeading] = element(tag="h2", default=[])  # 0
-    h3s: list[NavHeading] = element(tag="h3",
-                                    default=[])
+    h3s: list[NavHeading] = element(tag="h3", default=[])
     # 1 C:\Users\Ivan\.ewa\epub\nav\4b56dab32ef8d4e8a562e778b49da36f_toc.xhtml
     h4s: list[NavHeading] = element(tag="h4", default=[])  # 0
     h5s: list[NavHeading] = element(tag="h5", default=[])  # 0
@@ -88,17 +86,13 @@ class BlockElement(CommonAttributes):
     ps: list[NavInline] = element(tag="p", default=[])  # 4
     divs: list[Div] = element(tag="div", default=[])  # 10+
     navs: list[NavElement] = element(tag="nav", default=[])
-    sections: list[Section] = element(tag="section",
-                                      default=[])
+    sections: list[Section] = element(tag="section", default=[])
     # 4 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml +
-    article: Article | None = element(tag="article",
-                                      default=None)
+    article: Article | None = element(tag="article", default=None)
     # 1 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
-    header: Header | None = element(tag="header",
-                                    default=None)
+    header: Header | None = element(tag="header", default=None)
     # 1 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
-    footer: Footer | None = element(tag="footer",
-                                    default=None)
+    footer: Footer | None = element(tag="footer", default=None)
     # 1 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
 
     @property
@@ -107,10 +101,20 @@ class BlockElement(CommonAttributes):
 
 
 class Div(BlockElement, tag="div", search_mode="unordered"): ...
+
+
 class Section(BlockElement, tag="section", search_mode="unordered"): ...
+
+
 class Article(BlockElement, tag="article", search_mode="unordered"): ...
+
+
 class Header(BlockElement, tag="header", search_mode="unordered"): ...
+
+
 class Footer(BlockElement, tag="footer", search_mode="unordered"): ...
+
+
 class Body(BlockElement, tag="body", search_mode="unordered"): ...
 
 
@@ -153,7 +157,5 @@ class NavDocument(CommonAttributes, XMLDocumentModel, tag="html", nsmap=NAV_NSMA
     head: Head = element()
     body: Body = element()
 
-    __unordered_tags__ = {
-        'html', 'head', 'body', 'div', 'section', 'article', 'header', 'footer', 'aside', 'nav', 'li'
-    }
+    __unordered_tags__ = {"html", "head", "body", "div", "section", "article", "header", "footer", "aside", "nav", "li"}
     __ignore_xmlns__ = True

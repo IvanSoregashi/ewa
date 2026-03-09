@@ -85,5 +85,4 @@ class NCXDocument(XMLDocumentModel, tag=NamespacePrefix.NCX, nsmap=NCX_NSMAP, se
     nav_lists: list[NavList] = element(tag="navList", default=[])
     page_list: PageList | None = element(tag="pageList", default=None)
 
-    __unordered_tags__ = {'head', 'ncx'}
-
+    __unordered_tags__ = {"head", "ncx"}

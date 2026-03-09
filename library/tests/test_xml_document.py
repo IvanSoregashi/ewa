@@ -35,6 +35,7 @@ def test_make_document_from_etree(document_class):
 
 def test_make_document_from_path(document_class):
     class container(document_class): ...
+
     path = Path(CONTAINER_PATH)
     doc = container.from_path(path)
     assert get_facts(doc.to_xml_bytes()) == get_facts(path.read_bytes())

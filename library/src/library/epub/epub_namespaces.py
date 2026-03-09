@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class XMLNamespace(StrEnum):
     XML = "http://www.w3.org/XML/1998/namespace"
     XSI = "http://www.w3.org/2001/XMLSchema-instance"
@@ -10,6 +11,7 @@ class XMLNamespace(StrEnum):
     NCX = "http://www.daisy.org/z3986/2005/ncx/"
     CONTAINER = "urn:oasis:names:tc:opendocument:xmlns:container"
 
+
 class NamespacePrefix(StrEnum):
     XML = "xml"
     XSI = "xsi"
@@ -19,6 +21,7 @@ class NamespacePrefix(StrEnum):
     DC = "dc"
     NCX = "ncx"
     CONTAINER = "container"
+
 
 OPF_NSMAP = {
     NamespacePrefix.OPF: XMLNamespace.OPF,

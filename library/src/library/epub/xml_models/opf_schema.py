@@ -48,7 +48,6 @@ class Meta(DCElement, tag="meta", ns=XMLNamespace.OPF):
 
 
 class Metadata(XMLElement, tag="metadata", ns=XMLNamespace.OPF):
-
     titles = ChildListField(DCElement, tag="title")
     creators = ChildListField(DCElement, tag="creator")
     subjects = ChildListField(DCElement, tag="subject")
@@ -95,7 +94,6 @@ class Metadata(XMLElement, tag="metadata", ns=XMLNamespace.OPF):
 
 
 class ManifestItem(XMLElement, tag="item", ns=XMLNamespace.OPF):
-
     id = AttrField("id")
     href = AttrField("href")
     media_type = AttrField("media-type")
@@ -105,7 +103,6 @@ class ManifestItem(XMLElement, tag="item", ns=XMLNamespace.OPF):
 
 
 class Manifest(XMLElement, tag="manifest", ns=XMLNamespace.OPF):
-
     items = ChildListField(ManifestItem)
 
 
@@ -115,7 +112,6 @@ class Manifest(XMLElement, tag="manifest", ns=XMLNamespace.OPF):
 
 
 class SpineItemRef(XMLElement, tag="itemref", ns=XMLNamespace.OPF):
-
     idref = AttrField("idref")
     linear = AttrField("linear")
     properties = AttrField("properties")
@@ -123,7 +119,6 @@ class SpineItemRef(XMLElement, tag="itemref", ns=XMLNamespace.OPF):
 
 
 class Spine(XMLElement, tag="spine", ns=XMLNamespace.OPF):
-
     id = AttrField("id")
     toc = AttrField("toc")
     page_progression_direction = AttrField("page-progression-direction")
@@ -138,14 +133,12 @@ class Spine(XMLElement, tag="spine", ns=XMLNamespace.OPF):
 
 
 class GuideReference(XMLElement, tag="reference", ns=XMLNamespace.OPF):
-
     type = AttrField("type")
     title = AttrField("title")
     href = AttrField("href")
 
 
 class Guide(XMLElement, tag="guide", ns=XMLNamespace.OPF):
-
     references = ChildListField(GuideReference)
 
 
@@ -155,13 +148,11 @@ class Guide(XMLElement, tag="guide", ns=XMLNamespace.OPF):
 
 
 class Tour(XMLElement, tag="tour", ns=XMLNamespace.OPF):
-
     id = AttrField("id")
     title = AttrField("title")
 
 
 class Tours(XMLElement, tag="tours", ns=XMLNamespace.OPF):
-
     tours = ChildListField(Tour)
 
 
@@ -171,7 +162,6 @@ class Tours(XMLElement, tag="tours", ns=XMLNamespace.OPF):
 
 
 class PackageDocument(XMLDocumentSchema, tag="package", ns=XMLNamespace.OPF, nsmap=OPF_NSMAP):
-
     version = AttrField("version")
     unique_identifier = AttrField("unique-identifier")
     id = AttrField("id")

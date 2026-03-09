@@ -2,6 +2,7 @@
 NCXDocument — descriptor-based model for EPUB NCX files.
 Mirrors xml_pydantic/ncx_document.py without pydantic-xml.
 """
+
 from library.epub.epub_namespaces import XMLNamespace
 from library.xml.document_custom import XMLDocumentSchema, XMLElement
 from library.xml.descriptor_fields import AttrField, ChildField, ChildListField, ChildTextField
@@ -11,10 +12,11 @@ from library.xml.descriptor_fields import AttrField, ChildField, ChildListField,
 # Head
 # ---------------------------------------------------------------------------
 
+
 class Meta(XMLElement, tag="meta", ns=XMLNamespace.NCX):
-    name    = AttrField("name")
+    name = AttrField("name")
     content = AttrField("content")
-    scheme  = AttrField("scheme")
+    scheme = AttrField("scheme")
 
 
 class Head(XMLElement, tag="head", ns=XMLNamespace.NCX):
@@ -25,8 +27,10 @@ class Head(XMLElement, tag="head", ns=XMLNamespace.NCX):
 # Shared sub-elements
 # ---------------------------------------------------------------------------
 
+
 class TextElement(XMLElement, ns=XMLNamespace.NCX):
     """Wraps elements like <navLabel> or <docTitle> that contain a <text> child."""
+
     text = ChildTextField("text", ns=XMLNamespace.NCX)
 
 
@@ -38,13 +42,14 @@ class Content(XMLElement, tag="content", ns=XMLNamespace.NCX):
 # NavPoint (recursive)
 # ---------------------------------------------------------------------------
 
-class NavPoint(XMLElement, tag="navPoint", ns=XMLNamespace.NCX):
-    id          = AttrField("id")
-    class_attr  = AttrField("class")
-    play_order  = AttrField("playOrder", type=int)
 
-    nav_label   = ChildField(TextElement, tag="navLabel", ns=XMLNamespace.NCX, default=None)
-    content     = ChildField(Content, default=None)
+class NavPoint(XMLElement, tag="navPoint", ns=XMLNamespace.NCX):
+    id = AttrField("id")
+    class_attr = AttrField("class")
+    play_order = AttrField("playOrder", type=int)
+
+    nav_label = ChildField(TextElement, tag="navLabel", ns=XMLNamespace.NCX, default=None)
+    content = ChildField(Content, default=None)
 
     @property
     def nav_points(self):
@@ -55,6 +60,7 @@ class NavPoint(XMLElement, tag="navPoint", ns=XMLNamespace.NCX):
 # ---------------------------------------------------------------------------
 # NavMap
 # ---------------------------------------------------------------------------
+
 
 class NavMap(XMLElement, tag="navMap", ns=XMLNamespace.NCX):
     @property
@@ -72,22 +78,23 @@ class NavMap(XMLElement, tag="navMap", ns=XMLNamespace.NCX):
 # PageList / PageTarget
 # ---------------------------------------------------------------------------
 
+
 class PageTarget(XMLElement, tag="pageTarget", ns=XMLNamespace.NCX):
-    id         = AttrField("id")
-    value      = AttrField("value")
-    type       = AttrField("type")
+    id = AttrField("id")
+    value = AttrField("value")
+    type = AttrField("type")
     class_attr = AttrField("class")
     play_order = AttrField("playOrder", type=int)
 
-    nav_label  = ChildField(TextElement, tag="navLabel", ns=XMLNamespace.NCX, default=None)
-    content    = ChildField(Content, default=None)
+    nav_label = ChildField(TextElement, tag="navLabel", ns=XMLNamespace.NCX, default=None)
+    content = ChildField(Content, default=None)
 
 
 class PageList(XMLElement, tag="pageList", ns=XMLNamespace.NCX):
-    id         = AttrField("id")
+    id = AttrField("id")
     class_attr = AttrField("class")
 
-    nav_label    = ChildField(TextElement, tag="navLabel", ns=XMLNamespace.NCX, default=None)
+    nav_label = ChildField(TextElement, tag="navLabel", ns=XMLNamespace.NCX, default=None)
 
     @property
     def nav_infos(self):
@@ -104,21 +111,22 @@ class PageList(XMLElement, tag="pageList", ns=XMLNamespace.NCX):
 # NavList / NavTarget
 # ---------------------------------------------------------------------------
 
+
 class NavTarget(XMLElement, tag="navTarget", ns=XMLNamespace.NCX):
-    id         = AttrField("id")
+    id = AttrField("id")
     class_attr = AttrField("class")
-    value      = AttrField("value")
+    value = AttrField("value")
     play_order = AttrField("playOrder", type=int)
 
-    nav_label  = ChildField(TextElement, tag="navLabel", ns=XMLNamespace.NCX, default=None)
-    content    = ChildField(Content, default=None)
+    nav_label = ChildField(TextElement, tag="navLabel", ns=XMLNamespace.NCX, default=None)
+    content = ChildField(Content, default=None)
 
 
 class NavList(XMLElement, tag="navList", ns=XMLNamespace.NCX):
-    id         = AttrField("id")
+    id = AttrField("id")
     class_attr = AttrField("class")
 
-    nav_label  = ChildField(TextElement, tag="navLabel", ns=XMLNamespace.NCX, default=None)
+    nav_label = ChildField(TextElement, tag="navLabel", ns=XMLNamespace.NCX, default=None)
 
     @property
     def nav_infos(self):
@@ -135,13 +143,14 @@ class NavList(XMLElement, tag="navList", ns=XMLNamespace.NCX):
 # NCXDocument
 # ---------------------------------------------------------------------------
 
-class NCXDocument(XMLDocumentSchema, tag="ncx", ns=XMLNamespace.NCX):
-    version  = AttrField("version")
-    xml_lang = AttrField("lang", ns=XMLNamespace.XML)
-    dir      = AttrField("dir")
 
-    head      = ChildField(Head)
-    nav_map   = ChildField(NavMap, tag="navMap", ns=XMLNamespace.NCX)
+class NCXDocument(XMLDocumentSchema, tag="ncx", ns=XMLNamespace.NCX):
+    version = AttrField("version")
+    xml_lang = AttrField("lang", ns=XMLNamespace.XML)
+    dir = AttrField("dir")
+
+    head = ChildField(Head)
+    nav_map = ChildField(NavMap, tag="navMap", ns=XMLNamespace.NCX)
     page_list = ChildField(PageList, tag="pageList", ns=XMLNamespace.NCX, default=None)
 
     @property
