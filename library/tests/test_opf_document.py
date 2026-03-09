@@ -7,23 +7,13 @@ from library.epub.xml_models.opf_model import PackageDocument as PydanticPackage
 from library.epub.xml_models.opf_schema import PackageDocument as CustomPackageDocument
 from library.xml.utils import compare_roundtrip
 
-SAMPLE_OPF = Path(__file__).parent / "samples" / "sample.opf"
-random_txt = Path(__file__).parent / "samples" / (str(random.randint(1000000, 9999999)) + "_result.opf")
+SAMPLE_DIR = Path(__file__).parent / "samples" / "opf"
+SAMPLE_OPF = SAMPLE_DIR / "sample.opf"
+ALL_SAMPLES = [p for p in SAMPLE_DIR.glob("*.opf") if not p.name.endswith(".formatted.opf")]
 ALL_OPF_DIR = Path("~").expanduser() / ".ewa" / "epub" / "opf"
 ALL_OPF_PATHS = list(ALL_OPF_DIR.glob("*.opf"))
-NAMESPACE_ISSUE = [
-    r"C:\Users\Ivan\.ewa\epub\opf\daed016fdcd99ae496089be4e02087a2_content.opf",
-    r"C:\Users\Ivan\.ewa\epub\opf\609946ca1f662a890dbe1a350c619cac_content.opf",
-    r"C:/Users/Ivan/.ewa/epub/opf/57658a80f2b350c9b5f80ee3485d6015_content.opf",
-    r"C:/Users/Ivan/.ewa/epub/opf/52a0128cbe4ac4a4179fb8a2ca91b2b4_content.opf",
-    r"C:/Users/Ivan/.ewa/epub/opf/3d130f8fb66838cf8018f0701f88dca3_content.opf"
-]
 
-@pytest.fixture(params=NAMESPACE_ISSUE)
-def opf_ns_issue_path(request: pytest.FixtureRequest) -> str:
-    return str(request.param)
-
-@pytest.fixture(params=ALL_OPF_PATHS)
+@pytest.fixture(params=ALL_SAMPLES)
 def opf_path(request: pytest.FixtureRequest) -> Path:
     return request.param
 
@@ -37,9 +27,34 @@ def package_class(request: pytest.FixtureRequest) -> PydanticPackageDocument:
     return p_class
 
 
-def test_opf_roundtrip(package_class, opf_ns_issue_path):
-    assert compare_roundtrip(package_class, str(opf_ns_issue_path))
+def test_opf_roundtrip(package_class, opf_path):
+    assert compare_roundtrip(package_class, str(opf_path))
 
+
+def test_opf_literal_comparison(package_class, opf_path):
+    import difflib
+
+    suffix = ".pydantic.formatted.opf" if package_class == PydanticPackageDocument else ".custom.formatted.opf"
+    formatted_path = opf_path.with_suffix(suffix)
+    if not formatted_path.exists():
+        pytest.skip(f"No formatted file for {opf_path} with {suffix}")
+
+    expected_content = formatted_path.read_text(encoding="utf-8").strip()
+    doc = package_class.from_path(str(opf_path))
+    actual_content = doc.to_xml_bytes(pretty_print=True).decode("utf-8").strip()
+
+    if actual_content != expected_content:
+        diff = difflib.unified_diff(
+            expected_content.splitlines(),
+            actual_content.splitlines(),
+            fromfile="expected",
+            tofile="actual",
+            lineterm=""
+        )
+        print(f"\nLiteral diff for {opf_path.name} ({package_class.__name__}):")
+        for line in diff:
+            print(line)
+        assert actual_content == expected_content
 
 def test_read_opf_metadata(package_class):
     doc: PydanticPackageDocument = package_class.from_path(str(SAMPLE_OPF))

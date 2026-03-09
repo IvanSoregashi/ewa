@@ -18,8 +18,7 @@ def prettify(document: bytes) -> bytes: ...
 
 def prettify(document: bytes, encoding: Literal["unicode"] | None = None) -> bytes | str:
     logger.debug("prettify util is called.")
-    parser = etree.XMLParser(remove_blank_text=True)
-    tree = etree.fromstring(document, parser)
+    tree = etree_from_bytes(document)
     return etree.tostring(tree, pretty_print=True, encoding=encoding)
 
 
