@@ -201,7 +201,7 @@ def test_opf_manifest_add_remove(package_class):
     assert len(doc.manifest.items) == initial_count + 1
     
     # Remove
-    doc.manifest.items = [i for i in doc.manifest.items if i.id != "added-item"]
+    doc.manifest.remove_item(id="added-item")
     assert len(doc.manifest.items) == initial_count
 
 
@@ -214,7 +214,7 @@ def test_opf_spine_add_remove(package_class):
     assert len(doc.spine.itemrefs) == initial_count + 1
     
     # Remove
-    doc.spine.itemrefs = [r for r in doc.spine.itemrefs if r.idref != "added-ref"]
+    doc.spine.remove_itemref(idref="added-ref")
     assert len(doc.spine.itemrefs) == initial_count
 
 
@@ -226,10 +226,10 @@ def test_opf_guide_add_remove(package_class):
         pass
     
     initial_count = len(doc.guide.references)
-    doc.guide.add_reference(type="title-page", href="title.xhtml", title="Title Page")
+    added_ref = doc.guide.add_reference(type="title-page", href="title.xhtml", title="Title Page")
     assert len(doc.guide.references) == initial_count + 1
     
-    doc.guide.references = doc.guide.references[:-1]
+    doc.guide.remove_reference(reference=added_ref)
     assert len(doc.guide.references) == initial_count
 
 
@@ -327,8 +327,8 @@ def test_opf_metadata_remove(package_class):
     metadata = doc.metadata
 
     # Remove all subjects and creators
-    metadata.subjects = []
-    metadata.creators = []
+    metadata.remove_metadata("subject")
+    metadata.remove_metadata("creator")
 
     # Verify after re-parsing
     new_doc = package_class.from_xml_bytes(doc.to_xml_bytes())

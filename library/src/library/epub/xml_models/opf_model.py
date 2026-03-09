@@ -72,6 +72,25 @@ class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_N
             new_item = Meta(text=text, **kwargs)
             self.metas.append(new_item)
 
+    def remove_metadata(
+        self, tag: str | DCMetadataType, text: str | None = None, id: str | None = None, dc: bool = True
+    ):
+        """Uniform helper to remove metadata items."""
+        def should_remove(item) -> bool:
+            if text is None and id is None:
+                return True
+            match_text = (text is None) or (getattr(item, "text", None) == text)
+            match_id = (id is None) or (getattr(item, "id", None) == id)
+            return match_text and match_id
+
+        if dc:
+            attr_name = f"{tag}s"
+            if hasattr(self, attr_name):
+                current = getattr(self, attr_name)
+                setattr(self, attr_name, [x for x in current if not should_remove(x)])
+        else:
+            self.metas = [x for x in self.metas if not should_remove(x)]
+
 
 class ManifestItem(BaseXmlModel, tag="item", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     id: str = attr()
@@ -89,6 +108,13 @@ class Manifest(BaseXmlModel, tag="manifest", ns=NamespacePrefix.OPF, nsmap=OPF_N
         new_item = ManifestItem(id=id, href=href, media_type=media_type, **kwargs)
         self.items.append(new_item)
         return new_item
+
+    def remove_item(self, item: ManifestItem | None = None, id: str | None = None):
+        """Remove a manifest item by its id or object reference."""
+        if item is not None:
+            self.items = [i for i in self.items if i is not item]
+        elif id is not None:
+            self.items = [i for i in self.items if i.id != id]
 
 
 class SpineItemRef(BaseXmlModel, tag="itemref", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
@@ -110,6 +136,13 @@ class Spine(BaseXmlModel, tag="spine", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
         self.itemrefs.append(new_ref)
         return new_ref
 
+    def remove_itemref(self, itemref: SpineItemRef | None = None, idref: str | None = None):
+        """Remove a spine itemref by its idref or object reference."""
+        if itemref is not None:
+            self.itemrefs = [r for r in self.itemrefs if r is not itemref]
+        elif idref is not None:
+            self.itemrefs = [r for r in self.itemrefs if r.idref != idref]
+
 
 class GuideReference(BaseXmlModel, tag="reference", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     type: str = attr()
@@ -125,6 +158,13 @@ class Guide(BaseXmlModel, tag="guide", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
         self.references.append(new_ref)
         return new_ref
 
+    def remove_reference(self, reference: GuideReference | None = None, type: str | None = None):
+        """Remove a guide reference by its type or object reference."""
+        if reference is not None:
+            self.references = [r for r in self.references if r is not reference]
+        elif type is not None:
+            self.references = [r for r in self.references if r.type != type]
+
 
 class Tour(BaseXmlModel, tag="tour", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     id: str | None = attr(default=None)
@@ -138,6 +178,13 @@ class Tours(BaseXmlModel, tag="tours", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
         new_tour = Tour(id=id, title=title, **kwargs)
         self.tours.append(new_tour)
         return new_tour
+
+    def remove_tour(self, tour: Tour | None = None, id: str | None = None):
+        """Remove a tour by its id or object reference."""
+        if tour is not None:
+            self.tours = [t for t in self.tours if t is not tour]
+        elif id is not None:
+            self.tours = [t for t in self.tours if t.id != id]
 
 
 class PackageDocument(

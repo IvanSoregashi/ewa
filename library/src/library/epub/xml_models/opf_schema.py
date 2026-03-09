@@ -87,6 +87,25 @@ class Metadata(XMLElement, tag="metadata", ns=XMLNamespace.OPF):
             new_item = Meta.create(text=text, **kwargs)
             self.metas = self.metas + [new_item]
 
+    def remove_metadata(
+        self, tag: str | DCMetadataType, text: str | None = None, id: str | None = None, dc: bool = True
+    ):
+        """Uniform helper to remove metadata items."""
+        def should_remove(item) -> bool:
+            if text is None and id is None:
+                return True
+            match_text = (text is None) or (getattr(item, "text", None) == text)
+            match_id = (id is None) or (getattr(item, "id", None) == id)
+            return match_text and match_id
+
+        if dc:
+            attr_name = f"{tag}s"
+            if hasattr(self, attr_name):
+                current = getattr(self, attr_name, [])
+                setattr(self, attr_name, [x for x in current if not should_remove(x)])
+        else:
+            self.metas = [x for x in self.metas if not should_remove(x)]
+
 
 # ---------------------------------------------------------------------------
 # Manifest
@@ -109,6 +128,13 @@ class Manifest(XMLElement, tag="manifest", ns=XMLNamespace.OPF):
         new_item = ManifestItem.create(id=id, href=href, media_type=media_type, **kwargs)
         self.items = self.items + [new_item]
         return new_item
+
+    def remove_item(self, item: ManifestItem | None = None, id: str | None = None):
+        """Remove a manifest item by its id or object reference."""
+        if item is not None:
+            self.items = [i for i in self.items if i._elem is not item._elem]
+        elif id is not None:
+            self.items = [i for i in self.items if i.id != id]
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +162,13 @@ class Spine(XMLElement, tag="spine", ns=XMLNamespace.OPF):
         self.itemrefs = self.itemrefs + [new_ref]
         return new_ref
 
+    def remove_itemref(self, itemref: SpineItemRef | None = None, idref: str | None = None):
+        """Remove a spine itemref by its idref or object reference."""
+        if itemref is not None:
+            self.itemrefs = [r for r in self.itemrefs if r._elem is not itemref._elem]
+        elif idref is not None:
+            self.itemrefs = [r for r in self.itemrefs if r.idref != idref]
+
 
 # ---------------------------------------------------------------------------
 # Guide
@@ -156,6 +189,13 @@ class Guide(XMLElement, tag="guide", ns=XMLNamespace.OPF):
         self.references = self.references + [new_ref]
         return new_ref
 
+    def remove_reference(self, reference: GuideReference | None = None, type: str | None = None):
+        """Remove a guide reference by its type or object reference."""
+        if reference is not None:
+            self.references = [r for r in self.references if r._elem is not reference._elem]
+        elif type is not None:
+            self.references = [r for r in self.references if r.type != type]
+
 
 # ---------------------------------------------------------------------------
 # Tours
@@ -174,6 +214,13 @@ class Tours(XMLElement, tag="tours", ns=XMLNamespace.OPF):
         new_tour = Tour.create(id=id, title=title, **kwargs)
         self.tours = self.tours + [new_tour]
         return new_tour
+
+    def remove_tour(self, tour: Tour | None = None, id: str | None = None):
+        """Remove a tour by its id or object reference."""
+        if tour is not None:
+            self.tours = [t for t in self.tours if t._elem is not tour._elem]
+        elif id is not None:
+            self.tours = [t for t in self.tours if t.id != id]
 
 
 # ---------------------------------------------------------------------------
