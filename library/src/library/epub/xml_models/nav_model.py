@@ -15,8 +15,8 @@ class CommonAttributes(BaseXmlModel, nsmap=NAV_NSMAP):
     epub_type: str | None = attr(name="type", ns=NamespacePrefix.EPUB, default=None)
     epub_prefix: str | None = attr(name="prefix", ns=NamespacePrefix.EPUB, default=None)
     role: str | None = attr(default=None)
-    value: str | None = attr(default=None)
-    # 1 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
+    value: str | None = attr(default=None)  # 1 
+    data_type: str | None = attr(name="data-type", default=None)  # 1 
 
 
 class Inline(CommonAttributes):
@@ -66,8 +66,7 @@ NavList.model_rebuild()
 class NavElement(CommonAttributes, tag="nav", search_mode="unordered"):
     h1: NavHeading | None = element(tag="h1", default=None)
     h2: NavHeading | None = element(tag="h2", default=None)
-    h3: NavHeading | None = element(tag="h3", default=None)
-    # 1 C:\Users\Ivan\.ewa\epub\nav\4b56dab32ef8d4e8a562e778b49da36f_toc.xhtml
+    h3: NavHeading | None = element(tag="h3", default=None)  # 1
     h4: NavHeading | None = element(tag="h4", default=None)  # 0
     h5: NavHeading | None = element(tag="h5", default=None)  # 0
     h6: NavHeading | None = element(tag="h6", default=None)  # 0
@@ -78,22 +77,17 @@ class NavElement(CommonAttributes, tag="nav", search_mode="unordered"):
 class BlockElement(CommonAttributes):
     h1s: list[NavHeading] = element(tag="h1", default=[])  # 50+
     h2s: list[NavHeading] = element(tag="h2", default=[])  # 0
-    h3s: list[NavHeading] = element(tag="h3", default=[])
-    # 1 C:\Users\Ivan\.ewa\epub\nav\4b56dab32ef8d4e8a562e778b49da36f_toc.xhtml
+    h3s: list[NavHeading] = element(tag="h3", default=[])  # 1
     h4s: list[NavHeading] = element(tag="h4", default=[])  # 0
     h5s: list[NavHeading] = element(tag="h5", default=[])  # 0
     h6s: list[NavHeading] = element(tag="h6", default=[])  # 0
     ps: list[NavInline] = element(tag="p", default=[])  # 4
     divs: list[Div] = element(tag="div", default=[])  # 10+
     navs: list[NavElement] = element(tag="nav", default=[])
-    sections: list[Section] = element(tag="section", default=[])
-    # 4 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml +
-    article: Article | None = element(tag="article", default=None)
-    # 1 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
-    header: Header | None = element(tag="header", default=None)
-    # 1 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
-    footer: Footer | None = element(tag="footer", default=None)
-    # 1 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
+    sections: list[Section] = element(tag="section", default=[])  # 4  +
+    article: Article | None = element(tag="article", default=None)  # 1
+    header: Header | None = element(tag="header", default=None)  # 1
+    footer: Footer | None = element(tag="footer", default=None)  # 1
 
     @property
     def nav(self) -> NavElement | None:

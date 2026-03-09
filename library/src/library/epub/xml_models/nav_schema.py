@@ -8,148 +8,37 @@ from library.xml.document_custom import XMLDocumentSchema, XMLElement
 from library.xml.descriptor_fields import AttrField, TextField, ChildField, ChildListField, ChildTextField
 
 
-def _find_all_direct(elem, tag, ns):
-    """Find all direct children with Clark-notation tag."""
-    clark = f"{{{ns}}}{tag}" if ns else tag
-    return [c for c in elem if c.tag == clark]
-
-
-def _find_first(elem, tag, ns):
-    clark = f"{{{ns}}}{tag}" if ns else tag
-    return elem.find(clark)
-
-
 # ---------------------------------------------------------------------------
-# common attributes mixin (via regular fields — works because we don't have
-# lxml elements during class definition, only during __get__ at runtime)
+# Class Definitions (Structural Shells)
 # ---------------------------------------------------------------------------
-
 
 class CommonAttributes(XMLElement, ns=XMLNamespace.XHTML):
     """Base that many nav elements share."""
-
-    id = AttrField("id")
-    class_attr = AttrField("class")
-    style = AttrField("style")
-    lang = AttrField("lang")
-    xml_lang = AttrField("lang", ns=XMLNamespace.XML)
-    dir = AttrField("dir")
-    hidden = AttrField("hidden")
-    epub_type = AttrField("type", ns=NamespacePrefix.EPUB)
-    epub_prefix = AttrField("prefix", ns=NamespacePrefix.EPUB)
-    role = AttrField("role")
-    value = AttrField("value")
-    text = TextField()
+    ...
 
 
-# ---------------------------------------------------------------------------
-# Inline elements (NavInline, NavLink, NavHeading)
-# These can be nested, so we use dynamic properties.
-# ---------------------------------------------------------------------------
-
-
-class NavInline(CommonAttributes, tag=""):
-    @property
-    def spans(self):
-        return [NavInline(e) for e in _find_all_direct(self._elem, "span", XMLNamespace.XHTML)]
-
-    @property
-    def is_(self):
-        return [NavInline(e) for e in _find_all_direct(self._elem, "i", XMLNamespace.XHTML)]
-
-    @property
-    def bs(self):
-        return [NavInline(e) for e in _find_all_direct(self._elem, "b", XMLNamespace.XHTML)]
-
-    @property
-    def ems(self):
-        return [NavInline(e) for e in _find_all_direct(self._elem, "em", XMLNamespace.XHTML)]
-
-    @property
-    def codes(self):
-        return [NavInline(e) for e in _find_all_direct(self._elem, "code", XMLNamespace.XHTML)]
-
-    @property
-    def vars(self):
-        return [NavInline(e) for e in _find_all_direct(self._elem, "var", XMLNamespace.XHTML)]
-
-    @property
-    def as_(self):
-        return [NavLink(e) for e in _find_all_direct(self._elem, "a", XMLNamespace.XHTML)]
+class NavInline(CommonAttributes, tag=""): ...
 
 
 class NavHeading(NavInline, tag=""): ...
 
 
-class NavLink(NavInline, tag="a"):
-    href = AttrField("href")
+class NavLink(NavInline, tag="a"): ...
 
 
-# ---------------------------------------------------------------------------
-# NavListItem / NavList (ol > li > a/span + nested ol)
-# ---------------------------------------------------------------------------
+class NavListItem(CommonAttributes, tag="li"): ...
 
 
-class NavListItem(CommonAttributes, tag="li"):
-    a = ChildField(NavLink, tag="a")
-    span = ChildField(NavInline, tag="span")
-
-    @property
-    def ol(self):
-        e = _find_first(self._elem, "ol", XMLNamespace.XHTML)
-        return NavList(e) if e is not None else None
+class NavList(CommonAttributes, tag="ol"): ...
 
 
-class NavList(CommonAttributes, tag="ol"):
-    items = ChildListField(NavListItem)
-
-
-# ---------------------------------------------------------------------------
-# NavElement  (<nav>)
-# ---------------------------------------------------------------------------
-
-
-class NavElement(CommonAttributes, tag="nav"):
-    h1 = ChildField(NavHeading, tag="h1")
-    h2 = ChildField(NavHeading, tag="h2")
-    h3 = ChildField(NavHeading, tag="h3")
-    ol = ChildField(NavList)
-
-
-# ---------------------------------------------------------------------------
-# Block-level elements  (div, section, article, header, footer, body)
-# All share the same structural property set — extracted as a mixin.
-# ---------------------------------------------------------------------------
+class NavElement(CommonAttributes, tag="nav"): ...
 
 
 class BlockElement(CommonAttributes):
-    h1s = ChildListField(NavHeading, tag="h1")
-    h3s = ChildListField(NavHeading, tag="h3")
-    ps = ChildListField(NavInline, tag="p")
-    navs = ChildListField(NavElement)
-
-    @property
-    def sections(self):
-        return [Section(e) for e in _find_all_direct(self._elem, "section", XMLNamespace.XHTML)]
-
-    @property
-    def article(self):
-        e = _find_first(self._elem, "article", XMLNamespace.XHTML)
-        return Article(e) if e is not None else None
-
-    @property
-    def header(self):
-        e = _find_first(self._elem, "header", XMLNamespace.XHTML)
-        return Header(e) if e is not None else None
-
-    @property
-    def footer(self):
-        e = _find_first(self._elem, "footer", XMLNamespace.XHTML)
-        return Footer(e) if e is not None else None
-
     @property
     def nav(self):
-        return self.navs[0] if self.navs else None
+        return self.nav_navs[0] if hasattr(self, "nav_navs") and self.nav_navs else None
 
 
 class Div(BlockElement, tag="div"): ...
@@ -170,56 +59,19 @@ class Footer(BlockElement, tag="footer"): ...
 class Body(BlockElement, tag="body"): ...
 
 
-# ---------------------------------------------------------------------------
-# Head sub-elements
-# ---------------------------------------------------------------------------
+class HeadLink(CommonAttributes, tag="link"): ...
 
 
-class HeadLink(CommonAttributes, tag="link"):
-    href = AttrField("href")
-    rel = AttrField("rel")
-    type = AttrField("type")
+class HeadMeta(XMLElement, tag="meta", ns=XMLNamespace.XHTML): ...
 
 
-class HeadMeta(XMLElement, tag="meta", ns=XMLNamespace.XHTML):
-    charset = AttrField("charset")
-    content = AttrField("content")
-    http_equiv = AttrField("http-equiv")
-    name = AttrField("name")
+class HeadStyle(XMLElement, tag="style", ns=XMLNamespace.XHTML): ...
 
 
-class HeadStyle(XMLElement, tag="style", ns=XMLNamespace.XHTML):
-    type = AttrField("type")
-    text = TextField()
-
-
-class Head(CommonAttributes, tag="head"):
-    title = ChildTextField("title")
-    metas = ChildListField(HeadMeta)
-    links = ChildListField(HeadLink)
-    styles = ChildListField(HeadStyle)
-
-
-# ---------------------------------------------------------------------------
-# NavDocument  (<html>)
-# ---------------------------------------------------------------------------
+class Head(CommonAttributes, tag="head"): ...
 
 
 class NavDocument(XMLDocumentSchema, tag="html", ns=XMLNamespace.XHTML):
-    id = AttrField("id")
-    class_attr = AttrField("class")
-    style = AttrField("style")
-    lang = AttrField("lang")
-    xml_lang = AttrField("lang", ns=XMLNamespace.XML)
-    dir = AttrField("dir")
-    hidden = AttrField("hidden")
-    epub_type = AttrField("type", ns=XMLNamespace.EPUB)
-    epub_prefix = AttrField("prefix", ns=XMLNamespace.EPUB)
-    prefix = AttrField("prefix")
-
-    head = ChildField(Head)
-    body = ChildField(Body)
-
     __unordered_tags__ = {
         "html",
         "head",
@@ -234,3 +86,93 @@ class NavDocument(XMLDocumentSchema, tag="html", ns=XMLNamespace.XHTML):
         "li",
     }
     __ignore_xmlns__ = True
+
+
+# ---------------------------------------------------------------------------
+# Schema Mapping (Descriptors assigned post-definition)
+# ---------------------------------------------------------------------------
+
+# CommonAttributes
+CommonAttributes.id = AttrField("id")
+CommonAttributes.class_attr = AttrField("class")
+CommonAttributes.style = AttrField("style")
+CommonAttributes.lang = AttrField("lang")
+CommonAttributes.xml_lang = AttrField("lang", ns=NamespacePrefix.XML)
+CommonAttributes.dir = AttrField("dir")
+CommonAttributes.hidden = AttrField("hidden")
+CommonAttributes.epub_type = AttrField("type", ns=XMLNamespace.EPUB)
+CommonAttributes.epub_prefix = AttrField("prefix", ns=XMLNamespace.EPUB)
+CommonAttributes.role = AttrField("role")
+CommonAttributes.value = AttrField("value")
+CommonAttributes.data_type = AttrField("data-type")
+CommonAttributes.text = TextField()
+
+# NavLink
+NavLink.href = AttrField("href")
+
+# NavListItem
+NavListItem.a = ChildField(NavLink, tag="a")
+NavListItem.span = ChildField(NavInline, tag="span")
+NavListItem.ol = ChildField(NavList, tag="ol")
+
+# NavList
+NavList.items = ChildListField(NavListItem)
+
+# NavElement
+NavElement.h1 = ChildField(NavHeading, tag="h1")
+NavElement.h2 = ChildField(NavHeading, tag="h2")
+NavElement.h3 = ChildField(NavHeading, tag="h3")
+NavElement.ol = ChildField(NavList)
+
+# BlockElement
+BlockElement.h1s = ChildListField(NavHeading, tag="h1")
+BlockElement.h3s = ChildListField(NavHeading, tag="h3")
+BlockElement.ps = ChildListField(NavInline, tag="p")
+BlockElement.nav_navs = ChildListField(NavElement, tag="nav")
+BlockElement.divs = ChildListField(Div, tag="div")
+BlockElement.sections = ChildListField(Section, tag="section")
+BlockElement.article = ChildField(Article, tag="article")
+BlockElement.header = ChildField(Header, tag="header")
+BlockElement.footer = ChildField(Footer, tag="footer")
+
+# Head sub-elements
+HeadLink.href = AttrField("href")
+HeadLink.rel = AttrField("rel")
+HeadLink.type = AttrField("type")
+
+HeadMeta.charset = AttrField("charset")
+HeadMeta.content = AttrField("content")
+HeadMeta.http_equiv = AttrField("http-equiv")
+HeadMeta.name = AttrField("name")
+
+HeadStyle.type = AttrField("type")
+HeadStyle.text = TextField()
+
+# Head
+Head.title = ChildTextField("title", ns=XMLNamespace.XHTML)
+Head.metas = ChildListField(HeadMeta)
+Head.links = ChildListField(HeadLink)
+Head.styles = ChildListField(HeadStyle)
+
+# NavDocument
+NavDocument.id = AttrField("id")
+NavDocument.class_attr = AttrField("class")
+NavDocument.style = AttrField("style")
+NavDocument.lang = AttrField("lang")
+NavDocument.xml_lang = AttrField("lang", ns=NamespacePrefix.XML)
+NavDocument.dir = AttrField("dir")
+NavDocument.hidden = AttrField("hidden")
+NavDocument.epub_type = AttrField("type", ns=XMLNamespace.EPUB)
+NavDocument.epub_prefix = AttrField("prefix", ns=XMLNamespace.EPUB)
+NavDocument.prefix = AttrField("prefix")
+NavDocument.head = ChildField(Head)
+NavDocument.body = ChildField(Body)
+
+# Inline circular references
+NavInline.spans = ChildListField(NavInline, tag="span")
+NavInline.is_ = ChildListField(NavInline, tag="i")
+NavInline.bs = ChildListField(NavInline, tag="b")
+NavInline.ems = ChildListField(NavInline, tag="em")
+NavInline.codes = ChildListField(NavInline, tag="code")
+NavInline.vars = ChildListField(NavInline, tag="var")
+NavInline.as_ = ChildListField(NavLink, tag="a")
