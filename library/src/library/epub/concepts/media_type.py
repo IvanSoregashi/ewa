@@ -153,3 +153,11 @@ class MediaType(StrEnum):
     def is_video(self) -> bool:
         """Returns whether if the media type is video."""
         return self.startswith("video/")
+
+
+IMAGE_MEDIA_TYPES = [
+    MediaType.IMAGE_JPEG,
+    MediaType.IMAGE_PNG,
+    MediaType.IMAGE_SVG,
+    "image/jpg",
+]

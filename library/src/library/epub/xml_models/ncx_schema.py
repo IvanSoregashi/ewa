@@ -2,7 +2,7 @@
 NCXDocument — descriptor-based model for EPUB NCX files.
 Mirrors xml_pydantic/ncx_document.py without pydantic-xml.
 """
-from library.epub.constants import NCX_NS, XML_NS
+from library.epub.epub_namespaces import NCX_NS, XML_NS
 from library.xml.document_custom import XMLDocumentSchema, XMLElement
 from library.xml.descriptor_fields import AttrField, ChildField, ChildListField, ChildTextField
 

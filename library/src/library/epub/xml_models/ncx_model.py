@@ -1,6 +1,6 @@
 from pydantic_xml import BaseXmlModel, attr, element
 from library.xml.document_pydantic import XMLDocumentModel
-from library.epub.constants import NCX_NSMAP
+from library.epub.epub_namespaces import NCX_NSMAP
 
 
 class Meta(BaseXmlModel, tag="meta", nsmap=NCX_NSMAP):

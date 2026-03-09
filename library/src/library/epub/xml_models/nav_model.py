@@ -1,6 +1,6 @@
 from pydantic_xml import BaseXmlModel, attr, element
 from library.xml.document_pydantic import XMLDocumentModel
-from library.epub.constants import NAV_NSMAP
+from library.epub.epub_namespaces import NAV_NSMAP
 
 
 

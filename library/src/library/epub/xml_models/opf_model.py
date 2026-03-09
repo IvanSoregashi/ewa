@@ -1,6 +1,7 @@
 from pydantic_xml import BaseXmlModel, attr, element
 from library.xml.document_pydantic import XMLDocumentModel
-from library.epub.constants import OPF_NSMAP
+from library.epub.epub_namespaces import OPF_NSMAP
+from library.epub.concepts.metadata import DCMetadataType
 
 
 class DCElement(BaseXmlModel, ns="dc", nsmap=OPF_NSMAP):
@@ -58,7 +59,7 @@ class Metadata(BaseXmlModel, tag="metadata", ns="opf", nsmap=OPF_NSMAP, search_m
     def language(self) -> DCElement:
         return self.languages[0] if self.languages else None
 
-    def add_metadata(self, tag: str, text: str, dc: bool = True, **kwargs):
+    def add_metadata(self, tag: str | DCMetadataType, text: str, dc: bool = True, **kwargs):
         """Uniform helper to add metadata items."""
         if dc:
             new_item = DCElement(text=text, **kwargs)

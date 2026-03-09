@@ -2,7 +2,7 @@
 NavDocument — descriptor-based model for EPUB Navigation Documents (XHTML nav files).
 Mirrors xml_pydantic/nav_document.py without pydantic-xml.
 """
-from library.epub.constants import XHTML_NS, EPUB_NS, XML_NS
+from library.epub.epub_namespaces import XHTML_NS, EPUB_NS, XML_NS
 from library.xml.document_custom import XMLDocumentSchema, XMLElement
 from library.xml.descriptor_fields import AttrField, TextField, ChildField
 

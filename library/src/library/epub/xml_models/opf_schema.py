@@ -3,7 +3,8 @@ PackageDocument — descriptor-based model for EPUB OPF files.
 Mirrors xml_pydantic/package_document.py without pydantic-xml.
 """
 
-from library.epub.constants import DC_NS, XML_NS, XSI_NS, OPF_NS, OPF_NSMAP
+from library.epub.epub_namespaces import DC_NS, XML_NS, XSI_NS, OPF_NS, OPF_NSMAP
+from library.epub.concepts.metadata import DCMetadataType
 from library.xml.document_custom import XMLDocumentSchema, XMLElement
 from library.xml.descriptor_fields import AttrField, TextField, ChildField, ChildListField
 
@@ -75,7 +76,7 @@ class Metadata(XMLElement, tag="metadata", ns=OPF_NS):
     def language(self) -> DCElement:
         return self.languages[0] if self.languages else None
 
-    def add_metadata(self, tag: str, text: str, dc: bool = True, **kwargs):
+    def add_metadata(self, tag: str | DCMetadataType, text: str, dc: bool = True, **kwargs):
         """Uniform helper to add metadata items."""
         if dc:
             new_item = DCElement.create(tag=tag, text=text, **kwargs)
