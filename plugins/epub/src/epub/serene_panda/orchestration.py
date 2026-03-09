@@ -6,6 +6,8 @@ from itertools import repeat, combinations
 from pathlib import Path
 from zipfile import ZipFile
 
+import pandas as pd
+
 from epub.epub_classes import EPUB, ScanEpubsInDirectory
 from epub.file_parsing import parse_container_xml, parse_content_opf
 from epub.serene_panda.font import process_font
@@ -22,6 +24,7 @@ from ewa.cli.progress import DisplayProgress, track_unknown, track_sized, track_
 from ewa.main import settings
 from ewa.ui import print_success, print_error
 from library.database.sqlite_model_table import TERMINATOR
+from library.epub.xml_models.opf_model import Metadata, PackageDocument
 from library.image.ocr import recognize_letter
 
 logger = logging.getLogger(__name__)
@@ -496,3 +499,69 @@ def extract_ncx_files():
         errs = list(track_unknown(executor.map(extract_ncx_to_destination, epub_paths), total=len(epub_paths)))
         print_error(str(sum(errs)))
         print_success(str(len(errs)))
+
+
+
+
+def analyze_metadata(metadata: Metadata):
+    lengths = {
+        "titles": len(metadata.titles),
+        "creators": len(metadata.creators),
+        "subjects": len(metadata.subjects),
+        "descriptions": len(metadata.descriptions),
+        "publishers": len(metadata.publishers),
+        "contributors": len(metadata.contributors),
+        "dates": len(metadata.dates),
+        "types": len(metadata.types),
+        "formats": len(metadata.formats),
+        "identifiers": len(metadata.identifiers),
+        "sources": len(metadata.sources),
+        "languages": len(metadata.languages),
+        "relations": len(metadata.relations),
+        "coverages": len(metadata.coverages),
+        "rights": len(metadata.rights),
+        "metas": len(metadata.metas),
+        "dc_metas": len(metadata.dc_metas),
+    }
+
+    contents = {
+        "titles": [i.text for i in metadata.titles],
+        "creators": [i.text for i in metadata.creators],
+        "subjects": [i.text for i in metadata.subjects],
+        "descriptions": [i.text for i in metadata.descriptions],
+        "publishers": [i.text for i in metadata.publishers],
+        "contributors": [i.text for i in metadata.contributors],
+        "dates": [i.text for i in metadata.dates],
+        "types": [i.text for i in metadata.types],
+        "formats": [i.text for i in metadata.formats],
+        "identifiers": [i.text for i in metadata.identifiers],
+        "sources": [i.text for i in metadata.sources],
+        "languages": [i.text for i in metadata.languages],
+        "relations": [i.text for i in metadata.relations],
+        "coverages": [i.text for i in metadata.coverages],
+        "rights": [i.text for i in metadata.rights],
+        "metas": [i.text for i in metadata.metas],
+        "dc_metas": [i.text for i in metadata.dc_metas],
+    }
+
+    return lengths, contents
+
+all_length = []
+all_contents = []
+def analize_opf_metadata(path: Path):
+    doc = PackageDocument.from_path(path)
+    lengths, contents = analyze_metadata(doc.metadata)
+    lengths["file"] = path.name
+    contents["file"] = path.name
+    all_length.append(lengths)
+    all_contents.append(contents)
+
+def parse_opf_metadata():
+    source = settings.profile_dir / "epub" / "opf"
+    opf_paths = list(source.glob("*.opf"))
+    with DisplayProgress(), ThreadPoolExecutor(max_workers=12) as executor:
+        list(track_unknown(executor.map(analize_opf_metadata, opf_paths), total=len(opf_paths)))
+    lengths_df = pd.DataFrame(all_length)
+    contents_df = pd.DataFrame(all_contents)
+    lengths_df.to_csv(settings.profile_dir / "opf_metadata_l.csv")
+    contents_df.to_csv(settings.profile_dir / "opf_metadata_c.csv")

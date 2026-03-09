@@ -15,7 +15,7 @@ from epub.epub_state import EpubIllustrations
 from epub.tables import EpubFileModel, EpubContentsModel, EpubBookTable, EpubContentsTable
 from epub.utils import string_to_int_hash
 from epub.file_parsing import parse_epub_xml
-from epub.constants import quarantine_directory, untranslated_directory
+from epub.constants import quarantine_directory
 
 from library.image.image_optimization_settings import ImageSettings
 from epub.chapter_processor import EpubChapters

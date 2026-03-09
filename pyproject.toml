@@ -32,8 +32,9 @@ packages = ["src/ewa"]
 dev = [
     "ruff",
     "pytest",
+    "pytest-xdist>=3.8.0",
     "library[all]",
-    "epub"
+    "epub",
 ]
 
 [project.scripts]
