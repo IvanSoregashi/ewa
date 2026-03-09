@@ -103,3 +103,71 @@ def test_read_opf_spine(package_class):
     assert len(doc.spine.itemrefs) == 18
     ref = doc.spine.itemrefs[0]
     assert ref.idref == "titlepage"
+
+
+def test_opf_metadata_add(package_class):
+    doc = package_class.from_path(str(SAMPLE_OPF))
+    metadata = doc.metadata
+
+    # Add Creator with attributes
+    metadata.add_metadata("creator", "NEW AUTHOR", id="author_1", role_ns="aut", file_as_ns="AUTHOR, NEW")
+    # Add Meta with attributes (EPUB 3)
+    metadata.add_metadata("meta", "2024-01-01T00:00:00Z", dc=False, property="dcterms:modified", id="mod_1")
+    # Add Identifier with scheme
+    metadata.add_metadata("identifier", "987654321", scheme_ns="ISBN", id="isbn_id")
+
+    # Verify after re-parsing
+    new_doc = package_class.from_xml_bytes(doc.to_xml_bytes())
+    new_meta = new_doc.metadata
+
+    author = next(c for c in new_meta.creators if c.text == "NEW AUTHOR")
+    assert author.id == "author_1"
+    assert author.role_ns == "aut"
+    assert author.file_as_ns == "AUTHOR, NEW"
+
+    mod = next(m for m in new_meta.metas if m.text == "2024-01-01T00:00:00Z")
+    assert mod.property == "dcterms:modified"
+    assert mod.id == "mod_1"
+
+    isbn = next(i for i in new_meta.identifiers if i.text == "987654321")
+    assert isbn.scheme_ns == "ISBN"
+
+
+def test_opf_metadata_modify(package_class):
+    doc = package_class.from_path(str(SAMPLE_OPF))
+    metadata = doc.metadata
+
+    # Modify existing title and its text/attributes
+    title_elem = metadata.titles[0]
+    title_elem.text = "UPDATED TITLE"
+    title_elem.lang = "ru"
+
+    # Modify existing identifier's scheme
+    ident = metadata.identifiers[0]
+    ident.scheme_ns = "NEW_SCHEME"
+
+    # Verify after re-parsing
+    new_doc = package_class.from_xml_bytes(doc.to_xml_bytes())
+    new_meta = new_doc.metadata
+
+    assert new_meta.titles[0].text == "UPDATED TITLE"
+    assert new_meta.titles[0].lang == "ru"
+    assert new_meta.identifiers[0].scheme_ns == "NEW_SCHEME"
+
+
+def test_opf_metadata_remove(package_class):
+    doc = package_class.from_path(str(SAMPLE_OPF))
+    metadata = doc.metadata
+
+    # Remove all subjects and creators
+    metadata.subjects = []
+    metadata.creators = []
+
+    # Verify after re-parsing
+    new_doc = package_class.from_xml_bytes(doc.to_xml_bytes())
+    new_meta = new_doc.metadata
+
+    assert len(new_meta.subjects) == 0
+    assert len(new_meta.creators) == 0
+    # Other metadata should remain
+    assert len(new_meta.titles) > 0
