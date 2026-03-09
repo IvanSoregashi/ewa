@@ -70,8 +70,9 @@ def test_nav_remove(package_class):
     doc.head.metas = []
     doc.head.links = []
     
-    # Clear nav items (empty list)
-    doc.body.nav.ol.items = []
+    # Clear nav items (empty list) by removing the first one (it usually has elements in the sample)
+    if len(doc.body.nav.ol.items) > 0:
+        doc.body.nav.ol.remove_item(item=doc.body.nav.ol.items[0])
     
     # Verify after re-parsing
     reparsed = package_class.from_xml_bytes(doc.to_xml_bytes())
@@ -83,16 +84,15 @@ def test_nav_remove(package_class):
 def test_nav_add(package_class):
     doc = package_class.from_path(str(SAMPLE_XHTML))
     
-    # Manual append for list modification check
-    items = list(doc.body.nav.ol.items)
-    
-    import copy
-    new_item = copy.deepcopy(items[0])
-    new_item.a.text = "NEW ITEM"
-    new_item.a.href = "new.xhtml"
-    
-    items.append(new_item)
-    doc.body.nav.ol.items = items
+    # Add via method
+    if package_class == PydanticNavDocument:
+        from library.epub.xml_models.nav_model import NavLink as PNavLink
+        link = PNavLink(href="new.xhtml", text="NEW ITEM")
+    else:
+        from library.epub.xml_models.nav_schema import NavLink as CNavLink
+        link = CNavLink.create(href="new.xhtml", text="NEW ITEM")
+        
+    doc.body.nav.ol.add_item(link=link)
     
     # Verify after re-parsing
     reparsed = package_class.from_xml_bytes(doc.to_xml_bytes())

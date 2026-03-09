@@ -29,7 +29,18 @@ class NavLink(NavInline, tag="a"): ...
 class NavListItem(CommonAttributes, tag="li"): ...
 
 
-class NavList(CommonAttributes, tag="ol"): ...
+class NavList(CommonAttributes, tag="ol"):
+    def add_item(self, link: "NavLink | None" = None, span: "NavInline | None" = None, ol: "NavList | None" = None, **kwargs) -> "NavListItem":
+        new_item = NavListItem.create(a=link, span=span, ol=ol, **kwargs)
+        self.items = self.items + [new_item]
+        return new_item
+
+    def remove_item(self, item: "NavListItem | None" = None, id: str | None = None):
+        """Remove a nav list item by its id or object reference."""
+        if item is not None:
+            self.items = [i for i in self.items if i._elem is not item._elem]
+        elif id is not None:
+            self.items = [i for i in self.items if i.id != id]
 
 
 class NavElement(CommonAttributes, tag="nav"): ...

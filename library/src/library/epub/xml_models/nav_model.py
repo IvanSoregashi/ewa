@@ -55,6 +55,18 @@ class NavListItem(CommonAttributes, tag="li", search_mode="unordered"):
 class NavList(CommonAttributes, tag="ol"):
     items: list[NavListItem] = element(tag="li", default=[])
 
+    def add_item(self, link: NavLink | None = None, span: NavInline | None = None, ol: "NavList | None" = None, **kwargs) -> NavListItem:
+        new_item = NavListItem(link=link, span=span, ol=ol, **kwargs)
+        self.items.append(new_item)
+        return new_item
+
+    def remove_item(self, item: NavListItem | None = None, id: str | None = None):
+        """Remove a nav list item by its id or object reference."""
+        if item is not None:
+            self.items = [i for i in self.items if i is not item]
+        elif id is not None:
+            self.items = [i for i in self.items if i.id != id]
+
 
 NavInline.model_rebuild()
 NavLink.model_rebuild()
