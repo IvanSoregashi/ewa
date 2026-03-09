@@ -11,15 +11,29 @@ class XMLElement:
 
     All descriptor fields from fields.py operate on self._elem.
 
-    Subclasses declare:
-        __tag__   = "tagname"          (required for root)
-        __ns__    = "http://..."       (optional namespace)
-        __nsmap__ = {"prefix": "uri"}  (optional ns prefix map)
+    Subclasses can declare tags and namespaces via class arguments:
+        class MyModel(XMLElement, tag="tagname", ns="http://...", nsmap={...}):
+            ...
     """
 
     __tag__: str = ""
     __ns__: str = ""
     __nsmap__: dict = {}
+
+    def __init_subclass__(
+        cls,
+        tag: str | None = None,
+        ns: str | None = None,
+        nsmap: dict | None = None,
+        **kwargs,
+    ):
+        super().__init_subclass__(**kwargs)
+        if tag is not None:
+            cls.__tag__ = tag
+        if ns is not None:
+            cls.__ns__ = ns
+        if nsmap is not None:
+            cls.__nsmap__ = nsmap
 
     def __init__(self, elem: etree.Element | None = None):
         self._elem = elem

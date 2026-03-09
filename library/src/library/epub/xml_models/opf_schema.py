@@ -13,10 +13,8 @@ from library.xml.descriptor_fields import AttrField, TextField, ChildField, Chil
 # ---------------------------------------------------------------------------
 
 
-class DCElement(XMLElement):
+class DCElement(XMLElement, ns=DC_NS):
     """Base for Dublin Core elements — lives in dc: namespace."""
-
-    __ns__ = DC_NS
 
     id = AttrField("id")
     xml_lang = AttrField("lang", ns=XML_NS)
@@ -37,102 +35,37 @@ class DCElement(XMLElement):
     text = TextField()
 
 
-class DCMeta(DCElement):
+class DCMeta(DCElement, tag="meta", ns=DC_NS):
     """<meta> in the dc/opf namespace (old EPUB 2 style)."""
 
-    __tag__ = "meta"
-    __ns__ = DC_NS
 
-
-class Meta(DCElement):
+class Meta(DCElement, tag="meta", ns=OPF_NS):
     """<meta> in the opf namespace (EPUB 3 style)."""
-
-    __tag__ = "meta"
-    __ns__ = OPF_NS
 
     property = AttrField("property")
     refines = AttrField("refines")
 
 
-class Metadata(XMLElement):
-    __tag__ = "metadata"
-    __ns__ = OPF_NS
+class Metadata(XMLElement, tag="metadata", ns=OPF_NS):
 
-    @staticmethod
-    def _find_all(elem, tag, ns):
-        clark = f"{{{ns}}}{tag}" if ns else tag
-        return elem.findall(clark)
+    titles = ChildListField(DCElement, tag="title")
+    creators = ChildListField(DCElement, tag="creator")
+    subjects = ChildListField(DCElement, tag="subject")
+    descriptions = ChildListField(DCElement, tag="description")
+    publishers = ChildListField(DCElement, tag="publisher")
+    contributors = ChildListField(DCElement, tag="contributor")
+    dates = ChildListField(DCElement, tag="date")
+    types = ChildListField(DCElement, tag="type")
+    formats = ChildListField(DCElement, tag="format")
+    identifiers = ChildListField(DCElement, tag="identifier")
+    sources = ChildListField(DCElement, tag="source")
+    languages = ChildListField(DCElement, tag="language")
+    relations = ChildListField(DCElement, tag="relation")
+    coverages = ChildListField(DCElement, tag="coverage")
+    rights = ChildListField(DCElement, tag="rights")
 
-    def _get_dc_list(self, tag):
-        return [DCElement(e) for e in self._find_all(self._elem, tag, DC_NS)]
-
-    @property
-    def titles(self):
-        return self._get_dc_list("title")
-
-    @property
-    def creators(self):
-        return self._get_dc_list("creator")
-
-    @property
-    def subjects(self):
-        return self._get_dc_list("subject")
-
-    @property
-    def descriptions(self):
-        return self._get_dc_list("description")
-
-    @property
-    def publishers(self):
-        return self._get_dc_list("publisher")
-
-    @property
-    def contributors(self):
-        return self._get_dc_list("contributor")
-
-    @property
-    def dates(self):
-        return self._get_dc_list("date")
-
-    @property
-    def types(self):
-        return self._get_dc_list("type")
-
-    @property
-    def formats(self):
-        return self._get_dc_list("format")
-
-    @property
-    def identifiers(self):
-        return self._get_dc_list("identifier")
-
-    @property
-    def sources(self):
-        return self._get_dc_list("source")
-
-    @property
-    def languages(self):
-        return self._get_dc_list("language")
-
-    @property
-    def relations(self):
-        return self._get_dc_list("relation")
-
-    @property
-    def coverages(self):
-        return self._get_dc_list("coverage")
-
-    @property
-    def rights(self):
-        return self._get_dc_list("rights")
-
-    @property
-    def metas(self):
-        return [Meta(e) for e in self._find_all(self._elem, "meta", OPF_NS)]
-
-    @property
-    def dc_metas(self):
-        return [DCMeta(e) for e in self._find_all(self._elem, "meta", DC_NS)]
+    metas = ChildListField(Meta)  # default tag/ns from Meta
+    dc_metas = ChildListField(DCMeta)  # default tag/ns from DCMeta
 
     @property
     def title(self) -> DCElement:
@@ -148,9 +81,7 @@ class Metadata(XMLElement):
 # ---------------------------------------------------------------------------
 
 
-class ManifestItem(XMLElement):
-    __tag__ = "item"
-    __ns__ = OPF_NS
+class ManifestItem(XMLElement, tag="item", ns=OPF_NS):
 
     id = AttrField("id")
     href = AttrField("href")
@@ -160,9 +91,7 @@ class ManifestItem(XMLElement):
     overlay = AttrField("overlay")
 
 
-class Manifest(XMLElement):
-    __tag__ = "manifest"
-    __ns__ = OPF_NS
+class Manifest(XMLElement, tag="manifest", ns=OPF_NS):
 
     items = ChildListField(ManifestItem)
 
@@ -172,9 +101,7 @@ class Manifest(XMLElement):
 # ---------------------------------------------------------------------------
 
 
-class SpineItemRef(XMLElement):
-    __tag__ = "itemref"
-    __ns__ = OPF_NS
+class SpineItemRef(XMLElement, tag="itemref", ns=OPF_NS):
 
     idref = AttrField("idref")
     linear = AttrField("linear")
@@ -182,9 +109,7 @@ class SpineItemRef(XMLElement):
     id = AttrField("id")
 
 
-class Spine(XMLElement):
-    __tag__ = "spine"
-    __ns__ = OPF_NS
+class Spine(XMLElement, tag="spine", ns=OPF_NS):
 
     id = AttrField("id")
     toc = AttrField("toc")
@@ -199,18 +124,14 @@ class Spine(XMLElement):
 # ---------------------------------------------------------------------------
 
 
-class GuideReference(XMLElement):
-    __tag__ = "reference"
-    __ns__ = OPF_NS
+class GuideReference(XMLElement, tag="reference", ns=OPF_NS):
 
     type = AttrField("type")
     title = AttrField("title")
     href = AttrField("href")
 
 
-class Guide(XMLElement):
-    __tag__ = "guide"
-    __ns__ = OPF_NS
+class Guide(XMLElement, tag="guide", ns=OPF_NS):
 
     references = ChildListField(GuideReference)
 
@@ -220,17 +141,13 @@ class Guide(XMLElement):
 # ---------------------------------------------------------------------------
 
 
-class Tour(XMLElement):
-    __tag__ = "tour"
-    __ns__ = OPF_NS
+class Tour(XMLElement, tag="tour", ns=OPF_NS):
 
     id = AttrField("id")
     title = AttrField("title")
 
 
-class Tours(XMLElement):
-    __tag__ = "tours"
-    __ns__ = OPF_NS
+class Tours(XMLElement, tag="tours", ns=OPF_NS):
 
     tours = ChildListField(Tour)
 
@@ -240,10 +157,7 @@ class Tours(XMLElement):
 # ---------------------------------------------------------------------------
 
 
-class PackageDocument(XMLDocumentSchema):
-    __tag__ = "package"
-    __ns__ = OPF_NS
-    __nsmap__ = OPF_NSMAP
+class PackageDocument(XMLDocumentSchema, tag="package", ns=OPF_NS, nsmap=OPF_NSMAP):
 
     version = AttrField("version")
     unique_identifier = AttrField("unique-identifier")
