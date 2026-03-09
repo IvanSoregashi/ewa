@@ -85,6 +85,11 @@ class ManifestItem(BaseXmlModel, tag="item", ns=NamespacePrefix.OPF, nsmap=OPF_N
 class Manifest(BaseXmlModel, tag="manifest", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     items: list[ManifestItem] = element(tag="item", default=[])
 
+    def add_item(self, id: str, href: str, media_type: str, **kwargs) -> ManifestItem:
+        new_item = ManifestItem(id=id, href=href, media_type=media_type, **kwargs)
+        self.items.append(new_item)
+        return new_item
+
 
 class SpineItemRef(BaseXmlModel, tag="itemref", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     idref: str = attr()
@@ -100,6 +105,11 @@ class Spine(BaseXmlModel, tag="spine", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     page_map: str | None = attr(name="page-map", default=None)
     itemrefs: list[SpineItemRef] = element(tag="itemref", default=[])
 
+    def add_itemref(self, idref: str, linear: str | None = None, **kwargs) -> SpineItemRef:
+        new_ref = SpineItemRef(idref=idref, linear=linear, **kwargs)
+        self.itemrefs.append(new_ref)
+        return new_ref
+
 
 class GuideReference(BaseXmlModel, tag="reference", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     type: str = attr()
@@ -110,6 +120,11 @@ class GuideReference(BaseXmlModel, tag="reference", ns=NamespacePrefix.OPF, nsma
 class Guide(BaseXmlModel, tag="guide", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     references: list[GuideReference] = element(tag="reference", default=[])
 
+    def add_reference(self, type: str, href: str, title: str | None = None, **kwargs) -> GuideReference:
+        new_ref = GuideReference(type=type, href=href, title=title, **kwargs)
+        self.references.append(new_ref)
+        return new_ref
+
 
 class Tour(BaseXmlModel, tag="tour", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     id: str | None = attr(default=None)
@@ -118,6 +133,11 @@ class Tour(BaseXmlModel, tag="tour", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
 
 class Tours(BaseXmlModel, tag="tours", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     tours: list[Tour] = element(tag="tour", default=[])
+
+    def add_tour(self, id: str, title: str, **kwargs) -> Tour:
+        new_tour = Tour(id=id, title=title, **kwargs)
+        self.tours.append(new_tour)
+        return new_tour
 
 
 class PackageDocument(

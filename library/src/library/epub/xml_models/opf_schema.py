@@ -105,6 +105,11 @@ class ManifestItem(XMLElement, tag="item", ns=XMLNamespace.OPF):
 class Manifest(XMLElement, tag="manifest", ns=XMLNamespace.OPF):
     items = ChildListField(ManifestItem)
 
+    def add_item(self, id: str, href: str, media_type: str, **kwargs) -> ManifestItem:
+        new_item = ManifestItem.create(id=id, href=href, media_type=media_type, **kwargs)
+        self.items = self.items + [new_item]
+        return new_item
+
 
 # ---------------------------------------------------------------------------
 # Spine
@@ -126,6 +131,11 @@ class Spine(XMLElement, tag="spine", ns=XMLNamespace.OPF):
 
     itemrefs = ChildListField(SpineItemRef)
 
+    def add_itemref(self, idref: str, linear: str | None = None, **kwargs) -> SpineItemRef:
+        new_ref = SpineItemRef.create(idref=idref, linear=linear, **kwargs)
+        self.itemrefs = self.itemrefs + [new_ref]
+        return new_ref
+
 
 # ---------------------------------------------------------------------------
 # Guide
@@ -141,6 +151,11 @@ class GuideReference(XMLElement, tag="reference", ns=XMLNamespace.OPF):
 class Guide(XMLElement, tag="guide", ns=XMLNamespace.OPF):
     references = ChildListField(GuideReference)
 
+    def add_reference(self, type: str, href: str, title: str | None = None, **kwargs) -> GuideReference:
+        new_ref = GuideReference.create(type=type, href=href, title=title, **kwargs)
+        self.references = self.references + [new_ref]
+        return new_ref
+
 
 # ---------------------------------------------------------------------------
 # Tours
@@ -154,6 +169,11 @@ class Tour(XMLElement, tag="tour", ns=XMLNamespace.OPF):
 
 class Tours(XMLElement, tag="tours", ns=XMLNamespace.OPF):
     tours = ChildListField(Tour)
+
+    def add_tour(self, id: str, title: str, **kwargs) -> Tour:
+        new_tour = Tour.create(id=id, title=title, **kwargs)
+        self.tours = self.tours + [new_tour]
+        return new_tour
 
 
 # ---------------------------------------------------------------------------
