@@ -1,22 +1,22 @@
 from pydantic_xml import BaseXmlModel, attr, element
 from library.xml.document_pydantic import XMLDocumentModel
-from library.epub.epub_namespaces import OPF_NSMAP
+from library.epub.epub_namespaces import OPF_NSMAP, NamespacePrefix
 from library.epub.concepts.metadata import DCMetadataType
 
 
-class DCElement(BaseXmlModel, ns="dc", nsmap=OPF_NSMAP):
+class DCElement(BaseXmlModel, ns=NamespacePrefix.DC, nsmap=OPF_NSMAP):
     id: str | None = attr(default=None)
-    lang: str | None = attr(name="lang", ns="xml", default=None)
-    type: str | None = attr(name="type", ns="xsi", default=None)
+    lang: str | None = attr(name="lang", ns=NamespacePrefix.XML, default=None)
+    type: str | None = attr(name="type", ns=NamespacePrefix.XSI, default=None)
 
     file_as: str | None = attr(name="file-as", default=None)
-    file_as_ns: str | None = attr(name="file-as", ns="opf", default=None)
+    file_as_ns: str | None = attr(name="file-as", ns=NamespacePrefix.OPF, default=None)
     role: str | None = attr(name="role", default=None)
-    role_ns: str | None = attr(name="role", ns="opf", default=None)
+    role_ns: str | None = attr(name="role", ns=NamespacePrefix.OPF, default=None)
     scheme: str | None = attr(name="scheme", default=None)
-    scheme_ns: str | None = attr(name="scheme", ns="opf", default=None)
+    scheme_ns: str | None = attr(name="scheme", ns=NamespacePrefix.OPF, default=None)
     event: str | None = attr(name="event", default=None)
-    event_ns: str | None = attr(name="event", ns="opf", default=None)
+    event_ns: str | None = attr(name="event", ns=NamespacePrefix.OPF, default=None)
 
     name: str | None = attr(default=None)
     content_attr: str | None = attr(name="content", default=None)
@@ -27,12 +27,12 @@ class DCMeta(DCElement, tag="meta"):
     pass
 
 
-class Meta(DCElement, tag="meta", ns="opf"):
+class Meta(DCElement, tag="meta", ns=NamespacePrefix.OPF):
     property: str | None = attr(default=None)
     refines: str | None = attr(default=None)
 
 
-class Metadata(BaseXmlModel, tag="metadata", ns="opf", nsmap=OPF_NSMAP, search_mode="unordered"):
+class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP, search_mode="unordered"):
     titles: list[DCElement] = element(tag="title", default=[])
     creators: list[DCElement] = element(tag="creator", default=[])
     subjects: list[DCElement] = element(tag="subject", default=[])
@@ -73,7 +73,7 @@ class Metadata(BaseXmlModel, tag="metadata", ns="opf", nsmap=OPF_NSMAP, search_m
             self.metas.append(new_item)
 
 
-class ManifestItem(BaseXmlModel, tag="item", ns="opf", nsmap=OPF_NSMAP):
+class ManifestItem(BaseXmlModel, tag="item", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     id: str = attr()
     href: str = attr()
     media_type: str = attr(name="media-type")
@@ -82,18 +82,18 @@ class ManifestItem(BaseXmlModel, tag="item", ns="opf", nsmap=OPF_NSMAP):
     overlay: str | None = attr(default=None)
 
 
-class Manifest(BaseXmlModel, tag="manifest", ns="opf", nsmap=OPF_NSMAP):
+class Manifest(BaseXmlModel, tag="manifest", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     items: list[ManifestItem] = element(tag="item", default=[])
 
 
-class SpineItemRef(BaseXmlModel, tag="itemref", ns="opf", nsmap=OPF_NSMAP):
+class SpineItemRef(BaseXmlModel, tag="itemref", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     idref: str = attr()
     linear: str | None = attr(default=None)
     properties: str | None = attr(default=None)
     id: str | None = attr(default=None)
 
 
-class Spine(BaseXmlModel, tag="spine", ns="opf", nsmap=OPF_NSMAP):
+class Spine(BaseXmlModel, tag="spine", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     id: str | None = attr(default=None)
     toc: str | None = attr(default=None)
     page_progression_direction: str | None = attr(name="page-progression-direction", default=None)
@@ -101,31 +101,31 @@ class Spine(BaseXmlModel, tag="spine", ns="opf", nsmap=OPF_NSMAP):
     itemrefs: list[SpineItemRef] = element(tag="itemref", default=[])
 
 
-class GuideReference(BaseXmlModel, tag="reference", ns="opf", nsmap=OPF_NSMAP):
+class GuideReference(BaseXmlModel, tag="reference", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     type: str = attr()
     title: str | None = attr(default=None)
     href: str = attr()
 
 
-class Guide(BaseXmlModel, tag="guide", ns="opf", nsmap=OPF_NSMAP):
+class Guide(BaseXmlModel, tag="guide", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     references: list[GuideReference] = element(tag="reference", default=[])
 
 
-class Tour(BaseXmlModel, tag="tour", ns="opf", nsmap=OPF_NSMAP):
+class Tour(BaseXmlModel, tag="tour", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     id: str | None = attr(default=None)
     title: str = attr()
 
 
-class Tours(BaseXmlModel, tag="tours", ns="opf", nsmap=OPF_NSMAP):
+class Tours(BaseXmlModel, tag="tours", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     tours: list[Tour] = element(tag="tour", default=[])
 
 
-class PackageDocument(XMLDocumentModel, tag="package", ns="opf", nsmap=OPF_NSMAP, search_mode="unordered"):
+class PackageDocument(XMLDocumentModel, tag="package", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP, search_mode="unordered"):
     version: str | None = attr(default=None)
     unique_identifier: str | None = attr(name="unique-identifier", default=None)
     id: str | None = attr(default=None)
     prefix: str | None = attr(default=None)
-    lang: str | None = attr(name="lang", ns="xml", default=None)
+    lang: str | None = attr(name="lang", ns=NamespacePrefix.XML, default=None)
     dir: str | None = attr(default=None)
 
     metadata: Metadata = element()

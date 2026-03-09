@@ -3,7 +3,7 @@ PackageDocument — descriptor-based model for EPUB OPF files.
 Mirrors xml_pydantic/package_document.py without pydantic-xml.
 """
 
-from library.epub.epub_namespaces import DC_NS, XML_NS, XSI_NS, OPF_NS, OPF_NSMAP
+from library.epub.epub_namespaces import XMLNamespace, OPF_NSMAP
 from library.epub.concepts.metadata import DCMetadataType
 from library.xml.document_custom import XMLDocumentSchema, XMLElement
 from library.xml.descriptor_fields import AttrField, TextField, ChildField, ChildListField
@@ -14,21 +14,21 @@ from library.xml.descriptor_fields import AttrField, TextField, ChildField, Chil
 # ---------------------------------------------------------------------------
 
 
-class DCElement(XMLElement, ns=DC_NS):
+class DCElement(XMLElement, ns=XMLNamespace.DC):
     """Base for Dublin Core elements — lives in dc: namespace."""
 
     id = AttrField("id")
-    lang = AttrField("lang", ns=XML_NS)
-    type = AttrField("type", ns=XSI_NS)
+    lang = AttrField("lang", ns=XMLNamespace.XML)
+    type = AttrField("type", ns=XMLNamespace.XSI)
 
     file_as = AttrField("file-as")
-    file_as_ns = AttrField("file-as", ns=OPF_NS)
+    file_as_ns = AttrField("file-as", ns=XMLNamespace.OPF)
     role = AttrField("role")
-    role_ns = AttrField("role", ns=OPF_NS)
+    role_ns = AttrField("role", ns=XMLNamespace.OPF)
     scheme = AttrField("scheme")
-    scheme_ns = AttrField("scheme", ns=OPF_NS)
+    scheme_ns = AttrField("scheme", ns=XMLNamespace.OPF)
     event = AttrField("event")
-    event_ns = AttrField("event", ns=OPF_NS)
+    event_ns = AttrField("event", ns=XMLNamespace.OPF)
 
     name = AttrField("name")
     content_attr = AttrField("content")
@@ -36,18 +36,18 @@ class DCElement(XMLElement, ns=DC_NS):
     text = TextField()
 
 
-class DCMeta(DCElement, tag="meta", ns=DC_NS):
+class DCMeta(DCElement, tag="meta", ns=XMLNamespace.DC):
     """<meta> in the dc/opf namespace (old EPUB 2 style)."""
 
 
-class Meta(DCElement, tag="meta", ns=OPF_NS):
+class Meta(DCElement, tag="meta", ns=XMLNamespace.OPF):
     """<meta> in the opf namespace (EPUB 3 style)."""
 
     property = AttrField("property")
     refines = AttrField("refines")
 
 
-class Metadata(XMLElement, tag="metadata", ns=OPF_NS):
+class Metadata(XMLElement, tag="metadata", ns=XMLNamespace.OPF):
 
     titles = ChildListField(DCElement, tag="title")
     creators = ChildListField(DCElement, tag="creator")
@@ -94,7 +94,7 @@ class Metadata(XMLElement, tag="metadata", ns=OPF_NS):
 # ---------------------------------------------------------------------------
 
 
-class ManifestItem(XMLElement, tag="item", ns=OPF_NS):
+class ManifestItem(XMLElement, tag="item", ns=XMLNamespace.OPF):
 
     id = AttrField("id")
     href = AttrField("href")
@@ -104,7 +104,7 @@ class ManifestItem(XMLElement, tag="item", ns=OPF_NS):
     overlay = AttrField("overlay")
 
 
-class Manifest(XMLElement, tag="manifest", ns=OPF_NS):
+class Manifest(XMLElement, tag="manifest", ns=XMLNamespace.OPF):
 
     items = ChildListField(ManifestItem)
 
@@ -114,7 +114,7 @@ class Manifest(XMLElement, tag="manifest", ns=OPF_NS):
 # ---------------------------------------------------------------------------
 
 
-class SpineItemRef(XMLElement, tag="itemref", ns=OPF_NS):
+class SpineItemRef(XMLElement, tag="itemref", ns=XMLNamespace.OPF):
 
     idref = AttrField("idref")
     linear = AttrField("linear")
@@ -122,7 +122,7 @@ class SpineItemRef(XMLElement, tag="itemref", ns=OPF_NS):
     id = AttrField("id")
 
 
-class Spine(XMLElement, tag="spine", ns=OPF_NS):
+class Spine(XMLElement, tag="spine", ns=XMLNamespace.OPF):
 
     id = AttrField("id")
     toc = AttrField("toc")
@@ -137,14 +137,14 @@ class Spine(XMLElement, tag="spine", ns=OPF_NS):
 # ---------------------------------------------------------------------------
 
 
-class GuideReference(XMLElement, tag="reference", ns=OPF_NS):
+class GuideReference(XMLElement, tag="reference", ns=XMLNamespace.OPF):
 
     type = AttrField("type")
     title = AttrField("title")
     href = AttrField("href")
 
 
-class Guide(XMLElement, tag="guide", ns=OPF_NS):
+class Guide(XMLElement, tag="guide", ns=XMLNamespace.OPF):
 
     references = ChildListField(GuideReference)
 
@@ -154,13 +154,13 @@ class Guide(XMLElement, tag="guide", ns=OPF_NS):
 # ---------------------------------------------------------------------------
 
 
-class Tour(XMLElement, tag="tour", ns=OPF_NS):
+class Tour(XMLElement, tag="tour", ns=XMLNamespace.OPF):
 
     id = AttrField("id")
     title = AttrField("title")
 
 
-class Tours(XMLElement, tag="tours", ns=OPF_NS):
+class Tours(XMLElement, tag="tours", ns=XMLNamespace.OPF):
 
     tours = ChildListField(Tour)
 
@@ -170,13 +170,13 @@ class Tours(XMLElement, tag="tours", ns=OPF_NS):
 # ---------------------------------------------------------------------------
 
 
-class PackageDocument(XMLDocumentSchema, tag="package", ns=OPF_NS, nsmap=OPF_NSMAP):
+class PackageDocument(XMLDocumentSchema, tag="package", ns=XMLNamespace.OPF, nsmap=OPF_NSMAP):
 
     version = AttrField("version")
     unique_identifier = AttrField("unique-identifier")
     id = AttrField("id")
     prefix = AttrField("prefix")
-    lang = AttrField("lang", ns=XML_NS)
+    lang = AttrField("lang", ns=XMLNamespace.XML)
     dir = AttrField("dir")
 
     metadata = ChildField(Metadata)

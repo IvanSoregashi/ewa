@@ -1,6 +1,6 @@
 from pydantic_xml import BaseXmlModel, attr, element
 from library.xml.document_pydantic import XMLDocumentModel
-from library.epub.epub_namespaces import NCX_NSMAP
+from library.epub.epub_namespaces import NamespacePrefix, NCX_NSMAP
 
 
 class Meta(BaseXmlModel, tag="meta", nsmap=NCX_NSMAP):
@@ -73,9 +73,9 @@ class NavList(BaseXmlModel, tag="navList", nsmap=NCX_NSMAP):
     nav_targets: list[NavTarget] = element(tag="navTarget", default=[])
 
 
-class NCXDocument(XMLDocumentModel, tag="ncx", nsmap=NCX_NSMAP, search_mode="unordered"):
+class NCXDocument(XMLDocumentModel, tag=NamespacePrefix.NCX, nsmap=NCX_NSMAP, search_mode="unordered"):
     version: str | None = attr(default=None)
-    xml_lang: str | None = attr(name="lang", ns="xml", default=None)
+    xml_lang: str | None = attr(name="lang", ns=NamespacePrefix.XML, default=None)
     dir: str | None = attr(default=None)
 
     head: Head = element()

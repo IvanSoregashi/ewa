@@ -1,39 +1,50 @@
-XML_NS = "http://www.w3.org/XML/1998/namespace"
-XSI_NS = "http://www.w3.org/2001/XMLSchema-instance"
-XHTML_NS = "http://www.w3.org/1999/xhtml"
+from enum import StrEnum
 
-EPUB_NS = "http://www.idpf.org/2007/ops"
-OPF_NS = "http://www.idpf.org/2007/opf"
+class XMLNamespace(StrEnum):
+    XML = "http://www.w3.org/XML/1998/namespace"
+    XSI = "http://www.w3.org/2001/XMLSchema-instance"
+    XHTML = "http://www.w3.org/1999/xhtml"
+    EPUB = "http://www.idpf.org/2007/ops"
+    OPF = "http://www.idpf.org/2007/opf"
+    DC = "http://purl.org/dc/elements/1.1/"
+    NCX = "http://www.daisy.org/z3986/2005/ncx/"
+    CONTAINER = "urn:oasis:names:tc:opendocument:xmlns:container"
 
-DC_NS = "http://purl.org/dc/elements/1.1/"
-NCX_NS = "http://www.daisy.org/z3986/2005/ncx/"
-CONTAINER_NS = "urn:oasis:names:tc:opendocument:xmlns:container"
+class NamespacePrefix(StrEnum):
+    XML = "xml"
+    XSI = "xsi"
+    XHTML = "xhtml"
+    EPUB = "epub"
+    OPF = "opf"
+    DC = "dc"
+    NCX = "ncx"
+    CONTAINER = "container"
 
 OPF_NSMAP = {
-    "opf": OPF_NS,
-    "dc": DC_NS,
-    "xsi": XSI_NS,
-    "xml": XML_NS,
-    "": OPF_NS,
+    NamespacePrefix.OPF: XMLNamespace.OPF,
+    NamespacePrefix.DC: XMLNamespace.DC,
+    NamespacePrefix.XSI: XMLNamespace.XSI,
+    NamespacePrefix.XML: XMLNamespace.XML,
+    "": XMLNamespace.OPF,
 }
 
 NCX_NSMAP = {
-    "": NCX_NS,
-    "xml": XML_NS,
+    "": XMLNamespace.NCX,
+    NamespacePrefix.XML: XMLNamespace.XML,
 }
 
 NAV_NSMAP = {
-    "": XHTML_NS,
-    "epub": EPUB_NS,
-    "xml": XML_NS,
+    "": XMLNamespace.XHTML,
+    NamespacePrefix.EPUB: XMLNamespace.EPUB,
+    NamespacePrefix.XML: XMLNamespace.XML,
 }
 
 NAMESPACES = {
-    "XML": XML_NS,
-    "EPUB": EPUB_NS,
-    "DAISY": NCX_NS,
-    "OPF": OPF_NS,
-    "CONTAINERNS": CONTAINER_NS,
-    "DC": DC_NS,
-    "XHTML": XHTML_NS,
+    "XML": XMLNamespace.XML,
+    "EPUB": XMLNamespace.EPUB,
+    "DAISY": XMLNamespace.NCX,
+    "OPF": XMLNamespace.OPF,
+    "CONTAINERNS": XMLNamespace.CONTAINER,
+    "DC": XMLNamespace.DC,
+    "XHTML": XMLNamespace.XHTML,
 }

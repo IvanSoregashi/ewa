@@ -1,7 +1,7 @@
+from library.epub.epub_namespaces import NamespacePrefix
 from pydantic_xml import BaseXmlModel, attr, element
 from library.xml.document_pydantic import XMLDocumentModel
 from library.epub.epub_namespaces import NAV_NSMAP
-
 
 
 
@@ -11,11 +11,11 @@ class CommonAttributes(BaseXmlModel, nsmap=NAV_NSMAP):
     class_attr: str | None = attr(name="class", default=None)
     style: str | None = attr(default=None)  # 10+
     lang: str | None = attr(default=None)
-    xml_lang: str | None = attr(name="lang", ns="xml", default=None)
+    xml_lang: str | None = attr(name="lang", ns=NamespacePrefix.XML, default=None)
     dir: str | None = attr(default=None)  # 10+
     hidden: str | None = attr(default=None)
-    epub_type: str | None = attr(name="type", ns="epub", default=None)
-    epub_prefix: str | None = attr(name="prefix", ns="epub", default=None)
+    epub_type: str | None = attr(name="type", ns=NamespacePrefix.EPUB, default=None)
+    epub_prefix: str | None = attr(name="prefix", ns=NamespacePrefix.EPUB, default=None)
     role: str | None = attr(default=None)
     value: str | None = attr(default=None)  # 1 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
 
@@ -32,10 +32,10 @@ class Inline(CommonAttributes):
     text: str | None = None
 
 
-class NavInline(Inline): pass
+class NavInline(Inline): ...
 
 
-class NavHeading(Inline): pass
+class NavHeading(Inline): ...
 
 
 class NavLink(Inline, tag="a"):
@@ -67,7 +67,8 @@ class NavElement(CommonAttributes, tag="nav", search_mode="unordered"):
     h1: NavHeading | None = element(tag="h1", default=None)
     h2: NavHeading | None = element(tag="h2", default=None)
     h3: NavHeading | None = element(tag="h3",
-                                    default=None)  # 1 C:\Users\Ivan\.ewa\epub\nav\4b56dab32ef8d4e8a562e778b49da36f_toc.xhtml
+                                    default=None)
+    # 1 C:\Users\Ivan\.ewa\epub\nav\4b56dab32ef8d4e8a562e778b49da36f_toc.xhtml
     h4: NavHeading | None = element(tag="h4", default=None)  # 0
     h5: NavHeading | None = element(tag="h5", default=None)  # 0
     h6: NavHeading | None = element(tag="h6", default=None)  # 0
@@ -79,7 +80,8 @@ class BlockElement(CommonAttributes):
     h1s: list[NavHeading] = element(tag="h1", default=[])  # 50+
     h2s: list[NavHeading] = element(tag="h2", default=[])  # 0
     h3s: list[NavHeading] = element(tag="h3",
-                                    default=[])  # 1 C:\Users\Ivan\.ewa\epub\nav\4b56dab32ef8d4e8a562e778b49da36f_toc.xhtml
+                                    default=[])
+    # 1 C:\Users\Ivan\.ewa\epub\nav\4b56dab32ef8d4e8a562e778b49da36f_toc.xhtml
     h4s: list[NavHeading] = element(tag="h4", default=[])  # 0
     h5s: list[NavHeading] = element(tag="h5", default=[])  # 0
     h6s: list[NavHeading] = element(tag="h6", default=[])  # 0
@@ -87,35 +89,29 @@ class BlockElement(CommonAttributes):
     divs: list[Div] = element(tag="div", default=[])  # 10+
     navs: list[NavElement] = element(tag="nav", default=[])
     sections: list[Section] = element(tag="section",
-                                      default=[])  # 4 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml +
+                                      default=[])
+    # 4 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml +
     article: Article | None = element(tag="article",
-                                      default=None)  # 1 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
+                                      default=None)
+    # 1 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
     header: Header | None = element(tag="header",
-                                    default=None)  # 1 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
+                                    default=None)
+    # 1 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
     footer: Footer | None = element(tag="footer",
-                                    default=None)  # 1 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
+                                    default=None)
+    # 1 C:\Users\Ivan\.ewa\epub\nav\6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
 
     @property
     def nav(self) -> NavElement | None:
         return self.navs[0] if self.navs else None
 
 
-class Div(BlockElement, tag="div", search_mode="unordered"): pass
-
-
-class Section(BlockElement, tag="section", search_mode="unordered"): pass
-
-
-class Article(BlockElement, tag="article", search_mode="unordered"): pass
-
-
-class Header(BlockElement, tag="header", search_mode="unordered"): pass
-
-
-class Footer(BlockElement, tag="footer", search_mode="unordered"): pass
-
-
-class Body(BlockElement, tag="body", search_mode="unordered"): pass
+class Div(BlockElement, tag="div", search_mode="unordered"): ...
+class Section(BlockElement, tag="section", search_mode="unordered"): ...
+class Article(BlockElement, tag="article", search_mode="unordered"): ...
+class Header(BlockElement, tag="header", search_mode="unordered"): ...
+class Footer(BlockElement, tag="footer", search_mode="unordered"): ...
+class Body(BlockElement, tag="body", search_mode="unordered"): ...
 
 
 BlockElement.model_rebuild()
