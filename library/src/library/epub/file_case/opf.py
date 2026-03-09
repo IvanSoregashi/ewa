@@ -1,4 +1,4 @@
-from typing import Annotated, Any, Protocol, runtime_checkable
+from typing import Annotated, Any
 
 import bs4
 

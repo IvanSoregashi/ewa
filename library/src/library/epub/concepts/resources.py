@@ -1,6 +1,6 @@
 import io
 from pathlib import Path
-from typing import IO, Protocol, Self, override, runtime_checkable
+from typing import IO, Self, override
 from zipfile import ZipInfo
 
 import bs4

@@ -1,5 +1,4 @@
 import zipfile
-from datetime import datetime
 from pathlib import Path
 from typing import IO, Literal, Protocol, override
 from zipfile import ZipInfo
