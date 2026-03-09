@@ -17,8 +17,8 @@ class DCElement(XMLElement, ns=DC_NS):
     """Base for Dublin Core elements — lives in dc: namespace."""
 
     id = AttrField("id")
-    xml_lang = AttrField("lang", ns=XML_NS)
-    xsi_type = AttrField("type", ns=XSI_NS)
+    lang = AttrField("lang", ns=XML_NS)
+    type = AttrField("type", ns=XSI_NS)
 
     file_as = AttrField("file-as")
     file_as_ns = AttrField("file-as", ns=OPF_NS)
@@ -74,6 +74,18 @@ class Metadata(XMLElement, tag="metadata", ns=OPF_NS):
     @property
     def language(self) -> DCElement:
         return self.languages[0] if self.languages else None
+
+    def add_metadata(self, tag: str, text: str, dc: bool = True, **kwargs):
+        """Uniform helper to add metadata items."""
+        if dc:
+            new_item = DCElement.create(tag=tag, text=text, **kwargs)
+            attr_name = f"{tag}s"
+            if hasattr(self, attr_name):
+                current = getattr(self, attr_name)
+                setattr(self, attr_name, current + [new_item])
+        else:
+            new_item = Meta.create(text=text, **kwargs)
+            self.metas = self.metas + [new_item]
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +175,7 @@ class PackageDocument(XMLDocumentSchema, tag="package", ns=OPF_NS, nsmap=OPF_NSM
     unique_identifier = AttrField("unique-identifier")
     id = AttrField("id")
     prefix = AttrField("prefix")
-    xml_lang = AttrField("lang", ns=XML_NS)
+    lang = AttrField("lang", ns=XML_NS)
     dir = AttrField("dir")
 
     metadata = ChildField(Metadata)

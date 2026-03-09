@@ -5,8 +5,8 @@ from library.epub.constants import OPF_NSMAP
 
 class DCElement(BaseXmlModel, ns="dc", nsmap=OPF_NSMAP):
     id: str | None = attr(default=None)
-    xml_lang: str | None = attr(name="lang", ns="xml", default=None)
-    xsi_type: str | None = attr(name="type", ns="xsi", default=None)
+    lang: str | None = attr(name="lang", ns="xml", default=None)
+    type: str | None = attr(name="type", ns="xsi", default=None)
 
     file_as: str | None = attr(name="file-as", default=None)
     file_as_ns: str | None = attr(name="file-as", ns="opf", default=None)
@@ -57,6 +57,19 @@ class Metadata(BaseXmlModel, tag="metadata", ns="opf", nsmap=OPF_NSMAP, search_m
     @property
     def language(self) -> DCElement:
         return self.languages[0] if self.languages else None
+
+    def add_metadata(self, tag: str, text: str, dc: bool = True, **kwargs):
+        """Uniform helper to add metadata items."""
+        if dc:
+            new_item = DCElement(text=text, **kwargs)
+            # Find matching list: titles, creators, etc.
+            attr_name = f"{tag}s"
+            if hasattr(self, attr_name):
+                getattr(self, attr_name).append(new_item)
+        else:
+            # EPUB 3 style <meta property="...">
+            new_item = Meta(text=text, **kwargs)
+            self.metas.append(new_item)
 
 
 class ManifestItem(BaseXmlModel, tag="item", ns="opf", nsmap=OPF_NSMAP):
@@ -111,7 +124,7 @@ class PackageDocument(XMLDocumentModel, tag="package", ns="opf", nsmap=OPF_NSMAP
     unique_identifier: str | None = attr(name="unique-identifier", default=None)
     id: str | None = attr(default=None)
     prefix: str | None = attr(default=None)
-    xml_lang: str | None = attr(name="lang", ns="xml", default=None)
+    lang: str | None = attr(name="lang", ns="xml", default=None)
     dir: str | None = attr(default=None)
 
     metadata: Metadata = element()

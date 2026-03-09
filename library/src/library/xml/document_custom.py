@@ -38,6 +38,20 @@ class XMLElement:
     def __init__(self, elem: etree.Element | None = None):
         self._elem = elem
 
+    @classmethod
+    def create(cls, tag: str | None = None, **kwargs):
+        """Create a new XMLElement instance with its own lxml element."""
+        final_tag = tag or cls.__tag__
+        if not final_tag:
+            raise ValueError(f"{cls.__name__} has no __tag__ and none provided.")
+
+        clark = f"{{{cls.__ns__}}}{final_tag}" if cls.__ns__ else final_tag
+        elem = etree.Element(clark, nsmap=cls.__nsmap__)
+        instance = cls(elem)
+        for k, v in kwargs.items():
+            setattr(instance, k, v)
+        return instance
+
 
 class XMLDocumentSchema(XMLDocument, XMLElement):
     """
