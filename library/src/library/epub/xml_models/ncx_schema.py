@@ -26,22 +26,62 @@ class TextElement(XMLElement, ns=XMLNamespace.NCX):
 class Content(XMLElement, tag="content", ns=XMLNamespace.NCX): ...
 
 
-class NavPoint(XMLElement, tag="navPoint", ns=XMLNamespace.NCX): ...
+class NavPoint(XMLElement, tag="navPoint", ns=XMLNamespace.NCX):
+    def add_nav_point(self, content: "Content", id: str | None = None, **kwargs) -> "NavPoint":
+        new_point = NavPoint.create(content=content, id=id, **kwargs)
+        self.nav_points = self.nav_points + [new_point]
+        return new_point
+
+    def remove_nav_point(self, point: "NavPoint | None" = None, id: str | None = None):
+        if point is not None:
+            self.nav_points = [p for p in self.nav_points if p._elem is not point._elem]
+        elif id is not None:
+            self.nav_points = [p for p in self.nav_points if p.id != id]
 
 
-class NavMap(XMLElement, tag="navMap", ns=XMLNamespace.NCX): ...
+class NavMap(XMLElement, tag="navMap", ns=XMLNamespace.NCX):
+    def add_nav_point(self, content: "Content", id: str | None = None, **kwargs) -> "NavPoint":
+        new_point = NavPoint.create(content=content, id=id, **kwargs)
+        self.nav_points = self.nav_points + [new_point]
+        return new_point
+
+    def remove_nav_point(self, point: "NavPoint | None" = None, id: str | None = None):
+        if point is not None:
+            self.nav_points = [p for p in self.nav_points if p._elem is not point._elem]
+        elif id is not None:
+            self.nav_points = [p for p in self.nav_points if p.id != id]
 
 
 class PageTarget(XMLElement, tag="pageTarget", ns=XMLNamespace.NCX): ...
 
 
-class PageList(XMLElement, tag="pageList", ns=XMLNamespace.NCX): ...
+class PageList(XMLElement, tag="pageList", ns=XMLNamespace.NCX):
+    def add_page_target(self, content: "Content", id: str | None = None, value: str | None = None, type: str | None = None, **kwargs) -> "PageTarget":
+        new_target = PageTarget.create(content=content, id=id, value=value, type=type, **kwargs)
+        self.page_targets = self.page_targets + [new_target]
+        return new_target
+
+    def remove_page_target(self, target: "PageTarget | None" = None, id: str | None = None):
+        if target is not None:
+            self.page_targets = [t for t in self.page_targets if t._elem is not target._elem]
+        elif id is not None:
+            self.page_targets = [t for t in self.page_targets if t.id != id]
 
 
 class NavTarget(XMLElement, tag="navTarget", ns=XMLNamespace.NCX): ...
 
 
-class NavList(XMLElement, tag="navList", ns=XMLNamespace.NCX): ...
+class NavList(XMLElement, tag="navList", ns=XMLNamespace.NCX):
+    def add_nav_target(self, content: "Content", id: str, **kwargs) -> "NavTarget":
+        new_target = NavTarget.create(content=content, id=id, **kwargs)
+        self.nav_targets = self.nav_targets + [new_target]
+        return new_target
+
+    def remove_nav_target(self, target: "NavTarget | None" = None, id: str | None = None):
+        if target is not None:
+            self.nav_targets = [t for t in self.nav_targets if t._elem is not target._elem]
+        elif id is not None:
+            self.nav_targets = [t for t in self.nav_targets if t.id != id]
 
 
 class NCXDocument(XMLDocumentSchema, tag="ncx", ns=XMLNamespace.NCX):

@@ -30,10 +30,34 @@ class NavPoint(BaseXmlModel, tag="navPoint", nsmap=NCX_NSMAP):
     content: Content = element()
     nav_points: list[NavPoint] = element(tag="navPoint", default=[])
 
+    def add_nav_point(self, content: Content, id: str | None = None, **kwargs) -> "NavPoint":
+        new_point = NavPoint(content=content, id=id, **kwargs)
+        self.nav_points.append(new_point)
+        return new_point
+
+    def remove_nav_point(self, point: "NavPoint | None" = None, id: str | None = None):
+        """Remove a navPoint by its id or object reference."""
+        if point is not None:
+            self.nav_points = [p for p in self.nav_points if p is not point]
+        elif id is not None:
+            self.nav_points = [p for p in self.nav_points if p.id != id]
+
 
 class NavMap(BaseXmlModel, tag="navMap", nsmap=NCX_NSMAP):
     nav_infos: list[TextElement] = element(tag="navInfo", default=[])
     nav_points: list[NavPoint] = element(tag="navPoint", default=[])
+
+    def add_nav_point(self, content: Content, id: str | None = None, **kwargs) -> NavPoint:
+        new_point = NavPoint(content=content, id=id, **kwargs)
+        self.nav_points.append(new_point)
+        return new_point
+
+    def remove_nav_point(self, point: NavPoint | None = None, id: str | None = None):
+        """Remove a navPoint by its id or object reference."""
+        if point is not None:
+            self.nav_points = [p for p in self.nav_points if p is not point]
+        elif id is not None:
+            self.nav_points = [p for p in self.nav_points if p.id != id]
 
 
 class PageTarget(BaseXmlModel, tag="pageTarget", nsmap=NCX_NSMAP):
@@ -54,6 +78,18 @@ class PageList(BaseXmlModel, tag="pageList", nsmap=NCX_NSMAP):
     nav_infos: list[TextElement] = element(tag="navInfo", default=[])
     page_targets: list[PageTarget] = element(tag="pageTarget", default=[])
 
+    def add_page_target(self, content: Content, id: str | None = None, value: str | None = None, type: str | None = None, **kwargs) -> PageTarget:
+        new_target = PageTarget(content=content, id=id, value=value, type=type, **kwargs)
+        self.page_targets.append(new_target)
+        return new_target
+
+    def remove_page_target(self, target: PageTarget | None = None, id: str | None = None):
+        """Remove a pageTarget by its id or object reference."""
+        if target is not None:
+            self.page_targets = [t for t in self.page_targets if t is not target]
+        elif id is not None:
+            self.page_targets = [t for t in self.page_targets if t.id != id]
+
 
 class NavTarget(BaseXmlModel, tag="navTarget", nsmap=NCX_NSMAP):
     id: str = attr()
@@ -71,6 +107,18 @@ class NavList(BaseXmlModel, tag="navList", nsmap=NCX_NSMAP):
     nav_label: TextElement | None = element(tag="navLabel", default=None)
     nav_infos: list[TextElement] = element(tag="navInfo", default=[])
     nav_targets: list[NavTarget] = element(tag="navTarget", default=[])
+
+    def add_nav_target(self, content: Content, id: str, **kwargs) -> NavTarget:
+        new_target = NavTarget(content=content, id=id, **kwargs)
+        self.nav_targets.append(new_target)
+        return new_target
+
+    def remove_nav_target(self, target: NavTarget | None = None, id: str | None = None):
+        """Remove a navTarget by its id or object reference."""
+        if target is not None:
+            self.nav_targets = [t for t in self.nav_targets if t is not target]
+        elif id is not None:
+            self.nav_targets = [t for t in self.nav_targets if t.id != id]
 
 
 class NCXDocument(XMLDocumentModel, tag=NamespacePrefix.NCX, nsmap=NCX_NSMAP, search_mode="unordered"):
