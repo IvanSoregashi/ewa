@@ -1,7 +1,7 @@
 from pydantic_xml import BaseXmlModel, attr, element
 from library.xml.document_pydantic import XMLDocumentModel
 from library.epub.epub_namespaces import OPF_NSMAP, NamespacePrefix
-from library.epub.concepts.metadata import DCMetadataType
+from library.epub.concepts.metadata import DCMetadataType, MetadataType
 
 
 class DCElement(BaseXmlModel, ns=NamespacePrefix.DC, nsmap=OPF_NSMAP):
@@ -23,33 +23,33 @@ class DCElement(BaseXmlModel, ns=NamespacePrefix.DC, nsmap=OPF_NSMAP):
     text: str | None = None
 
 
-class DCMeta(DCElement, tag="meta"):
+class DCMeta(DCElement, tag=MetadataType.DC_META):
     pass
 
 
-class Meta(DCElement, tag="meta", ns=NamespacePrefix.OPF):
+class Meta(DCElement, tag=MetadataType.META, ns=NamespacePrefix.OPF):
     property: str | None = attr(default=None)
     refines: str | None = attr(default=None)
 
 
 class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP, search_mode="unordered"):
-    titles: list[DCElement] = element(tag="title", default=[])
-    creators: list[DCElement] = element(tag="creator", default=[])
-    subjects: list[DCElement] = element(tag="subject", default=[])
-    descriptions: list[DCElement] = element(tag="description", default=[])
-    publishers: list[DCElement] = element(tag="publisher", default=[])
-    contributors: list[DCElement] = element(tag="contributor", default=[])
-    dates: list[DCElement] = element(tag="date", default=[])
-    types: list[DCElement] = element(tag="type", default=[])
-    formats: list[DCElement] = element(tag="format", default=[])
-    identifiers: list[DCElement] = element(tag="identifier", default=[])
-    sources: list[DCElement] = element(tag="source", default=[])
-    languages: list[DCElement] = element(tag="language", default=[])
-    relations: list[DCElement] = element(tag="relation", default=[])
-    coverages: list[DCElement] = element(tag="coverage", default=[])
-    rights: list[DCElement] = element(tag="rights", default=[])
-    metas: list[Meta] = element(tag="meta", default=[])
-    dc_metas: list[DCMeta] = element(tag="meta", default=[])
+    titles: list[DCElement] = element(tag=DCMetadataType.TITLE, default=[])
+    creators: list[DCElement] = element(tag=DCMetadataType.CREATOR, default=[])
+    subjects: list[DCElement] = element(tag=DCMetadataType.SUBJECT, default=[])
+    descriptions: list[DCElement] = element(tag=DCMetadataType.DESCRIPTION, default=[])
+    publishers: list[DCElement] = element(tag=DCMetadataType.PUBLISHER, default=[])
+    contributors: list[DCElement] = element(tag=DCMetadataType.CONTRIBUTOR, default=[])
+    dates: list[DCElement] = element(tag=DCMetadataType.DATE, default=[])
+    types: list[DCElement] = element(tag=DCMetadataType.TYPE, default=[])
+    formats: list[DCElement] = element(tag=DCMetadataType.FORMAT, default=[])
+    identifiers: list[DCElement] = element(tag=DCMetadataType.IDENTIFIER, default=[])
+    sources: list[DCElement] = element(tag=DCMetadataType.SOURCE, default=[])
+    languages: list[DCElement] = element(tag=DCMetadataType.LANGUAGE, default=[])
+    relations: list[DCElement] = element(tag=DCMetadataType.RELATION, default=[])
+    coverages: list[DCElement] = element(tag=DCMetadataType.COVERAGE, default=[])
+    rights: list[DCElement] = element(tag=DCMetadataType.RIGHTS, default=[])
+    metas: list[Meta] = element(tag=MetadataType.META, default=[])
+    dc_metas: list[DCMeta] = element(tag=MetadataType.DC_META, default=[])
 
     @property
     def title(self) -> DCElement:
@@ -59,7 +59,7 @@ class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_N
     def language(self) -> DCElement:
         return self.languages[0] if self.languages else None
 
-    def add_metadata(self, tag: str | DCMetadataType, text: str, dc: bool = True, **kwargs):
+    def add_metadata(self, tag: DCMetadataType | MetadataType, text: str, dc: bool = True, **kwargs):
         """Uniform helper to add metadata items."""
         if dc:
             new_item = DCElement(text=text, **kwargs)
@@ -73,7 +73,7 @@ class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_N
             self.metas.append(new_item)
 
     def remove_metadata(
-        self, tag: str | DCMetadataType, text: str | None = None, id: str | None = None, dc: bool = True
+        self, tag: DCMetadataType | MetadataType, text: str | None = None, id: str | None = None, dc: bool = True
     ):
         """Uniform helper to remove metadata items."""
 
@@ -188,9 +188,7 @@ class Tours(BaseXmlModel, tag="tours", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
             self.tours = [t for t in self.tours if t.id != id]
 
 
-class PackageDocument(
-    XMLDocumentModel, tag="package", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP, search_mode="unordered"
-):
+class PackageDocument(XMLDocumentModel, tag="package", ns="", nsmap=OPF_NSMAP, search_mode="unordered"):
     version: str | None = attr(default=None)
     unique_identifier: str | None = attr(name="unique-identifier", default=None)
     id: str | None = attr(default=None)

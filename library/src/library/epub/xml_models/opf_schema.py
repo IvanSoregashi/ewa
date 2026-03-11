@@ -36,11 +36,11 @@ class DCElement(XMLElement, ns=XMLNamespace.DC):
     text = TextField()
 
 
-class DCMeta(DCElement, tag="meta", ns=XMLNamespace.DC):
+class DCMeta(DCElement, tag=MetadataType.DC_META, ns=XMLNamespace.DC):
     """<meta> in the dc/opf namespace (old EPUB 2 style)."""
 
 
-class Meta(DCElement, tag="meta", ns=XMLNamespace.OPF):
+class Meta(DCElement, tag=MetadataType.META, ns=XMLNamespace.OPF):
     """<meta> in the opf namespace (EPUB 3 style)."""
 
     property = AttrField("property")
@@ -48,21 +48,21 @@ class Meta(DCElement, tag="meta", ns=XMLNamespace.OPF):
 
 
 class Metadata(XMLElement, tag="metadata", ns=XMLNamespace.OPF):
-    titles = ChildListField(DCElement, tag="title")
-    creators = ChildListField(DCElement, tag="creator")
-    subjects = ChildListField(DCElement, tag="subject")
-    descriptions = ChildListField(DCElement, tag="description")
-    publishers = ChildListField(DCElement, tag="publisher")
-    contributors = ChildListField(DCElement, tag="contributor")
-    dates = ChildListField(DCElement, tag="date")
-    types = ChildListField(DCElement, tag="type")
-    formats = ChildListField(DCElement, tag="format")
-    identifiers = ChildListField(DCElement, tag="identifier")
-    sources = ChildListField(DCElement, tag="source")
-    languages = ChildListField(DCElement, tag="language")
-    relations = ChildListField(DCElement, tag="relation")
-    coverages = ChildListField(DCElement, tag="coverage")
-    rights = ChildListField(DCElement, tag="rights")
+    titles = ChildListField(DCElement, tag=DCMetadataType.TITLE)
+    creators = ChildListField(DCElement, tag=DCMetadataType.CREATOR)
+    subjects = ChildListField(DCElement, tag=DCMetadataType.SUBJECT)
+    descriptions = ChildListField(DCElement, tag=DCMetadataType.DESCRIPTION)
+    publishers = ChildListField(DCElement, tag=DCMetadataType.PUBLISHER)
+    contributors = ChildListField(DCElement, tag=DCMetadataType.CONTRIBUTOR)
+    dates = ChildListField(DCElement, tag=DCMetadataType.DATE)
+    types = ChildListField(DCElement, tag=DCMetadataType.TYPE)
+    formats = ChildListField(DCElement, tag=DCMetadataType.FORMAT)
+    identifiers = ChildListField(DCElement, tag=DCMetadataType.IDENTIFIER)
+    sources = ChildListField(DCElement, tag=DCMetadataType.SOURCE)
+    languages = ChildListField(DCElement, tag=DCMetadataType.LANGUAGE)
+    relations = ChildListField(DCElement, tag=DCMetadataType.RELATION)
+    coverages = ChildListField(DCElement, tag=DCMetadataType.COVERAGE)
+    rights = ChildListField(DCElement, tag=DCMetadataType.RIGHTS)
 
     metas = ChildListField(Meta)  # default tag/ns from Meta
     dc_metas = ChildListField(DCMeta)  # default tag/ns from DCMeta
@@ -75,7 +75,7 @@ class Metadata(XMLElement, tag="metadata", ns=XMLNamespace.OPF):
     def language(self) -> DCElement:
         return self.languages[0] if self.languages else None
 
-    def add_metadata(self, tag: str | DCMetadataType, text: str, dc: bool = True, **kwargs):
+    def add_metadata(self, tag: DCMetadataType | MetadataType, text: str, dc: bool = True, **kwargs):
         """Uniform helper to add metadata items."""
         if dc:
             new_item = DCElement.create(tag=tag, text=text, **kwargs)
@@ -88,7 +88,7 @@ class Metadata(XMLElement, tag="metadata", ns=XMLNamespace.OPF):
             self.metas = self.metas + [new_item]
 
     def remove_metadata(
-        self, tag: str | DCMetadataType, text: str | None = None, id: str | None = None, dc: bool = True
+        self, tag: DCMetadataType | MetadataType, text: str | None = None, id: str | None = None, dc: bool = True
     ):
         """Uniform helper to remove metadata items."""
 

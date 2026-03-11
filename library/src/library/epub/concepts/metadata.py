@@ -17,3 +17,8 @@ class DCMetadataType(StrEnum):
     RELATION = "relation"
     COVERAGE = "coverage"
     RIGHTS = "rights"
+
+
+class MetadataType(StrEnum):
+    META = "meta"
+    DC_META = "meta"
