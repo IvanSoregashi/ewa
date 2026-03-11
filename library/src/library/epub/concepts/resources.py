@@ -5,6 +5,9 @@ from zipfile import ZipInfo
 
 import bs4
 
+from library.epub.utils import strip_fragment
+from library.epub.zip_utils import info_to_zipinfo
+
 
 class Resource:
     """
@@ -129,7 +132,7 @@ class Resource:
             ClosedEPUBError: If this resource has been closed.
         """
         if self.closed:
-            raise ClosedEPUBError(f"Using resource {self.filename} after closing")
+            raise IOError(f"Using resource {self.filename} after closing")
 
     def close(self) -> None:
         """Close this resource and free any associated resources."""

@@ -361,7 +361,7 @@ def compare_epubs():
             print_success(
                 f"weight: {int(ratio)}% of the {path.stat().st_size / 1024 / 1024:.2f} MB original, the {expected_path} is"
             )
-            result = find_differences_in_sizes(path, expected_path)
+            find_differences_in_sizes(path, expected_path)
 
     if translated_paths:
         print_error(f"\t{translated_paths}")

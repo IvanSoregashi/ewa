@@ -68,7 +68,7 @@ def return_untranslated_back():
 
 
 @app.command("trall")
-def translate_this_directory():
+def translate_everything():
     with EpubBookTable() as table:
         orchestration.translate_all_encrypted(table)
 

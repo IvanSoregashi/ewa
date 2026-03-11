@@ -4,7 +4,7 @@ Mirrors xml_pydantic/package_document.py without pydantic-xml.
 """
 
 from library.epub.epub_namespaces import XMLNamespace, OPF_NSMAP
-from library.epub.concepts.metadata import DCMetadataType
+from library.epub.concepts.metadata import DCMetadataType, MetadataType
 from library.xml.document_custom import XMLDocumentSchema, XMLElement
 from library.xml.descriptor_fields import AttrField, TextField, ChildField, ChildListField
 
