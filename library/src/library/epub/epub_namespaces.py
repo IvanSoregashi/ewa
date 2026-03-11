@@ -24,11 +24,11 @@ class NamespacePrefix(StrEnum):
 
 
 OPF_NSMAP = {
+    "": XMLNamespace.OPF,
     NamespacePrefix.OPF: XMLNamespace.OPF,
     NamespacePrefix.DC: XMLNamespace.DC,
     NamespacePrefix.XSI: XMLNamespace.XSI,
     NamespacePrefix.XML: XMLNamespace.XML,
-    "": XMLNamespace.OPF,
 }
 
 NCX_NSMAP = {
