@@ -8,7 +8,8 @@ from library.xml.document_custom import XMLDocumentSchema
 from library.xml.document_pydantic import XMLDocumentModel
 from library.xml.utils import get_facts
 
-CONTAINER_PATH = "tests/samples/empty_container.xml"
+SAMPLE_DIR = Path(__file__).parent / "samples"
+CONTAINER_PATH = SAMPLE_DIR / "empty_container.xml"
 CONTAINER_XML = b'<?xml version="1.0" encoding="utf-8"?><container></container>'
 
 
