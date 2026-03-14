@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     current_dir: DirectoryPath = Path(".").absolute()
     database_file: FilePath | None = None
     database_url: str | None = None
-    log_level_name: str = "INFO"
+    log_level_name: str = "DEBUG"
     log_level: int = 10
     is_windows: bool = os.name == "nt"
 

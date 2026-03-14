@@ -2,7 +2,7 @@ import logging
 from rich.logging import RichHandler
 
 
-def setup_logging(level: int = logging.INFO):
+def setup_logging(level: int = logging.DEBUG):
     """
     Configures the root logger to use RichHandler.
     """
