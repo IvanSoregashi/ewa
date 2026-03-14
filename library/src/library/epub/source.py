@@ -1,111 +1,44 @@
-import zipfile
+import logging
+
+from collections.abc import Generator
+from contextlib import contextmanager
+from enum import Enum
 from pathlib import Path
-from typing import IO, Literal, Protocol, override
-from zipfile import ZipInfo
+from typing import IO, Literal, Protocol, override, Self
+from zipfile import ZipInfo, ZipFile, Path as ZipPath, ZIP_STORED, ZIP_DEFLATED, is_zipfile
+
+
+class SourceType(Enum):
+    DIRECTORY = 0
+    ZIPFILE = 1
 
 
 class SourceProtocol(Protocol):
-    """
-    Protocol for a source of EPUB data.
-    """
+    def pathlist(self) -> list[Path | ZipPath]: ...
+    def namelist(self) -> list[str]: ...
+    def file_pathlist(self) -> list[Path | ZipPath]: ...
+    def file_namelist(self) -> list[str]: ...
+    def infolist(self) -> list[ZipInfo]: ...
 
-    def getinfo(self, name: str) -> ZipInfo:
-        """
-        Get a ZipInfo object for the given name.
+    def getinfo(self, path: str | Path | ZipPath) -> ZipInfo: ...
+    def read_text(self, path: str | ZipInfo | Path | ZipPath) -> str: ...
+    def read_bytes(self, path: str | ZipInfo | Path | ZipPath) -> bytes: ...
 
-        Args:
-            name: The name of the item to get info for.
-
-        Returns:
-            A ZipInfo object for the given name.
-        """
-        ...
-
-    def infolist(self) -> list[ZipInfo]:
-        """
-        Returns a list of all ZipInfo objects in the source.
-        """
-        ...
-
-    def open(
-        self,
-        name: str | ZipInfo,
-        mode: Literal["r", "w"] = "r",
-        pwd: bytes | None = None,
-        *,
-        force_zip64: bool = False,
-    ) -> IO[bytes]:
-        """
-        Open a file in the source.
-
-        Args:
-            name: The name of the item to open, or a ZipInfo object.
-            mode: The mode to open the file in..
-            pwd: The password to use for encrypted files.
-            force_zip64: Whether to force ZIP64 extensions.
-
-        Returns:
-            A file-like object for the opened item.
-        """
-        ...
-
-    def read(self, name: str) -> bytes:
-        """
-        Read contents of a file in the source.
-
-        Args:
-            name: The name of the file to read.
-
-        returns bytes of the file.
-        """
-        ...
-
-    def close(self) -> None:
-        """Close this source."""
-        ...
-
-    @property
-    def closed(self) -> bool:
-        """Returns whether this source is closed."""
-        ...
+    @contextmanager
+    def open(self) -> Generator[Self, None, None]: ...
 
 
-class SinkProtocol(Protocol):
-    """Protocol for a sink of EPUB data."""
-
-    def writestr(
-        self,
-        zinfo_or_arcname: str | ZipInfo,
-        data: bytes | str,
-        compress_type: int | None = None,
-        compresslevel: int | None = None,
-    ) -> None:
-        """
-        Write a string or bytes to the sink.
-
-        Args:
-            zinfo_or_arcname: The name of the item to write, or a ZipInfo object.
-            data: The data to write.
-            compress_type: The compression type to use.
-            compresslevel: The compression level to use.
-        """
-        ...
-
-
-class DirectorySource(SourceProtocol):
-    """
-    An EPUB source that reads the book from a directory on the filesystem
-    (an 'unzipped' EPUB).
-
-    Args:
-        path: The path to the directory containing the EPUB files.
-    """
+class DirectorySource:
+    """Read-only Directory source"""
 
     def __init__(self, path: str | Path) -> None:
-        self.path: Path = Path(path)
+        self.path = Path(path).absolute()
+        self.log = logging.getLogger(self.__repr__())
         if not self.path.is_dir():
-            raise NotADirectoryError(f"'{path}' is not a directory")
-        self._closed: bool = False
+            raise NotADirectoryError(f"Path {path} is not a directory")
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.path.name})"
 
     def _to_zipinfo(self, name: str) -> ZipInfo:
         return ZipInfo.from_file(
@@ -114,100 +47,105 @@ class DirectorySource(SourceProtocol):
             strict_timestamps=False,
         )
 
-    @override
-    def getinfo(self, name: str | Path) -> ZipInfo:
-        target = self.path / name
-        if target.is_file():
-            return self._to_zipinfo(str(name))
-        raise KeyError(f"There is no item named '{name}' in the folder")
+    def _to_absolute_path(self, path: str | ZipInfo | Path) -> Path:
+        self.log.info(f"_to_absolute_path({path}: {type(path)})")
+        if isinstance(path, ZipInfo):
+            return self.path / path.filename
+        return self.path / path
 
-    @override
+    def _to_relative_path(self, path: str | ZipInfo | Path) -> str:
+        return self._to_absolute_path(path).relative_to(self.path).as_posix()
+
     def infolist(self) -> list[ZipInfo]:
-        return [
-            self._to_zipinfo(str(file.relative_to(self.path))) for file in self.path.rglob("*") if not file.is_dir()
-        ]
+        return [self._to_zipinfo(str(self._to_relative_path(file))) for file in self.path.rglob("*")]
 
-    @override
-    def open(
-        self,
-        name: str | Path | ZipInfo,
-        mode: Literal["r", "w"] = "r",
-        pwd: bytes | None = None,
-        *,
-        force_zip64: bool = False,
-    ) -> IO[bytes]:
-        if isinstance(name, ZipInfo):
-            filename = self.path / name.filename
-        else:
-            filename = self.path / name
+    def getinfo(self, path: str | Path) -> ZipInfo:
+        return self._to_zipinfo(str(self._to_relative_path(path)))
 
-        return open(filename, mode + "b")
+    def read_text(self, path: str | ZipInfo | Path) -> str:
+        return self._to_absolute_path(path).read_text()
 
-    @override
-    def read(self, name: str) -> bytes:
-        filepath = self.path / name
-        return filepath.read_bytes()
+    def read_bytes(self, path: str | ZipInfo | Path) -> bytes:
+        self.log.warning(f"reading {path} bytes")
+        return self._to_absolute_path(path).read_bytes()
 
-    def write(self, content: str | bytes, name: str) -> int:
-        filepath = self.path / name
-        if isinstance(content, str):
-            return filepath.write_text(content)
-        if isinstance(content, bytes):
-            return filepath.write_bytes(content)
-        return 0
+    def pathlist(self) -> list[Path]:
+        return list(self.path.rglob("*"))
 
-    @override
-    def close(self) -> None:
-        self._closed = True
+    def namelist(self) -> list[str]:
+        return [info.filename for info in self.infolist()]
 
-    @property
-    @override
-    def closed(self) -> bool:
-        return self._closed
+    def file_pathlist(self) -> list[Path]:
+        return [p for p in self.pathlist() if p.is_file()]
+
+    def file_namelist(self) -> list[str]:
+        return [info.filename for info in self.infolist() if not info.is_dir()]
+
+    @contextmanager
+    def open(self):
+        self.log.debug(f"opening {self}")
+        yield self
+        self.log.debug(f"closing {self}")
 
 
-class DirectorySink(SinkProtocol):
-    """
-    An EPUB sink that writes the book to a directory on the filesystem
-    (as an 'unzipped' EPUB).
-
-    Args:
-        path: The path to the directory to write the EPUB files to.
-    """
-
+class ZipFileSource:
     def __init__(self, path: str | Path) -> None:
-        self.path: Path = Path(path)
-        if not self.path.is_dir():
-            raise NotADirectoryError(f"'{path}' is not a directory")
+        self.path = Path(path).absolute()
+        self.log = logging.getLogger(self.__repr__())
+        self.zip_file: ZipFile | None = None
+        if not is_zipfile(path):
+            raise ValueError("Path is not a ZipFile")
 
-    @override
-    def writestr(
-        self,
-        zinfo_or_arcname: str | Path | ZipInfo,
-        data: bytes | str,
-        compress_type: int | None = None,
-        compresslevel: int | None = None,
-    ) -> None:
-        if isinstance(zinfo_or_arcname, ZipInfo):
-            filename = zinfo_or_arcname.filename
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.path.name})"
+
+    def infolist(self) -> list[ZipInfo]:
+        with self.open():
+            return self.zip_file.infolist()
+
+    def getinfo(self, path: str | ZipPath) -> ZipInfo:
+        with self.open():
+            return self.zip_file.getinfo(path)
+
+    def read_bytes(self, path: str | ZipInfo | ZipPath) -> bytes:
+        self.log.warning(f"reading the {path} bytes")
+        if isinstance(path, ZipPath):
+            self.should_be_open()
+            return path.read_bytes()
+        with self.open():
+            return self.zip_file.read(path)
+
+    def read_text(self, path: str | ZipInfo | ZipPath, encoding: str = "utf-8") -> str:
+        return self.read_bytes(path).decode(encoding)
+
+    def pathlist(self) -> list[Path]:
+        self.should_be_open()
+        return list(ZipPath(self.zip_file).iterdir())
+
+    def namelist(self) -> list[str]:
+        with self.open():
+            return self.zip_file.namelist()
+
+    def file_pathlist(self) -> list[Path]:
+        self.should_be_open()
+        return [file for file in ZipPath(self.zip_file).iterdir() if file.is_file()]
+
+    def file_namelist(self) -> list[str]:
+        return [name for name in self.namelist() if not name.endswith("/")]
+
+    @contextmanager
+    def open(self) -> Generator[Self, None, None]:
+        if self.zip_file is None:
+            with ZipFile(self.path) as zip_file:
+                self.log.debug(f"opening {self}")
+                self.zip_file = zip_file
+                yield self
+                self.log.debug(f"closing {self}")
+                self.zip_file = None
         else:
-            filename = zinfo_or_arcname
+            yield self
 
-        full_path = self.path / filename
-
-        if str(full_path.parent) != ".":
-            full_path.parent.mkdir(exist_ok=True, parents=True)
-
-        mode = "w" if isinstance(data, str) else "wb"
-        with open(full_path, mode) as f:
-            __ = f.write(data)
-
-
-class ZipFile(zipfile.ZipFile):
-    """
-    A ZipFile subclass that implements SourceProtocol
-    """
-
-    @property
-    def closed(self) -> bool:
-        return self.fp is None or self.fp.closed
+    def should_be_open(self):
+        if self.zip_file is None:
+            self.log.error("This operation requires source to be open.")
+            raise FileNotFoundError("This operation requires source to be open.")

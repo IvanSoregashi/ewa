@@ -3,8 +3,7 @@ from zipfile import ZipInfo, ZipFile, Path as ZipFilePath
 
 import pytest
 
-from library.epub.source import DirectorySource, DirectorySink, SourceProtocol
-from library.epub.epub import SourceDirectory, SourceZipFile, SourceProtocol as SSourceProtocol
+from library.epub.source import DirectorySource, SourceProtocol, ZipFileSource
 
 
 SAMPLE_DIR = Path(__file__).parent / "samples" / "source"
@@ -32,43 +31,68 @@ RELATIVE_FILE_NAMELIST = [
     "toc.ncx",
     "vol_0_ch_0_1_1.xhtml",
 ]
+FILESIZES = {
+    "content.opf": 1187,
+    "cover.xhtml": 405,
+    "META-INF/": 0,
+    "META-INF/container.xml": 251,
+    "mimetype": 20,
+    "nav.xhtml": 700,
+    "style/": 0,
+    "style/nav.css": 495,
+    "toc.ncx": 1036,
+    "vol_0_ch_0_1_1.xhtml": 6521,
+}
 
 
-@pytest.fixture(params=[DirectorySource(DIRECTORY), ZipFile(ARCHIVE)], ids=["DirectorySource", "ZipFile"])
-def source_epublib(request: pytest.FixtureRequest) -> SourceProtocol:
+@pytest.fixture(params=[DirectorySource(DIRECTORY), ZipFileSource(ARCHIVE)], ids=["DirectorySource", "ZipFile"])
+def source(request: pytest.FixtureRequest) -> SourceProtocol:
     return request.param
+
 
 @pytest.fixture(params=[Path(DIRECTORY), ZipFilePath(ARCHIVE)], ids=["DirectoryPath", "ZipFilePath"])
 def path_source(request: pytest.FixtureRequest) -> ZipFilePath:
     return request.param
 
 
-@pytest.fixture(params=[SourceDirectory(DIRECTORY), SourceZipFile(ARCHIVE)], ids=["SourceDirectory", "SourceZipFile"])
-def custom_source(request: pytest.FixtureRequest) -> SSourceProtocol:
-    return request.param
-
-
-def test_iterate(source_epublib):
+def test_source_epublib(source):
     print()
-    for info in source_epublib.infolist():
+    for info in source.infolist():
         assert info.filename in RELATIVE_NAMELIST
-    for file in RELATIVE_NAMELIST:
-        if (DIRECTORY / file).is_dir():
-            print("DIRECTORY", DIRECTORY / file)
-            continue
-        print(file)
-        assert source_epublib.getinfo(file).file_size == (DIRECTORY / file).stat().st_size
-        assert source_epublib.read(file) == (DIRECTORY / file).read_bytes()
+        assert info.file_size == FILESIZES[info.filename]
+    for file in RELATIVE_FILE_NAMELIST:
+        assert source.getinfo(file).file_size == (DIRECTORY / file).stat().st_size
+        assert source.read_bytes(file) == (DIRECTORY / file).read_bytes()
+    assert source.read_bytes("mimetype") == b"application/epub+zip"
 
 
-def test_source(custom_source):
-    with custom_source.open():
-        assert set(custom_source.namelist()) == set(RELATIVE_NAMELIST)
-        assert set(custom_source.file_namelist()) == set(RELATIVE_FILE_NAMELIST)
-        assert custom_source.read_text("mimetype") == "application/epub+zip"
-        assert custom_source.read_bytes("mimetype") == b"application/epub+zip"
-        print()
-        a = custom_source.infolist()
-    for i in a:
-        print(i)
-        print(i.filename, i.is_dir())
+def test_custom_source(source):
+    assert set(source.namelist()) == set(RELATIVE_NAMELIST)
+    assert set(source.file_namelist()) == set(RELATIVE_FILE_NAMELIST)
+    assert source.read_text("mimetype") == "application/epub+zip"
+    assert source.read_bytes("mimetype") == b"application/epub+zip"
+    infolist = source.infolist()
+    with source.open():
+        with_infolist = source.infolist()
+    for info1, info2 in zip(infolist, with_infolist):
+        assert info1.filename == info2.filename
+        assert info1.file_size == info2.file_size
+        assert info1.date_time == info2.date_time
+    for info in infolist:
+        assert info.file_size == FILESIZES[info.filename]
+
+
+def test_source_paths(source):
+    with source.open():
+
+        for path in source.pathlist():
+            if path.name == "mimetype":
+                assert source.read_bytes(path) == b"application/epub+zip"
+
+        for path in source.namelist():
+            if path == "mimetype":
+                assert source.read_bytes(path) == b"application/epub+zip"
+
+        for path in source.infolist():
+            if path.filename == "mimetype":
+                assert source.read_bytes(path) == b"application/epub+zip"
