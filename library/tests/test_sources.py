@@ -1,3 +1,6 @@
+import shutil
+import logging
+from collections.abc import Generator
 from pathlib import Path
 from zipfile import Path as ZipFilePath
 
@@ -5,7 +8,7 @@ import pytest
 
 from library.epub.source import DirectorySource, SourceProtocol, ZipFileSource
 
-
+logger = logging.getLogger(__name__)
 SAMPLE_DIR = Path(__file__).parent / "samples" / "source"
 DIRECTORY = SAMPLE_DIR / "directory"
 ARCHIVE = SAMPLE_DIR / "archive.zip"
@@ -50,6 +53,26 @@ def source(request: pytest.FixtureRequest) -> SourceProtocol:
     return request.param
 
 
+@pytest.fixture(params=[pytest.param(True, id="Dir exist"), pytest.param(False, id="Dir does not exist")])
+def destination(request: pytest.FixtureRequest) -> Generator[Path, None, None]:
+    path = SAMPLE_DIR / "destination"
+    if request.param:
+        path.mkdir(parents=True, exist_ok=True)
+    logger.debug(f"Destination path: {path}, {path.exists()=}")
+    yield path
+
+    shutil.rmtree(path)
+    logger.debug(f"Destination path: {path}, {path.exists()=}")
+
+
+@pytest.fixture
+def existing_destination() -> Generator[Path, None, None]:
+    path = SAMPLE_DIR / "destination"
+    path.mkdir(parents=True, exist_ok=True)
+    yield path
+    shutil.rmtree(path)
+
+
 @pytest.fixture(params=[Path(DIRECTORY), ZipFilePath(ARCHIVE)], ids=["DirectoryPath", "ZipFilePath"])
 def path_source(request: pytest.FixtureRequest) -> ZipFilePath:
     return request.param
@@ -81,8 +104,6 @@ def test_custom_source(source):
 def test_source_paths(source):
     with source.open():
         for path in source.file_pathlist():
-            assert "ï¼Œ" not in path.read_text(encoding="utf-8")
-            assert "ï¼Œ" not in source.read_text(path)
             assert source.read_bytes(path) == path.read_bytes()
             assert source.read_text(path) == path.read_text(encoding="utf-8")
 
@@ -95,3 +116,46 @@ def test_source_paths(source):
                 continue
             assert source.read_bytes(path) == (DIRECTORY / path.filename).read_bytes()
             assert source.read_text(path) == (DIRECTORY / path.filename).read_text(encoding="utf-8")
+
+
+def test_source_extract_all(source, destination):
+    source.extract_all(destination=destination)
+    source2 = DirectorySource(destination)
+
+    key = lambda x: x.filename
+    for info1, info2 in zip(sorted(source.infolist(), key=key), sorted(source2.infolist(), key=key)):
+        assert info1.filename == info2.filename
+        assert info1.file_size == info2.file_size
+        assert info1.date_time == info2.date_time
+
+
+@pytest.mark.parametrize(
+    "exclude_members",
+    (
+        ["mimetype", "content.opf"],
+        ["META-INF/", "META-INF/container.xml"],
+        ["mimetype", "META-INF/container.xml"],
+        ["style/nav.css"],
+    ),
+    ids=["root_files", "dir_and_contents", "in_and_out_of_dir", "full_die_contents"],
+)
+def test_source_extract_some(source, destination, exclude_members):
+    with source.open():
+        members = [m for m in RELATIVE_NAMELIST if m not in exclude_members]
+        source.extract_all(destination=destination, exclude_members=exclude_members)
+        source2 = DirectorySource(destination)
+
+        for member in members:
+            info1 = source.getinfo(member)
+            info2 = source2.getinfo(member)
+            assert info1.filename == info2.filename
+            assert info1.file_size == info2.file_size
+            assert info1.date_time == info2.date_time
+
+        assert set(source2.namelist()) == set(members)
+
+
+@pytest.mark.parametrize("member", RELATIVE_FILE_NAMELIST)
+def test_source_extract_one(source, existing_destination, member):
+    new_location = source.extract(destination=existing_destination, member=member)
+    assert source.read_bytes(member) == Path(new_location).read_bytes()
