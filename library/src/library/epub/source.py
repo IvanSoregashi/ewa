@@ -1,4 +1,5 @@
 import logging
+import os
 import shutil
 
 from collections.abc import Generator, Iterable
@@ -7,6 +8,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Protocol, Self
 from zipfile import ZipInfo, ZipFile, Path as ZipPath, is_zipfile
+
+from library.epub.zip_utils import zipinfo_to_timestamp
+from library.utils import ignore_absolute_paths
 
 
 def _is_a_directory(path: str | ZipInfo | Path | ZipPath) -> bool:
@@ -73,7 +77,7 @@ class DirectorySource:
         return [self.getinfo(file) for file in self.root.rglob("*")]
 
     def getinfo(self, path: str | Path) -> ZipInfo:
-        return self._to_zipinfo(str(self._to_relative_path(path)))
+        return self._to_zipinfo(self._to_relative_path(path))
 
     def read_bytes(self, path: str | ZipInfo | Path) -> bytes:
         self.log.warning(f"reading {path} bytes")
@@ -101,12 +105,15 @@ class DirectorySource:
         self.log.debug(f"closing {self}")
 
     def extract(self, destination: str | Path, member: str | ZipInfo) -> str:
+        self.log.info(f"{self}.extract({destination}, {member.filename if isinstance(member, ZipInfo) else member})")
         return shutil.copy2(src=self._to_absolute_path(member), dst=destination)
 
     def extract_all(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None) -> None:
+        self.log.info(f"{self}.extract_all({repr(destination)}, {exclude_members=})")
         ignore = None
         if exclude_members is not None:
-            ignore = shutil.ignore_patterns(*exclude_members)
+            exclude_members = [self._to_absolute_path(m) for m in exclude_members]
+            ignore = ignore_absolute_paths(absolute_paths=exclude_members)
         shutil.copytree(src=self.root, dst=destination, dirs_exist_ok=True, ignore=ignore)
 
 
@@ -177,11 +184,30 @@ class ZipFileSource:
 
     def extract(self, destination: str | Path, member: str | ZipInfo) -> str:
         with self.open():
-            return self.zip_file.extract(member=member, path=destination)
+            member = member if isinstance(member, ZipInfo) else self.getinfo(member)
+            self.log.info(f"{self}.extract({destination}, {member.filename})")
+            result = self.zip_file.extract(member=member, path=destination)
+
+            # When using extractall (or extract) file's mtime is not preserved
+            full_path = destination / member.filename
+            timestamp = zipinfo_to_timestamp(member)
+            os.utime(full_path, times=(timestamp, timestamp))
+
+            return result
 
     def extract_all(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None) -> None:
+        self.log.info(f"{self}.extract_all({repr(destination)}, {exclude_members=})")
+        destination = Path(destination)
         with self.open():
-            members = None
+            members = self.infolist()
             if exclude_members is not None:
-                members = [m for m in self.namelist() if m not in exclude_members]
+                exclude_members = [m if isinstance(m, str) else m.filename for m in exclude_members]
+                members = [info for info in members if info.filename not in exclude_members]
+
             self.zip_file.extractall(path=destination, members=members)
+
+            # When using extractall (or extract) file's mtime is not preserved
+            for file_zip_info in members:
+                full_path = destination / file_zip_info.filename
+                timestamp = zipinfo_to_timestamp(file_zip_info)
+                os.utime(full_path, times=(timestamp, timestamp))  # Set the access and modification times
