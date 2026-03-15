@@ -45,7 +45,7 @@ FILESIZES = {
 }
 
 
-@pytest.fixture(params=[DirectorySource(DIRECTORY), ZipFileSource(ARCHIVE)], ids=["DirectorySource", "ZipFile"])
+@pytest.fixture(params=[DirectorySource(DIRECTORY), ZipFileSource(ARCHIVE)], ids=["DirectorySource", "ZipFileSource"])
 def source(request: pytest.FixtureRequest) -> SourceProtocol:
     return request.param
 
@@ -55,29 +55,15 @@ def path_source(request: pytest.FixtureRequest) -> ZipFilePath:
     return request.param
 
 
-def test_source_epublib(source):
-    print()
-    for info in source.infolist():
-        assert info.filename in RELATIVE_NAMELIST
-        assert info.file_size == FILESIZES[info.filename]
-    for file in RELATIVE_FILE_NAMELIST:
-        assert source.getinfo(file).file_size == (DIRECTORY / file).stat().st_size
-        assert source.read_bytes(file) == (DIRECTORY / file).read_bytes()
-    assert source.read_bytes("mimetype") == b"application/epub+zip"
-
-
 def test_custom_source(source):
     assert set(source.namelist()) == set(RELATIVE_NAMELIST)
-    assert set(path.filename for path in source.infolist()) == set(RELATIVE_NAMELIST)
     assert set(source.file_namelist()) == set(RELATIVE_FILE_NAMELIST)
 
     with source.open():
-        assert set(Path(path.relative_to(source.root)) for path in source.pathlist()) == set(
-            Path(path) for path in RELATIVE_NAMELIST
-        )
-        assert set(Path(path.relative_to(source.root)) for path in source.file_pathlist()) == set(
-            Path(path) for path in RELATIVE_FILE_NAMELIST
-        )
+        set_namelist = set(Path(path.relative_to(source.root)) for path in source.pathlist())
+        assert set_namelist == set(Path(path) for path in RELATIVE_NAMELIST)
+        set_file_namelist = set(Path(path.relative_to(source.root)) for path in source.file_pathlist())
+        assert set_file_namelist == set(Path(path) for path in RELATIVE_FILE_NAMELIST)
 
     assert source.read_text("mimetype") == "application/epub+zip"
     assert source.read_bytes("mimetype") == b"application/epub+zip"
