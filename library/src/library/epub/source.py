@@ -1,6 +1,7 @@
 import logging
+import shutil
 
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path
@@ -34,6 +35,9 @@ class SourceProtocol(Protocol):
 
     @contextmanager
     def open(self) -> Generator[Self, None, None]: ...
+
+    def extract(self, destination: str | Path, member: str | ZipInfo) -> str: ...
+    def extract_all(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None) -> None: ...
 
 
 class DirectorySource:
@@ -95,6 +99,15 @@ class DirectorySource:
         self.log.debug(f"opening {self}")
         yield self
         self.log.debug(f"closing {self}")
+
+    def extract(self, destination: str | Path, member: str | ZipInfo) -> str:
+        return shutil.copy2(src=self._to_absolute_path(member), dst=destination)
+
+    def extract_all(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None) -> None:
+        ignore = None
+        if exclude_members is not None:
+            ignore = shutil.ignore_patterns(*exclude_members)
+        shutil.copytree(src=self.root, dst=destination, dirs_exist_ok=True, ignore=ignore)
 
 
 class ZipFileSource:
@@ -161,3 +174,14 @@ class ZipFileSource:
         if self.zip_file is None:
             self.log.error("This operation requires source to be open.")
             raise IOError("This operation requires source to be open.")
+
+    def extract(self, destination: str | Path, member: str | ZipInfo) -> str:
+        with self.open():
+            return self.zip_file.extract(member=member, path=destination)
+
+    def extract_all(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None) -> None:
+        with self.open():
+            members = None
+            if exclude_members is not None:
+                members = [m for m in self.namelist() if m not in exclude_members]
+            self.zip_file.extractall(path=destination, members=members)
