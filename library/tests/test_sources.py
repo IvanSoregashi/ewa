@@ -1,5 +1,5 @@
 from pathlib import Path
-from zipfile import ZipInfo, ZipFile, Path as ZipFilePath
+from zipfile import Path as ZipFilePath
 
 import pytest
 
@@ -68,7 +68,17 @@ def test_source_epublib(source):
 
 def test_custom_source(source):
     assert set(source.namelist()) == set(RELATIVE_NAMELIST)
+    assert set(path.filename for path in source.infolist()) == set(RELATIVE_NAMELIST)
     assert set(source.file_namelist()) == set(RELATIVE_FILE_NAMELIST)
+
+    with source.open():
+        assert set(Path(path.relative_to(source.root)) for path in source.pathlist()) == set(
+            Path(path) for path in RELATIVE_NAMELIST
+        )
+        assert set(Path(path.relative_to(source.root)) for path in source.file_pathlist()) == set(
+            Path(path) for path in RELATIVE_FILE_NAMELIST
+        )
+
     assert source.read_text("mimetype") == "application/epub+zip"
     assert source.read_bytes("mimetype") == b"application/epub+zip"
     infolist = source.infolist()
@@ -84,15 +94,18 @@ def test_custom_source(source):
 
 def test_source_paths(source):
     with source.open():
+        for path in source.file_pathlist():
+            assert "ï¼Œ" not in path.read_text(encoding="utf-8")
+            assert "ï¼Œ" not in source.read_text(path)
+            assert source.read_bytes(path) == path.read_bytes()
+            assert source.read_text(path) == path.read_text(encoding="utf-8")
 
-        for path in source.pathlist():
-            if path.name == "mimetype":
-                assert source.read_bytes(path) == b"application/epub+zip"
-
-        for path in source.namelist():
-            if path == "mimetype":
-                assert source.read_bytes(path) == b"application/epub+zip"
+        for path in source.file_namelist():
+            assert source.read_bytes(path) == (DIRECTORY / path).read_bytes()
+            assert source.read_text(path) == (DIRECTORY / path).read_text(encoding="utf-8")
 
         for path in source.infolist():
-            if path.filename == "mimetype":
-                assert source.read_bytes(path) == b"application/epub+zip"
+            if path.is_dir():
+                continue
+            assert source.read_bytes(path) == (DIRECTORY / path.filename).read_bytes()
+            assert source.read_text(path) == (DIRECTORY / path.filename).read_text(encoding="utf-8")

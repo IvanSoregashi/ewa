@@ -4,8 +4,16 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path
-from typing import IO, Literal, Protocol, override, Self
-from zipfile import ZipInfo, ZipFile, Path as ZipPath, ZIP_STORED, ZIP_DEFLATED, is_zipfile
+from typing import Protocol, Self
+from zipfile import ZipInfo, ZipFile, Path as ZipPath, is_zipfile
+
+
+def _is_a_directory(path: str | ZipInfo | Path | ZipPath) -> bool:
+    if isinstance(path, (ZipPath, Path, ZipInfo)):
+        return path.is_dir()
+    if isinstance(path, str):
+        return Path(path).is_dir()
+    raise NotImplementedError(f"Path {path} of type {type(path)} is not supported")
 
 
 class SourceType(Enum):
@@ -32,45 +40,46 @@ class DirectorySource:
     """Read-only Directory source"""
 
     def __init__(self, path: str | Path) -> None:
-        self.path = Path(path).absolute()
+        self.root = Path(path).absolute()
         self.log = logging.getLogger(self.__repr__())
-        if not self.path.is_dir():
+        if not self.root.is_dir():
             raise NotADirectoryError(f"Path {path} is not a directory")
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.path.name})"
+        return f"{self.__class__.__name__}({self.root.name})"
 
     def _to_zipinfo(self, name: str) -> ZipInfo:
         return ZipInfo.from_file(
-            self.path / name,
+            self.root / name,
             arcname=name,
             strict_timestamps=False,
         )
 
     def _to_absolute_path(self, path: str | ZipInfo | Path) -> Path:
-        self.log.info(f"_to_absolute_path({path}: {type(path)})")
         if isinstance(path, ZipInfo):
-            return self.path / path.filename
-        return self.path / path
+            return self.root / path.filename
+        return self.root / path
 
     def _to_relative_path(self, path: str | ZipInfo | Path) -> str:
-        return self._to_absolute_path(path).relative_to(self.path).as_posix()
+        if isinstance(path, ZipInfo):
+            return path.filename
+        return self._to_absolute_path(path).relative_to(self.root).as_posix()
 
     def infolist(self) -> list[ZipInfo]:
-        return [self._to_zipinfo(str(self._to_relative_path(file))) for file in self.path.rglob("*")]
+        return [self.getinfo(file) for file in self.root.rglob("*")]
 
     def getinfo(self, path: str | Path) -> ZipInfo:
         return self._to_zipinfo(str(self._to_relative_path(path)))
-
-    def read_text(self, path: str | ZipInfo | Path) -> str:
-        return self._to_absolute_path(path).read_text()
 
     def read_bytes(self, path: str | ZipInfo | Path) -> bytes:
         self.log.warning(f"reading {path} bytes")
         return self._to_absolute_path(path).read_bytes()
 
+    def read_text(self, path: str | ZipInfo | Path, encoding: str = "utf-8") -> str:
+        return self.read_bytes(path).decode(encoding=encoding)
+
     def pathlist(self) -> list[Path]:
-        return list(self.path.rglob("*"))
+        return list(self.root.rglob("*"))
 
     def namelist(self) -> list[str]:
         return [info.filename for info in self.infolist()]
@@ -90,14 +99,14 @@ class DirectorySource:
 
 class ZipFileSource:
     def __init__(self, path: str | Path) -> None:
-        self.path = Path(path).absolute()
+        self.root = Path(path).absolute()
         self.log = logging.getLogger(self.__repr__())
         self.zip_file: ZipFile | None = None
         if not is_zipfile(path):
             raise ValueError("Path is not a ZipFile")
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.path.name})"
+        return f"{self.__class__.__name__}({self.root.name})"
 
     def infolist(self) -> list[ZipInfo]:
         with self.open():
@@ -109,26 +118,29 @@ class ZipFileSource:
 
     def read_bytes(self, path: str | ZipInfo | ZipPath) -> bytes:
         self.log.warning(f"reading the {path} bytes")
+        if _is_a_directory(path):
+            self.log.error(f"Path {path} is a directory, cannot read bytes")
+            raise IsADirectoryError(f"Path {path} is a directory, cannot read bytes")
         if isinstance(path, ZipPath):
-            self.should_be_open()
+            self._should_be_open()
             return path.read_bytes()
         with self.open():
             return self.zip_file.read(path)
 
     def read_text(self, path: str | ZipInfo | ZipPath, encoding: str = "utf-8") -> str:
-        return self.read_bytes(path).decode(encoding)
+        return self.read_bytes(path).decode(encoding=encoding)
 
     def pathlist(self) -> list[Path]:
-        self.should_be_open()
-        return list(ZipPath(self.zip_file).iterdir())
+        self._should_be_open()
+        return list(set(ZipPath(self.zip_file).glob("*")) | set(ZipPath(self.root).rglob("*")))
 
     def namelist(self) -> list[str]:
         with self.open():
             return self.zip_file.namelist()
 
     def file_pathlist(self) -> list[Path]:
-        self.should_be_open()
-        return [file for file in ZipPath(self.zip_file).iterdir() if file.is_file()]
+        self._should_be_open()
+        return [file for file in self.pathlist() if file.is_file()]
 
     def file_namelist(self) -> list[str]:
         return [name for name in self.namelist() if not name.endswith("/")]
@@ -136,7 +148,7 @@ class ZipFileSource:
     @contextmanager
     def open(self) -> Generator[Self, None, None]:
         if self.zip_file is None:
-            with ZipFile(self.path) as zip_file:
+            with ZipFile(self.root) as zip_file:
                 self.log.debug(f"opening {self}")
                 self.zip_file = zip_file
                 yield self
@@ -145,7 +157,7 @@ class ZipFileSource:
         else:
             yield self
 
-    def should_be_open(self):
+    def _should_be_open(self):
         if self.zip_file is None:
             self.log.error("This operation requires source to be open.")
-            raise FileNotFoundError("This operation requires source to be open.")
+            raise IOError("This operation requires source to be open.")
