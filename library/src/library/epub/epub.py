@@ -59,7 +59,8 @@ class EPUB:
                 for zip_info in self.source.infolist():
                     # TODO: ZIP_STORED for images (already compressed)
                     # TODO: BUFFERED shutil.copyfileobj for big files
-                    if zip_info.filename == "mimetype": continue
+                    if zip_info.filename == "mimetype":
+                        continue
                     self.source.write_to_zipfile(zipf, zip_info)
         except Exception as e:
             logger.error(f"package_into: failed to compress into EPUB: {e}")
