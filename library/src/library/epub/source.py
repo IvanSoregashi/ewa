@@ -33,9 +33,11 @@ class SourceProtocol(Protocol):
     def file_namelist(self) -> list[str]: ...
     def infolist(self) -> list[ZipInfo]: ...
 
+    def getpath(self, path: str | Path | ZipPath) -> Path | ZipPath: ...
     def getinfo(self, path: str | Path | ZipPath) -> ZipInfo: ...
     def read_text(self, path: str | ZipInfo | Path | ZipPath) -> str: ...
     def read_bytes(self, path: str | ZipInfo | Path | ZipPath) -> bytes: ...
+    def write_to_zipfile(self, zip_file: ZipFile, path: str | Path | ZipInfo, compress_type: int | None = None) -> None: ...
 
     @contextmanager
     def open(self) -> Generator[Self, None, None]: ...
@@ -76,7 +78,12 @@ class DirectorySource:
     def infolist(self) -> list[ZipInfo]:
         return [self.getinfo(file) for file in self.root.rglob("*")]
 
-    def getinfo(self, path: str | Path) -> ZipInfo:
+    def getpath(self, path: str | Path | ZipPath) -> Path:
+        return self._to_absolute_path(path)
+
+    def getinfo(self, path: str | Path | ZipInfo) -> ZipInfo:
+        if isinstance(path, ZipInfo):
+            return path
         return self._to_zipinfo(self._to_relative_path(path))
 
     def read_bytes(self, path: str | ZipInfo | Path) -> bytes:
@@ -85,6 +92,11 @@ class DirectorySource:
 
     def read_text(self, path: str | ZipInfo | Path, encoding: str = "utf-8") -> str:
         return self.read_bytes(path).decode(encoding=encoding)
+
+    def write_to_zipfile(self, zip_file: ZipFile, path: str | Path | ZipInfo, compress_type: int | None = None) -> None:
+        absolute_path = self._to_absolute_path(path)
+        relative_path = self._to_relative_path(path)
+        zip_file.write(filename=absolute_path, arcname=relative_path, compress_type=compress_type)
 
     def pathlist(self) -> list[Path]:
         return list(self.root.rglob("*"))
@@ -132,9 +144,18 @@ class ZipFileSource:
         with self.open():
             return self.zip_file.infolist()
 
-    def getinfo(self, path: str | ZipPath) -> ZipInfo:
+    def getinfo(self, path: str | ZipPath | ZipInfo) -> ZipInfo:
+        if isinstance(path, ZipInfo):
+            return path
+        if isinstance(path, ZipPath):
+            path = path.at
         with self.open():
-            return self.zip_file.getinfo(path)
+            return self.zip_file.getinfo(str(path))
+
+    def getpath(self, path: str | ZipPath | ZipInfo) -> ZipPath:
+        self._should_be_open()
+        info = self.getinfo(path)
+        return ZipPath(root=self.zip_file, at=info.filename)
 
     def read_bytes(self, path: str | ZipInfo | ZipPath) -> bytes:
         self.log.warning(f"reading the {path} bytes")
@@ -181,6 +202,26 @@ class ZipFileSource:
         if self.zip_file is None:
             self.log.error("This operation requires source to be open.")
             raise IOError("This operation requires source to be open.")
+
+    def write_to_zipfile(self, zip_file: ZipFile, path: str | Path | ZipInfo, compress_type: int | None = None) -> None:
+        zip_info = self.getinfo(path)
+        if not zip_file.fp:
+            raise ValueError("Attempt to write to ZIP archive that was already closed")
+        if zip_file._writing:
+            raise ValueError("Can't write to ZIP archive while an open writing handle exists")
+
+        if zip_info.is_dir():
+            zip_info.compress_size = 0
+            zip_info.CRC = 0
+            zip_file.mkdir(zip_info)
+        else:
+            data_bytes = self.read_bytes(zip_info)
+            zip_info.compress_type = compress_type if compress_type is not None else zip_file.compression
+            zip_info.compress_level = zip_file.compresslevel
+
+            with zip_file.open(zip_info, "w") as dest:
+                dest.write(data_bytes)
+
 
     def extract(self, destination: str | Path, member: str | ZipInfo) -> str:
         with self.open():
