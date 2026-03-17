@@ -84,9 +84,9 @@ def test_custom_source(source):
 
     with source.open():
         set_namelist = set(Path(path.relative_to(source.root)) for path in source.pathlist())
-        assert set_namelist == set(Path(path) for path in RELATIVE_NAMELIST)
+        assert set_namelist == set(map(Path, RELATIVE_NAMELIST))
         set_file_namelist = set(Path(path.relative_to(source.root)) for path in source.file_pathlist())
-        assert set_file_namelist == set(Path(path) for path in RELATIVE_FILE_NAMELIST)
+        assert set_file_namelist == set(map(Path, RELATIVE_FILE_NAMELIST))
 
     assert source.read_text("mimetype") == "application/epub+zip"
     assert source.read_bytes("mimetype") == b"application/epub+zip"
