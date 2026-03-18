@@ -1,10 +1,10 @@
 import logging
 import tempfile
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Self
-from zipfile import is_zipfile, ZipFile, ZIP_STORED, ZIP_DEFLATED
+from zipfile import is_zipfile, ZipFile, ZIP_STORED, ZIP_DEFLATED, ZipInfo
 
 from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
 
@@ -13,12 +13,15 @@ logger = logging.getLogger(__name__)
 
 class EPUB:
     def __init__(self, path: str | Path) -> None:
+        """Initialize an EPUB object with path to epub file or a directory."""
         self.path = Path(path)
         self.source: SourceProtocol | None = None
         if self.path.is_dir():
-            self.source = DirectorySource(path)
+            self.source = DirectorySource(path, skip_dirs=True)
         elif is_zipfile(path):
-            self.source = ZipFileSource(path)
+            self.source = ZipFileSource(path, skip_dirs=True)
+        else:
+            raise ValueError("Path must be a directory or a zipfile.")
         if self.source is None:
             # TODO: None for creating new epub? or pass in the not yet existing path
             raise FileNotFoundError(f"Source {path} was not recognized as directory or epub(zipfile).")
@@ -38,7 +41,8 @@ class EPUB:
         self.source.extract_all(destination=dest_dir)
         return EPUB(dest_dir)
 
-    def package_into(self, destination: str | Path):
+    def package_into(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None):
+        exclude_members = [m.filename if isinstance(m, ZipInfo) else m for m in (exclude_members or [])]
         destination = Path(destination)
         self.ensure_epub()
         if destination.suffix.lower() != ".epub":
@@ -60,6 +64,8 @@ class EPUB:
                 for zip_info in self.source.infolist():
                     # TODO: ZIP_STORED for images (already compressed)
                     # TODO: BUFFERED shutil.copyfileobj for big files
+                    if zip_info.filename in exclude_members:
+                        continue
                     if zip_info.filename == "mimetype":
                         continue
                     if self.skip_dirs and zip_info.is_dir():
@@ -70,4 +76,8 @@ class EPUB:
             raise e
 
     @contextmanager
-    def stream_to(self, destination: str | Path) -> Generator[Self, None, None]: ...
+    def stream_to(self, destination: str | Path) -> Generator[Self, None, None]:
+
+        with self.source.open():
+            yield self
+        self.package_into(destination)

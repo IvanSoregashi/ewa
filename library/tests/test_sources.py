@@ -48,7 +48,10 @@ FILESIZES = {
 }
 
 
-@pytest.fixture(params=[DirectorySource(DIRECTORY), ZipFileSource(ARCHIVE)], ids=["DirectorySource", "ZipFileSource"])
+@pytest.fixture(
+    params=[DirectorySource(DIRECTORY, skip_dirs=True), ZipFileSource(ARCHIVE, skip_dirs=True)],
+    ids=["DirectorySource", "ZipFileSource"],
+)
 def source(request: pytest.FixtureRequest) -> SourceProtocol:
     return request.param
 
@@ -79,14 +82,11 @@ def path_source(request: pytest.FixtureRequest) -> ZipFilePath:
 
 
 def test_custom_source(source):
-    assert set(source.namelist()) == set(RELATIVE_NAMELIST)
-    assert set(source.file_namelist()) == set(RELATIVE_FILE_NAMELIST)
+    assert set(source.namelist()) == set(RELATIVE_FILE_NAMELIST)
 
     with source.open():
         set_namelist = set(Path(path.relative_to(source.root)) for path in source.pathlist())
-        assert set_namelist == set(map(Path, RELATIVE_NAMELIST))
-        set_file_namelist = set(Path(path.relative_to(source.root)) for path in source.file_pathlist())
-        assert set_file_namelist == set(map(Path, RELATIVE_FILE_NAMELIST))
+        assert set_namelist == set(map(Path, RELATIVE_FILE_NAMELIST))
 
     assert source.read_text("mimetype") == "application/epub+zip"
     assert source.read_bytes("mimetype") == b"application/epub+zip"
@@ -103,11 +103,11 @@ def test_custom_source(source):
 
 def test_source_paths(source):
     with source.open():
-        for path in source.file_pathlist():
+        for path in source.pathlist():
             assert source.read_bytes(path) == path.read_bytes()
             assert source.read_text(path) == path.read_text(encoding="utf-8")
 
-        for path in source.file_namelist():
+        for path in source.namelist():
             assert source.read_bytes(path) == (DIRECTORY / path).read_bytes()
             assert source.read_text(path) == (DIRECTORY / path).read_text(encoding="utf-8")
 
@@ -120,7 +120,7 @@ def test_source_paths(source):
 
 def test_source_extract_all(source, destination):
     source.extract_all(destination=destination)
-    source2 = DirectorySource(destination)
+    source2 = DirectorySource(destination, skip_dirs=True)
 
     key = lambda x: x.filename
     for info1, info2 in zip(sorted(source.infolist(), key=key), sorted(source2.infolist(), key=key)):
@@ -141,9 +141,9 @@ def test_source_extract_all(source, destination):
 )
 def test_source_extract_some(source, destination, exclude_members):
     with source.open():
-        members = [m for m in RELATIVE_NAMELIST if m not in exclude_members]
+        members = [m for m in RELATIVE_FILE_NAMELIST if m not in exclude_members]
         source.extract_all(destination=destination, exclude_members=exclude_members)
-        source2 = DirectorySource(destination)
+        source2 = DirectorySource(destination, skip_dirs=True)
 
         for member in members:
             info1 = source.getinfo(member)
