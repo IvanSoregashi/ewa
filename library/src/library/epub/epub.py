@@ -23,6 +23,7 @@ class EPUB:
             # TODO: None for creating new epub? or pass in the not yet existing path
             raise FileNotFoundError(f"Source {path} was not recognized as directory or epub(zipfile).")
         self._confirmed_epub: bool = False
+        self.skip_dirs = True
 
     def ensure_epub(self):
         if not self._confirmed_epub:
@@ -60,6 +61,8 @@ class EPUB:
                     # TODO: ZIP_STORED for images (already compressed)
                     # TODO: BUFFERED shutil.copyfileobj for big files
                     if zip_info.filename == "mimetype":
+                        continue
+                    if self.skip_dirs and zip_info.is_dir():
                         continue
                     self.source.write_to_zipfile(zipf, zip_info)
         except Exception as e:
