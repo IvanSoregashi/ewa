@@ -1,25 +1,8 @@
 from enum import IntEnum, StrEnum, auto
-from mimetypes import guess_file_type as base_guess_file_type
 from pathlib import Path
 from typing import Self, override
 
-
-def guess_file_type(path: str | Path) -> str | None:
-    """
-    Guess the media type of a file based on its filename or path.
-
-    Args:
-        path: The file path or name to guess file type from.
-
-    Returns:
-        The guessed media type as a string, or None if it cannot be determined.
-    """
-    path = Path(path)
-
-    if path.suffix.lower() == ".ncx":
-        return "application/x-dtbncx+xml"
-
-    return base_guess_file_type(path)[0]
+from library.filetypes import guess_file_type
 
 
 class Category(IntEnum):
@@ -76,14 +59,15 @@ class MediaType(StrEnum):
 
     # Fonts
     FONT_TTF = "font/ttf", Category.FONT
-    FONT_SFNT = "application/font-sfnt", Category.FONT
     FONT_OTF = "font/otf", Category.FONT
-    VND_MS_OPENTYPE = "application/vnd.ms-opentype", Category.FONT
     FONT_WOFF = "font/woff", Category.FONT
-    APPLICATION_FONT_WOFF = "application/font-woff", Category.FONT
     FONT_WOFF2 = "font/woff2", Category.FONT
+    FONT_SFNT = "application/font-sfnt", Category.FONT
+    VND_MS_OPENTYPE = "application/vnd.ms-opentype", Category.FONT
+    APPLICATION_FONT_WOFF = "application/font-woff", Category.FONT
 
     # Other
+    TEXT = "text/plain", Category.OTHER
     XHTML = "application/xhtml+xml", Category.OTHER
     JAVASCRIPT = "application/javascript", Category.OTHER
     ECMASCRIPT = "application/ecmascript", Category.OTHER
@@ -134,7 +118,7 @@ class MediaType(StrEnum):
 
         guessed = guess_file_type(value)
         if not guessed:
-            return None
+            return cls("application/unknown")
         instance = cls(guessed)
         return instance
 
