@@ -23,5 +23,5 @@ packages = ["src/library"]
 [dependency-groups]
 dev = [
     "ruff",
-    "pytest"
+    "pytest",
 ]
