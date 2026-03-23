@@ -42,6 +42,11 @@ NAV_NSMAP = {
     NamespacePrefix.XML: XMLNamespace.XML,
 }
 
+CONTAINER_NSMAP = {
+    "": XMLNamespace.CONTAINER,
+    NamespacePrefix.CONTAINER: XMLNamespace.CONTAINER,
+}
+
 NAMESPACES = {
     "XML": XMLNamespace.XML,
     "EPUB": XMLNamespace.EPUB,
