@@ -90,7 +90,7 @@ def write_mime_types(data: dict[str, str], file: str | Path | None = None) -> st
 
 
 @contextmanager
-def modify_mime_types():
-    mimetypes = parse_mime_types(mimetypes_path)
+def modify_mime_types(mt_path):
+    mimetypes = parse_mime_types(mt_path)
     yield mimetypes
-    write_mime_types(mimetypes, mimetypes_path)
+    write_mime_types(mimetypes, mt_path)

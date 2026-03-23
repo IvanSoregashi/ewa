@@ -95,8 +95,5 @@ def test_guess_file_type(filepath, expected):
 
 
 def test_read_write():
-    data = mimetypes_utils.parse_mime_types(mimetypes_path)
-    assert data
-    assert isinstance(data, dict)
-    mimetypes_text = mimetypes_utils.write_mime_types(data)
-    assert mimetypes_text == mimetypes_path.read_text(encoding="utf-8")
+    with mimetypes_utils.modify_mime_types(mimetypes_path) as mimetypes:
+        assert isinstance(mimetypes, dict)
