@@ -1,5 +1,6 @@
 from pydantic_xml import BaseXmlModel, attr, element
 from library.epub.epub_namespaces import XMLNamespace, NamespacePrefix, CONTAINER_NSMAP
+from library.xml.document_pydantic import XMLDocumentModel
 
 
 class RootFile(BaseXmlModel, tag="rootfile", ns=NamespacePrefix.CONTAINER, nsmap=CONTAINER_NSMAP):
@@ -11,7 +12,7 @@ class RootFiles(BaseXmlModel, tag="rootfiles", ns=NamespacePrefix.CONTAINER, nsm
     items: list[RootFile] = element(tag="rootfile", ns=NamespacePrefix.CONTAINER, default=[])
 
 
-class ContainerDocument(BaseXmlModel, tag="container", ns=NamespacePrefix.CONTAINER, nsmap=CONTAINER_NSMAP):
+class ContainerDocument(XMLDocumentModel, tag="container", ns=NamespacePrefix.CONTAINER, nsmap=CONTAINER_NSMAP):
     version: str = attr()
     rootfiles_wrapper: RootFiles = element(tag="rootfiles", ns=NamespacePrefix.CONTAINER)
 
