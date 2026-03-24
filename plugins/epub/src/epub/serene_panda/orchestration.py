@@ -567,3 +567,28 @@ def parse_opf_metadata():
     contents_df = pd.DataFrame(all_contents)
     lengths_df.to_csv(settings.profile_dir / "opf_metadata_l.csv")
     contents_df.to_csv(settings.profile_dir / "opf_metadata_c.csv")
+
+
+def extract_container_to_destination(epub_path: Path) -> bool:
+    if quarantine_directory in epub_path.parents:
+        logger.warning(f"skipping {epub_path}")
+        return True
+    with ZipFile(epub_path) as epub_zip:
+        c_bytes = epub_zip.read("META-INF/container.xml")
+
+        c_hash = to_hex_hash(c_bytes)
+        new_filepath = settings.profile_dir / "epub" / "container" / f"{c_hash}_container.xml"
+        if not new_filepath.exists():
+            new_filepath.write_bytes(c_bytes)
+            return True
+    return False
+
+
+def extract_container_files():
+    destination = settings.profile_dir / "epub" / "container"
+    destination.mkdir(parents=True, exist_ok=True)
+    epub_paths = list(epub_dir.rglob("*.epub"))
+    with DisplayProgress(), ThreadPoolExecutor(max_workers=12) as executor:
+        errs = list(track_unknown(executor.map(extract_container_to_destination, epub_paths), total=len(epub_paths)))
+        print_error(str(sum(errs)))
+        print_success(str(len(errs)))

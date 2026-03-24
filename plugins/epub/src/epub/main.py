@@ -58,7 +58,7 @@ def dups(move: bool = typer.Option(False, "-m", "--move"), cleanup: bool = typer
 
 @app.command()
 def test():
-    orchestration.parse_opf_metadata()
+    orchestration.extract_container_files()
 
 
 @app.command("rub")
