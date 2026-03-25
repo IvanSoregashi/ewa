@@ -46,6 +46,9 @@ class EPUBResource:
         # Navigation label (populated during NCX/NAV enrichment)
         self.toc_label: str | None = None
 
+    def __repr__(self) -> str:
+        return f"EPUBResource({self.filename!r}, media_type={str(self.media_type)})"
+
     @property
     def loaded(self) -> bool:
         return self._content is not None
@@ -72,9 +75,6 @@ class EPUBResource:
     def is_spine_item(self) -> bool:
         return self.spine_index is not None
 
-    def __repr__(self) -> str:
-        return f"EPUBResource({self.filename!r}, media_type={str(self.media_type)})"
-
 
 class ResourceIndex:
     """Auto-indexed collection of EPUBResource objects.
@@ -90,6 +90,20 @@ class ResourceIndex:
         if resources:
             for r in resources:
                 self.add(r)
+
+    def __repr__(self) -> str:
+        return f"ResourceIndex({len(self._items)} resources)"
+
+    def __iter__(self):
+        return iter(self._items)
+
+    def __len__(self) -> int:
+        return len(self._items)
+
+    def __contains__(self, item: EPUBResource | str) -> bool:
+        if isinstance(item, str):
+            return item in self._by_path
+        return item in self._items
 
     def add(self, resource: EPUBResource) -> None:
         """Add a resource to the index."""
@@ -117,20 +131,6 @@ class ResourceIndex:
         """Rebuild the ID index (call after OPF enrichment populates IDs)."""
         self._by_id = {r.id: r for r in self._items if r.id is not None}
 
-    def __iter__(self):
-        return iter(self._items)
-
-    def __len__(self) -> int:
-        return len(self._items)
-
-    def __contains__(self, item: EPUBResource | str) -> bool:
-        if isinstance(item, str):
-            return item in self._by_path
-        return item in self._items
-
-    def __repr__(self) -> str:
-        return f"ResourceIndex({len(self._items)} resources)"
-
 
 class EpubCore:
     """Manages the structural core of an EPUB archive.
@@ -145,9 +145,9 @@ class EpubCore:
 
         # Core documents (populated during parsing)
         self._opf_path: str | None = None
-        self._opf: PackageDocument | None = None
-        self._ncx: NCXDocument | None = None
-        self._nav: NavDocument | None = None
+        self.package: PackageDocument | None = None
+        self.ncx: NCXDocument | None = None
+        self.nav: NavDocument | None = None
 
         # Core resource references (populated during enrichment)
         self.mimetype_resource: EPUBResource | None = None
@@ -176,9 +176,11 @@ class EpubCore:
             raise ValueError(f"EPUB is missing '{CONTAINER_PATH}'.")
 
         container = ContainerDocument.from_xml(self.container_resource.content)
+        if len(container.rootfiles) > 1:
+            logger.warning(f"{self} has {len(container.rootfiles)} rootfiles. Using the first one.")
         self._opf_path = container.opf_path
         if self._opf_path is None:
-            raise ValueError("container.xml does not specify an OPF rootfile.")
+            raise ValueError(f"container.xml does not specify an OPF rootfile.")
 
     def _parse_opf(self) -> None:
         """Parse the OPF package document."""
@@ -189,7 +191,7 @@ class EpubCore:
         if self.opf_resource is None:
             raise ValueError(f"OPF file '{self._opf_path}' not found in resources.")
 
-        self._opf = PackageDocument.from_xml(self.opf_resource.content)
+        self.package = PackageDocument.from_xml(self.opf_resource.content)
 
     def _resolve_href(self, href: str) -> str:
         """Resolve a manifest href (relative to OPF) to an absolute EPUB path."""
@@ -205,11 +207,11 @@ class EpubCore:
 
     def _enrich_from_opf(self) -> None:
         """Enrich resources with manifest, spine, and guide data from the OPF."""
-        if self._opf is None:
+        if self.package is None:
             return
 
         # --- Manifest ---
-        for item in self._opf.manifest.items:
+        for item in self.package.manifest.items:
             abs_path = self._resolve_href(item.href)
             resource = self.resources.by_path(abs_path)
             if resource is None:
@@ -219,7 +221,7 @@ class EpubCore:
             resource.id = item.id
             resource.href = item.href
             resource.fallback = item.fallback
-            resource.media_overlay = getattr(item, 'overlay', None)
+            resource.media_overlay = getattr(item, "overlay", None)
 
             if item.properties:
                 resource.properties = item.properties.split()
@@ -234,7 +236,7 @@ class EpubCore:
         self.resources.rebuild_id_index()
 
         # --- Spine ---
-        for idx, itemref in enumerate(self._opf.spine.itemrefs):
+        for idx, itemref in enumerate(self.package.spine.itemrefs):
             resource = self.resources.by_id(itemref.idref)
             if resource is None:
                 logger.warning(f"Spine itemref '{itemref.idref}' references unknown manifest ID.")
@@ -243,8 +245,8 @@ class EpubCore:
             resource.linear = itemref.linear
 
         # --- Guide ---
-        if self._opf.guide:
-            for ref in self._opf.guide.references:
+        if self.package.guide:
+            for ref in self.package.guide.references:
                 abs_path = self._resolve_href(ref.href)
                 resource = self.resources.by_path(abs_path)
                 if resource is None:
@@ -259,8 +261,8 @@ class EpubCore:
     def _identify_core_resources(self) -> None:
         """Identify NCX, NAV, and cover resources from enriched manifest data."""
         # NCX: found via spine@toc attribute or by media type
-        if self._opf.spine.toc:
-            self.ncx_resource = self.resources.by_id(self._opf.spine.toc)
+        if self.package.spine.toc:
+            self.ncx_resource = self.resources.by_id(self.package.spine.toc)
         if self.ncx_resource is None:
             for r in self.resources:
                 if r.media_type == MediaType.NCX:
@@ -278,10 +280,10 @@ class EpubCore:
             if r.properties and "cover-image" in r.properties:
                 self.cover_resource = r
                 break
-        if self.cover_resource is None and self._opf:
-            for meta in self._opf.metadata.metas:
-                name = getattr(meta, 'name', None)
-                content = getattr(meta, 'content_attr', None)
+        if self.cover_resource is None and self.package:
+            for meta in self.package.metadata.metas:
+                name = getattr(meta, "name", None)
+                content = getattr(meta, "content_attr", None)
                 if name == "cover" and content:
                     self.cover_resource = self.resources.by_id(content)
                     break
@@ -349,21 +351,6 @@ class EpubCore:
     # Convenience properties
     # -----------------------------------------------------------------------
 
-    @property
-    def opf(self) -> PackageDocument | None:
-        return self._opf
-
-    @property
-    def ncx(self) -> NCXDocument | None:
-        return self._ncx
-
-    @property
-    def nav(self) -> NavDocument | None:
-        return self._nav
-
-    @property
-    def opf_path(self) -> str | None:
-        return self._opf_path
 
     @property
     def styles(self) -> list[EPUBResource]:
@@ -444,10 +431,7 @@ class EPUB:
             content = self.source.read_bytes(mimetype_info)
             if content.strip() != b"application/epub+zip":
                 logger.error(f"{self} 'mimetype' content is not 'application/epub+zip'.")
-                raise ValueError(
-                    f"EPUB 'mimetype' file must contain 'application/epub+zip', "
-                    f"got {content!r}."
-                )
+                raise ValueError(f"EPUB 'mimetype' file must contain 'application/epub+zip', got {content!r}.")
 
         self._confirmed_epub = True
         return True
@@ -500,21 +484,17 @@ class EPUB:
             yield self
         self.package_into(destination)
 
-    def scan_resources(self) -> 'ResourceIndex':
+    def scan_resources(self) -> "ResourceIndex":
         """Scan the EPUB source and build a ResourceIndex from all files."""
         with self.source.open():
-            resources = [
-                EPUBResource(info, self.source.read_bytes)
-                for info in self.source.infolist()
-            ]
+            resources = [EPUBResource(info, self.source.read_bytes) for info in self.source.infolist()]
         return ResourceIndex(resources)
 
     @property
-    def core(self) -> 'EpubCore':
+    def core(self) -> "EpubCore":
         """Lazily initialize and return the EpubCore for this EPUB."""
         if self._core is None:
             self.confirm_mimetype()
             resources = self.scan_resources()
             self._core = EpubCore(resources)
         return self._core
-
