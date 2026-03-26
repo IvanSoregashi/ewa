@@ -164,6 +164,15 @@ class EpubCore:
         self._enrich_from_ncx()
         self._enrich_from_nav()
 
+    def sync(self) -> None:
+        """Serialize all core models (package, ncx, nav) back to their respective resources."""
+        if self.package and self.opf_resource:
+            self.opf_resource.content = self.package.to_xml_bytes()
+        if self.ncx and self.ncx_resource:
+            self.ncx_resource.content = self.ncx.to_xml_bytes()
+        if self.nav and self.nav_resource:
+            self.nav_resource.content = self.nav.to_xml_bytes()
+
     # -----------------------------------------------------------------------
     # Parsing pipeline
     # -----------------------------------------------------------------------
@@ -447,6 +456,11 @@ class EPUB:
         exclude_members = [m.filename if isinstance(m, ZipInfo) else m for m in (exclude_members or [])]
         destination = Path(destination)
         self.confirm_mimetype()
+
+        # If core is active, sync models back to resources before packing
+        if self._core:
+            self._core.sync()
+
         if destination.suffix.lower() != ".epub":
             if destination.is_dir():
                 destination = destination / self.path.name
@@ -458,21 +472,32 @@ class EPUB:
             if not destination.parent.exists():
                 raise FileNotFoundError(f"Directory {destination.parent} does not exist.")
 
+        # If resources are already scanned, use them to find modified content
+        resources = self._core.resources if self._core else None
+
         try:
             with self.source.open(), ZipFile(destination, "w", compression=ZIP_DEFLATED) as zipf:
                 mimetype_info = self.source.getinfo("mimetype")
                 self.source.write_to_zipfile(zipf, mimetype_info, compress_type=ZIP_STORED)
 
                 for zip_info in self.source.infolist():
-                    # TODO: ZIP_STORED for images (already compressed)
-                    # TODO: BUFFERED shutil.copyfileobj for big files
                     if zip_info.filename in exclude_members:
                         continue
                     if zip_info.filename == "mimetype":
                         continue
                     if self.skip_dirs and zip_info.is_dir():
                         continue
-                    self.source.write_to_zipfile(zipf, zip_info)
+
+                    # Check if we have a version in memory (loaded)
+                    resource = resources.by_path(zip_info.filename) if resources else None
+                    if resource and resource.loaded:
+                        # Write bytes from memory
+                        # TODO make a proper method for this use case
+                        zipf.writestr(zip_info.filename, resource.content)
+                    else:
+                        # Stream untouched bytes from source
+                        self.source.write_to_zipfile(zipf, zip_info)
+
         except Exception as e:
             logger.error(f"package_into: failed to compress into EPUB: {e}")
             raise e
