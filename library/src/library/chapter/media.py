@@ -14,14 +14,11 @@ class MediaResource:
     def __init__(
         self,
         filename: str,
-        media_type: MediaType | str,
         read_bytes_func: Callable[[], bytes] | None = None,
         content: bytes | None = None,
     ) -> None:
         self.filename = filename
-        self.media_type = (
-            media_type if isinstance(media_type, MediaType) else MediaType(media_type)
-        )
+        self.media_type = MediaType.from_filename(filename)
         self._content = content
         self._read_bytes_func = read_bytes_func
 
@@ -50,16 +47,9 @@ class MediaResource:
     def from_file(cls, path: str | Path) -> Self:
         """Create a MediaResource from a local file path (lazy loaded)."""
         path = Path(path)
-        media_type = MediaType.from_filename(path) or "application/octet-stream"
-        
-        def read_file() -> bytes:
-            return path.read_bytes()
-            
-        return cls(path.name, media_type, read_bytes_func=read_file)
+        return cls(str(path), read_bytes_func=lambda: path.read_bytes())
 
     @classmethod
-    def from_bytes(cls, filename: str, content: bytes, media_type: MediaType | str | None = None) -> Self:
+    def from_bytes(cls, filename: str, content: bytes) -> Self:
         """Create a MediaResource from bytes in memory."""
-        if media_type is None:
-            media_type = MediaType.from_filename(filename) or "application/octet-stream"
-        return cls(filename, media_type, content=content)
+        return cls(filename, content=content)
