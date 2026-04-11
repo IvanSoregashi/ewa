@@ -2,6 +2,7 @@ import logging
 import tempfile
 from collections.abc import Generator, Iterable, Callable
 from contextlib import contextmanager
+from enum import Enum, auto
 from pathlib import Path
 from posixpath import join as posix_join, dirname as posix_dirname
 from typing import Self
@@ -18,6 +19,10 @@ from library.epub.xml_models.opf_model import PackageDocument
 
 logger = logging.getLogger(__name__)
 
+class EpubSpecification(Enum):
+    EWA_ORIGINAL = auto()
+    SERENE_PANDA = auto()
+    UNKNOWN = auto()
 
 class EPUBResource:
     """Represents a single file in an EPUB archive."""
@@ -388,20 +393,19 @@ class EpubCore:
 class EPUB:
     def __init__(self, path: str | Path) -> None:
         """Initialize an EPUB object with path to epub file or a directory."""
-        self.path = Path(path)
-        self.skip_dirs = True
-        self.source: SourceProtocol | None = None
-        if self.path.is_dir():
-            self.source = DirectorySource(path, skip_dirs=self.skip_dirs)
-        elif is_zipfile(path):
-            self.source = ZipFileSource(path, skip_dirs=self.skip_dirs)
-        else:
-            raise ValueError("Path must be a directory or a zipfile.")
-        if self.source is None:
+        self.path: Path = Path(path)
+        self.__skip_dirs: bool = True
+        self.__confirmed_epub: bool = False
+        self.__specification = EpubSpecification.UNKNOWN
+        if not path.exists():
             # TODO: None for creating new epub? or pass in the not yet existing path
             raise FileNotFoundError(f"Source {path} was not recognized as directory or epub(zipfile).")
-        self._confirmed_epub: bool = False
-        self._core: EpubCore | None = None
+        if self.path.is_dir():
+            self.source: SourceProtocol = DirectorySource(path, skip_dirs=self.__skip_dirs)
+        elif is_zipfile(path):
+            self.source: SourceProtocol = ZipFileSource(path, skip_dirs=self.__skip_dirs)
+        else:
+            raise ValueError("Path must be a directory or a zipfile.")
 
     def __repr__(self):
         return f"EPUB({self.path})"
@@ -420,7 +424,7 @@ class EPUB:
         Raises:
             ValueError: If any check fails.
         """
-        if self._confirmed_epub:
+        if self.__confirmed_epub:
             return True
         with self.source.open():
             try:
@@ -442,7 +446,7 @@ class EPUB:
                 logger.error(f"{self} 'mimetype' content is not 'application/epub+zip'.")
                 raise ValueError(f"EPUB 'mimetype' file must contain 'application/epub+zip', got {content!r}.")
 
-        self._confirmed_epub = True
+        self.__confirmed_epub = True
         return True
 
     def extract_to(self, dest_dir: str | Path | None = None) -> EPUB:
@@ -485,7 +489,7 @@ class EPUB:
                         continue
                     if zip_info.filename == "mimetype":
                         continue
-                    if self.skip_dirs and zip_info.is_dir():
+                    if self.__skip_dirs and zip_info.is_dir():
                         continue
 
                     # Check if we have a version in memory (loaded)

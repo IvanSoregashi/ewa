@@ -75,6 +75,10 @@ class MediaType(StrEnum):
     NCX = "application/x-dtbncx+xml", Category.OTHER
     SMIL_XML = "application/smil+xml", Category.OTHER
 
+    # Foreign
+    MARKDOWN = "text/markdown", Category.FOREIGN
+    MHTML = "message/rfc822", Category.FOREIGN
+
     def __new__(cls, value: str, category: Category) -> Self:
         obj = str.__new__(cls, value)
         obj._value_ = value
