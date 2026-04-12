@@ -1,6 +1,5 @@
 import mimetypes
 from pathlib import Path
-from library.filetypes.mimetypes_utils import parse_mime_types, write_mime_types
 
 # Explicitly load our standard mime.types file
 # so it is correctly instantiated upon package import.

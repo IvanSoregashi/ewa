@@ -1,7 +1,6 @@
 import io
 import logging
 from contextlib import contextmanager
-from dataclasses import dataclass
 from pathlib import Path
 from collections import defaultdict
 from typing import overload
@@ -64,9 +63,9 @@ def write_mime_types(data: dict[str, str], file: str | Path | None = None) -> st
         if file is not None:
             mimetypes = Path(file).open(mode="w", encoding="utf-8", newline="\n")
         for category in categories:
-            mimetypes.write(f"\n# =========================================\n")
+            mimetypes.write("\n# =========================================\n")
             mimetypes.write(f"# {category.upper()} TYPES\n")
-            mimetypes.write(f"# =========================================\n\n")
+            mimetypes.write("# =========================================\n\n")
 
             category_mimetypes = sorted(
                 [
