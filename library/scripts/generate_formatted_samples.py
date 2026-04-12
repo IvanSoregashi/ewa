@@ -6,7 +6,7 @@ from lxml import etree
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
 from library.xml.utils import etree_from_bytes
-from library.epub.xml_models.opf_model import PackageDocument as PydanticPackageDocument
+from library.epub.xml_models.package_document import PackageDocument as PydanticPackageDocument
 
 
 def main():
