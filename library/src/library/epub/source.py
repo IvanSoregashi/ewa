@@ -27,7 +27,7 @@ class SourceType(Enum):
 
 
 class SourceProtocol(Protocol):
-    def getinfo(self, path: str | Path | ZipPath) -> ZipInfo: ...
+    def getinfo(self, path: str | Path | ZipPath) -> ZipInfo | None: ...
     def getpath(self, path: str | Path | ZipPath) -> Path | ZipPath: ...
 
     def infolist(self) -> list[ZipInfo]: ...
@@ -60,7 +60,9 @@ class DirectorySource:
     def __repr__(self):
         return f"{self.__class__.__name__}({self.root.name})"
 
-    def _to_zipinfo(self, name: str) -> ZipInfo:
+    def _to_zipinfo(self, name: str) -> ZipInfo | None:
+        if not (self.root / name).exists():
+            return None
         return ZipInfo.from_file(
             self.root / name,
             arcname=name,
@@ -77,7 +79,7 @@ class DirectorySource:
             return path.filename
         return self._to_absolute_path(path).relative_to(self.root).as_posix()
 
-    def getinfo(self, path: str | Path | ZipInfo) -> ZipInfo:
+    def getinfo(self, path: str | Path | ZipInfo) -> ZipInfo | None:
         if isinstance(path, ZipInfo):
             return path
         return self._to_zipinfo(self._to_relative_path(path))
@@ -146,13 +148,16 @@ class ZipFileSource:
             self.log.error("This operation requires source to be open.")
             raise IOError("This operation requires source to be open.")
 
-    def getinfo(self, path: str | ZipPath | ZipInfo) -> ZipInfo:
+    def getinfo(self, path: str | ZipPath | ZipInfo) -> ZipInfo | None:
         if isinstance(path, ZipInfo):
             return path
         if isinstance(path, ZipPath):
             path = path.at
         with self.open():
-            return self.zip_file.getinfo(str(path))
+            try:
+                return self.zip_file.getinfo(str(path))
+            except KeyError:
+                return None
 
     def getpath(self, path: str | ZipPath | ZipInfo) -> ZipPath:
         self._should_be_open()

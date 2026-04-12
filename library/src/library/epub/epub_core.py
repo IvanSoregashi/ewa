@@ -1,11 +1,36 @@
+import logging
+from enum import StrEnum
+from posixpath import join as posix_join, dirname as posix_dirname
+from typing import Protocol
 
+from library.epub.media_type import MediaType, Category
+from library.epub.resources import ResourceIndex, EPUBResource
+from library.epub.utils import strip_fragment
+from library.epub.xml_literals import FileName
+from library.epub.xml_models.container_model import ContainerDocument
+from library.epub.xml_models.ncx_model import NCXDocument, NavPoint
+from library.epub.xml_models.nav_model import NavDocument, NavListItem
+from library.epub.xml_models.package_document import PackageDocument
+
+logger = logging.getLogger(__name__)
 
 class EpubCoreProtocol(Protocol):
     package: PackageDocument
     ncx: NCXDocument
     nav: NavDocument
+
     def sync(self): ...
 
+
+class EpubSpecification(StrEnum):
+    UNKNOWN = "UNKNOWN"
+    SERENE_PANDA_ENCRYPTED = "SERENE_PANDA_ENCRYPTED"
+    SERENE_PANDA_UNENCRYPTED = "SERENE_PANDA_UNENCRYPTED"
+    ASIA_NOVEL = "ASIA_NOVEL"
+    CALIBRE = "CALIBRE"
+    WEB_TO_EPUB = "WEB_TO_EPUB"
+    EPUB_PRESS = "EPUB_PRESS"
+    EWA_ONE = "EWA_ONE"
 
 
 class EpubCore:
@@ -55,17 +80,17 @@ class EpubCore:
 
     def _parse_container(self) -> None:
         """Parse META-INF/container.xml to find the OPF path."""
-        self.mimetype_resource = self.resources.by_path("mimetype")
-        self.container_resource = self.resources.by_path(CONTAINER_PATH)
+        self.mimetype_resource = self.resources.by_path(FileName.MIMETYPE)
+        self.container_resource = self.resources.by_path(FileName.CONTAINER)
         if self.container_resource is None:
-            raise ValueError(f"EPUB is missing '{CONTAINER_PATH}'.")
+            raise ValueError(f"EPUB is missing '{FileName.CONTAINER}'.")
 
         container = ContainerDocument.from_xml(self.container_resource.content)
         if len(container.rootfiles) > 1:
             logger.warning(f"{self} has {len(container.rootfiles)} rootfiles. Using the first one.")
         self._opf_path = container.opf_path
         if self._opf_path is None:
-            raise ValueError(f"container.xml does not specify an OPF rootfile.")
+            raise ValueError("container.xml does not specify an OPF rootfile.")
 
     def _parse_opf(self) -> None:
         """Parse the OPF package document."""
@@ -235,7 +260,6 @@ class EpubCore:
     # -----------------------------------------------------------------------
     # Convenience properties
     # -----------------------------------------------------------------------
-
 
     @property
     def styles(self) -> list[EPUBResource]:

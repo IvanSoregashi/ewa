@@ -1,393 +1,17 @@
 import logging
 import tempfile
-from collections.abc import Generator, Iterable, Callable
+from collections.abc import Generator, Iterable
 from contextlib import contextmanager
-from enum import Enum, auto
 from pathlib import Path
-from posixpath import join as posix_join, dirname as posix_dirname
 from typing import Self
 from zipfile import is_zipfile, ZipFile, ZIP_STORED, ZIP_DEFLATED, ZipInfo
 
-from library.epub.media_type import MediaType, Category
+from library.epub.epub_core import EpubCore
+from library.epub.resources import ResourceIndex, EPUBResource
 from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
-from library.epub.utils import strip_fragment
-from library.epub.xml_literals import CONTAINER_PATH
-from library.epub.xml_models.container_model import ContainerDocument
-from library.epub.xml_models.ncx_model import NCXDocument, NavPoint
-from library.epub.xml_models.nav_model import NavDocument, NavListItem
-from library.epub.xml_models.opf_model import PackageDocument
+from library.epub.xml_literals import FileName, FileContents
 
 logger = logging.getLogger(__name__)
-
-class EpubSpecification(Enum):
-    EWA_ORIGINAL = auto()
-    SERENE_PANDA = auto()
-    UNKNOWN = auto()
-
-class EPUBResource:
-    """Represents a single file in an EPUB archive."""
-
-    def __init__(self, info: ZipInfo, read_bytes_func: Callable[[str | ZipInfo], bytes]) -> None:
-        self.info = info
-        self.media_type = MediaType.from_filename(info.filename)
-        self._content: bytes | None = None
-        self._read_bytes_func = read_bytes_func
-
-        # Manifest attributes (populated during OPF enrichment)
-        self.id: str | None = None
-        self.properties: list[str] | None = None
-        self.href: str | None = None
-        self.fallback: str | None = None
-        self.media_overlay: str | None = None
-
-        # Spine attributes (populated during OPF enrichment)
-        self.spine_index: int | None = None
-        self.linear: str | None = None
-
-        # Guide attributes (populated during OPF enrichment)
-        self.guide_type: str | None = None
-        self.guide_title: str | None = None
-
-        # Navigation label (populated during NCX/NAV enrichment)
-        self.toc_label: str | None = None
-
-    def __repr__(self) -> str:
-        return f"EPUBResource({self.filename!r}, media_type={str(self.media_type)})"
-
-    @property
-    def loaded(self) -> bool:
-        return self._content is not None
-
-    @property
-    def content(self) -> bytes:
-        if self._content is None:
-            self._content = self._read_bytes_func(self.info)
-        return self._content
-
-    @content.setter
-    def content(self, value: bytes) -> None:
-        self._content = value
-
-    @property
-    def filename(self) -> str:
-        return self.info.filename
-
-    @filename.setter
-    def filename(self, value: str) -> None:
-        self.info.filename = value
-
-    @property
-    def is_spine_item(self) -> bool:
-        return self.spine_index is not None
-
-
-class ResourceIndex:
-    """Auto-indexed collection of EPUBResource objects.
-
-    Provides O(1) lookup by filename and by manifest ID,
-    while maintaining a stable list for iteration.
-    """
-
-    def __init__(self, resources: list[EPUBResource] | None = None) -> None:
-        self._items: list[EPUBResource] = []
-        self._by_path: dict[str, EPUBResource] = {}
-        self._by_id: dict[str, EPUBResource] = {}
-        if resources:
-            for r in resources:
-                self.add(r)
-
-    def __repr__(self) -> str:
-        return f"ResourceIndex({len(self._items)} resources)"
-
-    def __iter__(self):
-        return iter(self._items)
-
-    def __len__(self) -> int:
-        return len(self._items)
-
-    def __contains__(self, item: EPUBResource | str) -> bool:
-        if isinstance(item, str):
-            return item in self._by_path
-        return item in self._items
-
-    def add(self, resource: EPUBResource) -> None:
-        """Add a resource to the index."""
-        self._items.append(resource)
-        self._by_path[resource.filename] = resource
-        if resource.id is not None:
-            self._by_id[resource.id] = resource
-
-    def remove(self, resource: EPUBResource) -> None:
-        """Remove a resource from the index."""
-        self._items.remove(resource)
-        self._by_path.pop(resource.filename, None)
-        if resource.id is not None:
-            self._by_id.pop(resource.id, None)
-
-    def by_path(self, path: str) -> EPUBResource | None:
-        """Look up a resource by its filename/path."""
-        return self._by_path.get(path)
-
-    def by_id(self, id: str) -> EPUBResource | None:
-        """Look up a resource by its manifest ID."""
-        return self._by_id.get(id)
-
-    def rebuild_id_index(self) -> None:
-        """Rebuild the ID index (call after OPF enrichment populates IDs)."""
-        self._by_id = {r.id: r for r in self._items if r.id is not None}
-
-
-class EpubCore:
-    """Manages the structural core of an EPUB archive.
-
-    Initialized with a ResourceIndex (from EPUB.scan_resources()), it parses
-    the container, OPF, NCX, and NAV documents to enrich resources with
-    metadata and provide convenient access to core files.
-    """
-
-    def __init__(self, resources: ResourceIndex) -> None:
-        self.resources = resources
-
-        # Core documents (populated during parsing)
-        self._opf_path: str | None = None
-        self.package: PackageDocument | None = None
-        self.ncx: NCXDocument | None = None
-        self.nav: NavDocument | None = None
-
-        # Core resource references (populated during enrichment)
-        self.mimetype_resource: EPUBResource | None = None
-        self.container_resource: EPUBResource | None = None
-        self.opf_resource: EPUBResource | None = None
-        self.ncx_resource: EPUBResource | None = None
-        self.nav_resource: EPUBResource | None = None
-        self.cover_resource: EPUBResource | None = None
-
-        # Run the parsing pipeline
-        self._parse_container()
-        self._parse_opf()
-        self._enrich_from_opf()
-        self._enrich_from_ncx()
-        self._enrich_from_nav()
-
-    def sync(self) -> None:
-        """Serialize all core models (package, ncx, nav) back to their respective resources."""
-        if self.package and self.opf_resource:
-            self.opf_resource.content = self.package.to_xml_bytes()
-        if self.ncx and self.ncx_resource:
-            self.ncx_resource.content = self.ncx.to_xml_bytes()
-        if self.nav and self.nav_resource:
-            self.nav_resource.content = self.nav.to_xml_bytes()
-
-    # -----------------------------------------------------------------------
-    # Parsing pipeline
-    # -----------------------------------------------------------------------
-
-    def _parse_container(self) -> None:
-        """Parse META-INF/container.xml to find the OPF path."""
-        self.mimetype_resource = self.resources.by_path("mimetype")
-        self.container_resource = self.resources.by_path(CONTAINER_PATH)
-        if self.container_resource is None:
-            raise ValueError(f"EPUB is missing '{CONTAINER_PATH}'.")
-
-        container = ContainerDocument.from_xml(self.container_resource.content)
-        if len(container.rootfiles) > 1:
-            logger.warning(f"{self} has {len(container.rootfiles)} rootfiles. Using the first one.")
-        self._opf_path = container.opf_path
-        if self._opf_path is None:
-            raise ValueError(f"container.xml does not specify an OPF rootfile.")
-
-    def _parse_opf(self) -> None:
-        """Parse the OPF package document."""
-        if self._opf_path is None:
-            raise ValueError("OPF path not set. Call _parse_container first.")
-
-        self.opf_resource = self.resources.by_path(self._opf_path)
-        if self.opf_resource is None:
-            raise ValueError(f"OPF file '{self._opf_path}' not found in resources.")
-
-        self.package = PackageDocument.from_xml(self.opf_resource.content)
-
-    def _resolve_href(self, href: str) -> str:
-        """Resolve a manifest href (relative to OPF) to an absolute EPUB path."""
-        href = strip_fragment(href)
-        opf_dir = posix_dirname(self._opf_path)
-        if opf_dir:
-            return posix_join(opf_dir, href)
-        return href
-
-    # -----------------------------------------------------------------------
-    # OPF enrichment
-    # -----------------------------------------------------------------------
-
-    def _enrich_from_opf(self) -> None:
-        """Enrich resources with manifest, spine, and guide data from the OPF."""
-        if self.package is None:
-            return
-
-        # --- Manifest ---
-        for item in self.package.manifest.items:
-            abs_path = self._resolve_href(item.href)
-            resource = self.resources.by_path(abs_path)
-            if resource is None:
-                logger.warning(f"Manifest item '{item.id}' references missing file: {abs_path}")
-                continue
-
-            resource.id = item.id
-            resource.href = item.href
-            resource.fallback = item.fallback
-            resource.media_overlay = getattr(item, "overlay", None)
-
-            if item.properties:
-                resource.properties = item.properties.split()
-            else:
-                resource.properties = []
-
-            # Override media type from manifest if present
-            if item.media_type:
-                resource.media_type = MediaType(item.media_type)
-
-        # Rebuild ID index now that IDs are populated
-        self.resources.rebuild_id_index()
-
-        # --- Spine ---
-        for idx, itemref in enumerate(self.package.spine.itemrefs):
-            resource = self.resources.by_id(itemref.idref)
-            if resource is None:
-                logger.warning(f"Spine itemref '{itemref.idref}' references unknown manifest ID.")
-                continue
-            resource.spine_index = idx
-            resource.linear = itemref.linear
-
-        # --- Guide ---
-        if self.package.guide:
-            for ref in self.package.guide.references:
-                abs_path = self._resolve_href(ref.href)
-                resource = self.resources.by_path(abs_path)
-                if resource is None:
-                    logger.warning(f"Guide reference '{ref.type}' references missing file: {abs_path}")
-                    continue
-                resource.guide_type = ref.type
-                resource.guide_title = ref.title
-
-        # --- Identify core resources from manifest data ---
-        self._identify_core_resources()
-
-    def _identify_core_resources(self) -> None:
-        """Identify NCX, NAV, and cover resources from enriched manifest data."""
-        # NCX: found via spine@toc attribute or by media type
-        if self.package.spine.toc:
-            self.ncx_resource = self.resources.by_id(self.package.spine.toc)
-        if self.ncx_resource is None:
-            for r in self.resources:
-                if r.media_type == MediaType.NCX:
-                    self.ncx_resource = r
-                    break
-
-        # NAV: found via manifest properties="nav"
-        for r in self.resources:
-            if r.properties and "nav" in r.properties:
-                self.nav_resource = r
-                break
-
-        # Cover image: EPUB 3 properties="cover-image" or EPUB 2 meta
-        for r in self.resources:
-            if r.properties and "cover-image" in r.properties:
-                self.cover_resource = r
-                break
-        if self.cover_resource is None and self.package:
-            for meta in self.package.metadata.metas:
-                name = getattr(meta, "name", None)
-                content = getattr(meta, "content_attr", None)
-                if name == "cover" and content:
-                    self.cover_resource = self.resources.by_id(content)
-                    break
-
-    # -----------------------------------------------------------------------
-    # NCX enrichment
-    # -----------------------------------------------------------------------
-
-    def _enrich_from_ncx(self) -> None:
-        """Enrich resources with toc_label from the NCX document."""
-        if self.ncx_resource is None:
-            return
-
-        self._ncx = NCXDocument.from_xml(self.ncx_resource.content)
-        if self._ncx.nav_map is None:
-            return
-
-        self._walk_ncx_navpoints(self._ncx.nav_map.nav_points)
-
-    def _walk_ncx_navpoints(self, navpoints: list[NavPoint]) -> None:
-        """Recursively walk NCX navPoints and set toc_label on resources."""
-        for point in navpoints:
-            if point.content and point.content.src:
-                abs_path = self._resolve_href(strip_fragment(point.content.src))
-                resource = self.resources.by_path(abs_path)
-                if resource and resource.toc_label is None:
-                    label = None
-                    if point.nav_label and point.nav_label.text:
-                        label = point.nav_label.text
-                    resource.toc_label = label
-
-            if point.nav_points:
-                self._walk_ncx_navpoints(point.nav_points)
-
-    # -----------------------------------------------------------------------
-    # NAV enrichment
-    # -----------------------------------------------------------------------
-
-    def _enrich_from_nav(self) -> None:
-        """Enrich resources with toc_label from the NAV document."""
-        if self.nav_resource is None:
-            return
-
-        self._nav = NavDocument.from_xml(self.nav_resource.content)
-
-        for nav_elem in self._nav.body.navs:
-            if nav_elem.epub_type and "toc" in nav_elem.epub_type:
-                if nav_elem.ol:
-                    self._walk_nav_items(nav_elem.ol.items)
-                return
-
-    def _walk_nav_items(self, items: list[NavListItem]) -> None:
-        """Recursively walk NAV list items and set toc_label on resources."""
-        for item in items:
-            if item.link and item.link.href:
-                abs_path = self._resolve_href(strip_fragment(item.link.href))
-                resource = self.resources.by_path(abs_path)
-                if resource and resource.toc_label is None:
-                    resource.toc_label = item.link.text
-
-            if item.ol:
-                self._walk_nav_items(item.ol.items)
-
-    # -----------------------------------------------------------------------
-    # Convenience properties
-    # -----------------------------------------------------------------------
-
-
-    @property
-    def styles(self) -> list[EPUBResource]:
-        """All CSS stylesheets in the EPUB."""
-        return [r for r in self.resources if r.media_type.category == Category.STYLE]
-
-    @property
-    def fonts(self) -> list[EPUBResource]:
-        """All font files in the EPUB."""
-        return [r for r in self.resources if r.media_type.category == Category.FONT]
-
-    @property
-    def images(self) -> list[EPUBResource]:
-        """All image files in the EPUB."""
-        return [r for r in self.resources if r.media_type.category == Category.IMAGE]
-
-    @property
-    def spine(self) -> list[EPUBResource]:
-        """Resources in spine order."""
-        return sorted(
-            [r for r in self.resources if r.is_spine_item],
-            key=lambda r: r.spine_index,
-        )
 
 
 class EPUB:
@@ -396,7 +20,6 @@ class EPUB:
         self.path: Path = Path(path)
         self.__skip_dirs: bool = True
         self.__confirmed_epub: bool = False
-        self.__specification = EpubSpecification.UNKNOWN
         if not path.exists():
             # TODO: None for creating new epub? or pass in the not yet existing path
             raise FileNotFoundError(f"Source {path} was not recognized as directory or epub(zipfile).")
@@ -424,41 +47,46 @@ class EPUB:
         Raises:
             ValueError: If any check fails.
         """
+        mt = FileName.MIMETYPE
+        mtc = FileContents.MIMETYPE
+
         if self.__confirmed_epub:
             return True
+
         with self.source.open():
-            try:
-                mimetype_info = self.source.getinfo("mimetype")
-            except KeyError:
-                logger.error(f"{self} is missing the 'mimetype' file.")
-                raise ValueError("EPUB is missing the 'mimetype' file.")
+            mimetype_info = self.source.getinfo(mt)
+            if mimetype_info is None:
+                logger.error(f"{self} is missing the '{mt}' file.")
+                raise ValueError(f"EPUB is missing the '{mt}' file.")
 
             # Check compression: must be ZIP_STORED (0) or None (directory source)
             if mimetype_info.compress_type not in (ZIP_STORED, None):
                 logger.error(f"{self} {mimetype_info.compress_type=}")
                 raise ValueError(
-                    f"EPUB 'mimetype' file must be stored uncompressed (ZIP_STORED), "
+                    f"EPUB '{mt}' file must be stored uncompressed (ZIP_STORED), "
                     f"got compress_type={mimetype_info.compress_type}."
                 )
 
-            content = self.source.read_bytes(mimetype_info)
-            if content.strip() != b"application/epub+zip":
-                logger.error(f"{self} 'mimetype' content is not 'application/epub+zip'.")
-                raise ValueError(f"EPUB 'mimetype' file must contain 'application/epub+zip', got {content!r}.")
+            content = self.source.read_text(mimetype_info)
+            if content.strip() != mtc:
+                logger.error(f"{self} '{mt}' content is not '{mtc}', got {content!r}.")
+                raise ValueError(f"EPUB '{mt}' file must contain '{mtc}', got {content!r}.")
 
         self.__confirmed_epub = True
         return True
 
     def extract_to(self, dest_dir: str | Path | None = None) -> EPUB:
         if dest_dir is None:
-            dest_dir = Path(tempfile.mkdtemp())
+            dest_dir: Path = Path(tempfile.mkdtemp())
+        if isinstance(dest_dir, str):
+            dest_dir: Path = Path(dest_dir)
         dest_dir.mkdir(parents=True, exist_ok=True)
         self.source.extract_all(destination=dest_dir)
         return EPUB(dest_dir)
 
     def package_into(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None):
         exclude_members = [m.filename if isinstance(m, ZipInfo) else m for m in (exclude_members or [])]
-        destination = Path(destination)
+        destination: Path = Path(destination)
         self.confirm_mimetype()
 
         # If core is active, sync models back to resources before packing
@@ -481,13 +109,13 @@ class EPUB:
 
         try:
             with self.source.open(), ZipFile(destination, "w", compression=ZIP_DEFLATED) as zipf:
-                mimetype_info = self.source.getinfo("mimetype")
+                mimetype_info = self.source.getinfo(FileName.MIMETYPE)
                 self.source.write_to_zipfile(zipf, mimetype_info, compress_type=ZIP_STORED)
 
                 for zip_info in self.source.infolist():
                     if zip_info.filename in exclude_members:
                         continue
-                    if zip_info.filename == "mimetype":
+                    if zip_info.filename == FileName.MIMETYPE:
                         continue
                     if self.__skip_dirs and zip_info.is_dir():
                         continue
