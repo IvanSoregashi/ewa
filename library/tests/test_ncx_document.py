@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 from library.epub.xml_models.ncx_model import NCXDocument as PydanticNCXDocument
-from library.epub.xml_models.ncx_schema import NCXDocument as CustomNCXDocument
+from library.epub.xml_custom_models.ncx_schema import NCXDocument as CustomNCXDocument
 from library.xml.utils import compare_roundtrip
 
 SAMPLE_DIR = Path(__file__).parent / "samples" / "ncx"
@@ -86,7 +86,7 @@ def test_ncx_add(package_class):
 
         content = PydanticContent(src="new.xhtml")
     else:
-        from library.epub.xml_models.ncx_schema import Content as CustomContent
+        from library.epub.xml_custom_models.ncx_schema import Content as CustomContent
 
         content = CustomContent.create(src="new.xhtml")
 

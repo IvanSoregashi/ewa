@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 from library.epub.xml_models.nav_model import NavDocument as PydanticNavDocument
-from library.epub.xml_models.nav_schema import NavDocument as CustomNavDocument
+from library.epub.xml_custom_models.nav_schema import NavDocument as CustomNavDocument
 from library.xml.utils import compare_roundtrip
 
 SAMPLE_DIR = Path(__file__).parent / "samples" / "nav"
@@ -91,7 +91,7 @@ def test_nav_add(package_class):
 
         link = PNavLink(href="new.xhtml", text="NEW ITEM")
     else:
-        from library.epub.xml_models.nav_schema import NavLink as CNavLink
+        from library.epub.xml_custom_models.nav_schema import NavLink as CNavLink
 
         link = CNavLink.create(href="new.xhtml", text="NEW ITEM")
 

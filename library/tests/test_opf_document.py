@@ -2,13 +2,13 @@ from pathlib import Path
 
 import pytest
 
-from library.epub.xml_models.opf_model import (
+from library.epub.xml_models.package_document import (
     PackageDocument as PydanticPackageDocument,
     Metadata as PydanticMetadata,
     Manifest as PydanticManifest,
     Spine as PydanticSpine,
 )
-from library.epub.xml_models.opf_schema import (
+from library.epub.xml_custom_models.opf_schema import (
     PackageDocument as CustomPackageDocument,
     Metadata as CustomMetadata,
     Manifest as CustomManifest,
@@ -23,7 +23,7 @@ ALL_OPF_DIR = Path("~").expanduser() / ".ewa" / "epub" / "opf"
 ALL_OPF_PATHS = list(ALL_OPF_DIR.glob("*.opf"))
 
 
-@pytest.fixture(params=ALL_SAMPLES)
+@pytest.fixture(params=ALL_OPF_PATHS)
 def opf_path(request: pytest.FixtureRequest) -> Path:
     return request.param
 
@@ -36,8 +36,8 @@ def package_class(request: pytest.FixtureRequest) -> PydanticPackageDocument:
     return p_class
 
 
-def test_opf_roundtrip(package_class, opf_path):
-    assert compare_roundtrip(package_class, str(opf_path))
+def test_opf_roundtrip(opf_path):
+    assert compare_roundtrip(PydanticPackageDocument, str(opf_path))
 
 
 def test_opf_literal_comparison(package_class, opf_path):
