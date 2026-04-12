@@ -29,3 +29,7 @@ class ContainerDocument(XMLDocumentSchema, tag="container", ns=XMLNamespace.CONT
             if rootfile.media_type == "application/oebps-package+xml":
                 return rootfile.full_path
         return None
+
+    @property
+    def opf_paths(self) -> list[str]:
+        return [rootfile.full_path for rootfile in self.rootfiles]
