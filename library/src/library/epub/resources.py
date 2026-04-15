@@ -1,35 +1,37 @@
+from enum import Enum, auto
 from typing import Callable
 from zipfile import ZipInfo
 
 from library.epub.media_type import MediaType
+from library.epub.xml_models.ncx_model import NavPoint
+from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
+
+
+class ResourceType(Enum):
+    UNKNOWN = auto()
+    CORE = auto()
+    COMMON = auto()
+    CONTENT = auto()
 
 
 class EPUBResource:
     """Represents a single file in an EPUB archive."""
 
     def __init__(self, info: ZipInfo, read_bytes_func: Callable[[str | ZipInfo], bytes]) -> None:
-        self.info = info
-        self.media_type = MediaType.from_filename(info.filename)
+        self.info: ZipInfo = info
         self._content: bytes | None = None
         self._read_bytes_func = read_bytes_func
 
-        # Manifest attributes (populated during OPF enrichment)
-        self.id: str | None = None
-        self.properties: list[str] | None = None
-        self.href: str | None = None
-        self.fallback: str | None = None
-        self.media_overlay: str | None = None
+        self.media_type = MediaType.from_filename(info.filename)
+        self.resource_type: ResourceType = ResourceType.UNKNOWN
 
-        # Spine attributes (populated during OPF enrichment)
-        self.spine_index: int | None = None
-        self.linear: str | None = None
+        # OPF
+        self.manifest_item: ManifestItem | None = None
+        self.spine_item_ref: SpineItemRef | None = None
+        self.guide_reference: GuideReference | None = None
 
-        # Guide attributes (populated during OPF enrichment)
-        self.guide_type: str | None = None
-        self.guide_title: str | None = None
-
-        # Navigation label (populated during NCX/NAV enrichment)
-        self.toc_label: str | None = None
+        # NCX
+        self.ncx_nav_point: NavPoint | None = None
 
     def __repr__(self) -> str:
         return f"EPUBResource({self.filename!r}, media_type={str(self.media_type)})"
@@ -54,7 +56,7 @@ class EPUBResource:
 
     @property
     def is_spine_item(self) -> bool:
-        return self.spine_index is not None
+        return self.spine_item_ref is not None
 
 
 class ResourceIndex:
