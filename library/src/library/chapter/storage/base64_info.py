@@ -8,7 +8,7 @@ from library.chapter.media import MediaResource
 
 class Base64Storage:
     """Storage backend for saving/loading Chapters as a single JSON file.
-    
+
     Media assets are embedded as Base64-encoded strings.
     """
 
@@ -40,18 +40,18 @@ class Base64Storage:
     def load(self, path: str | Path) -> Chapter:
         path = Path(path)
         data = json.loads(path.read_text(encoding="utf-8"))
-        
+
         # Load metadata
         metadata_dict = data.get("metadata", {})
         known_fields = set(ChapterMetadata.model_fields.keys())
         extra = {k: v for k, v in metadata_dict.items() if k not in known_fields}
-        
+
         # Clean up metadata_dict to only contain known fields
         metadata_args = {k: v for k, v in metadata_dict.items() if k in known_fields}
         metadata_args["extra"] = extra
-        
+
         metadata = ChapterMetadata(**metadata_args)
-        
+
         # Load media
         media = []
         for m in data.get("media", []):
@@ -62,7 +62,7 @@ class Base64Storage:
                     content=base64.b64decode(m["content"]),
                 )
             )
-            
+
         return Chapter(
             metadata=metadata,
             content=data["content"],
