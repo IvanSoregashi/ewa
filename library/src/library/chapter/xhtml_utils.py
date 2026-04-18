@@ -2,10 +2,9 @@ from lxml import html
 from lxml.html import HtmlElement
 import json
 import logging
-import markdownify
-import markdown_it
 
-logger = logging.getLogger("parsing_html")
+logger = logging.getLogger(__file__)
+
 
 def from_html_head_parse_frontmatter(head: HtmlElement) -> dict:
     metadata_scripts = head.xpath('.//script[@id="frontmatter" and @type="application/ld+json"]')
@@ -13,7 +12,8 @@ def from_html_head_parse_frontmatter(head: HtmlElement) -> dict:
         return json.loads(metadata_scripts[0].text_content())
     return {}
 
-def from_html_head_parse_links(head: HtmlElement) -> tuple[list, list]:
+
+def from_html_head_parse_links(head: HtmlElement) -> list:
     stylesheets = []
     other_links = []
     for element, attribute, link, pos in head.iterlinks():
@@ -24,13 +24,15 @@ def from_html_head_parse_links(head: HtmlElement) -> tuple[list, list]:
             stylesheets.append(tpl)
             continue
         other_links.append(tpl)
-    return stylesheets, other_links
+    return stylesheets + other_links
+
 
 def from_html_body_parse_first_header(body: HtmlElement) -> str | None:
-    header = body.xpath('.//h1|.//h2|.//h3|.//h4|.//h5|.//h6')
+    header = body.xpath(".//h1|.//h2|.//h3|.//h4|.//h5|.//h6")
     if header:
         return header[0].text_content()
     return None
+
 
 def from_html_body_parse_highest_header(body: HtmlElement) -> str | None:
     for tag in ["h1", "h2", "h3", "h4", "h5", "h6"]:
@@ -39,31 +41,33 @@ def from_html_body_parse_highest_header(body: HtmlElement) -> str | None:
             return found.text_content()
     return None
 
-def from_html_body_parse_attachments(body: HtmlElement, tag: str | None = None):
+
+def from_html_body_parse_attachments(body: HtmlElement, tag: str | None = None) -> list:
 
     images = []
     other_attachments = []
 
     for element, attribute, link, pos in body.iterlinks():
         logger.debug(f"{element.tag}, {attribute}, {link}")
-        if link.startswith('#'):
+        if link.startswith("#"):
             continue
+        attrs = element.attrib
+        tpl = (element.tag, attrs, element.text_content())
         if element.tag in ("img", "image", "picture", "source"):
-            images.append((link, element.attrib.get("alt") or element.text_content()))
+            images.append(tpl)
             continue
-        other_attachments.append(element.tag, element.attrib)
-    return images, other_attachments
+        other_attachments.append(tpl)
+    return images + other_attachments
 
 
-def parse_html_content(file_content: str | bytes) -> dict:
-    """
-
-    """
+def parse_html_content(file_content: str | bytes) -> tuple[dict, list, list]:
+    """ """
     tree: HtmlElement = html.document_fromstring(file_content)
 
-    head: HtmlElement = tree.find('.//head')
+    head: HtmlElement = tree.find(".//head")
+    title = head.xpath(".//title")[0].text_content()
     metadata: dict = from_html_head_parse_frontmatter(head)
-    stylesheets, other_links = from_html_head_parse_links(head)
+    head_attach = from_html_head_parse_links(head)
 
     body: HtmlElement = tree.find(".//body")
 
@@ -74,6 +78,6 @@ def parse_html_content(file_content: str | bytes) -> dict:
         logger.debug(f"{highest_header=}")
         metadata["title"] = first_header
 
-    images, other_attachments = from_html_body_parse_attachments(body)
+    body_attach = from_html_body_parse_attachments(body)
 
-    return metadata, images
+    return metadata, head_attach, body_attach
