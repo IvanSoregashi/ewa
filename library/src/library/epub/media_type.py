@@ -1,28 +1,28 @@
-from enum import IntEnum, StrEnum, auto
+from enum import StrEnum
 from pathlib import Path
 from typing import Self, override
 
 from library.filetypes import guess_file_type
 
+class ResourceType(StrEnum):
+    UNKNOWN = "UNKNOWN"
+    CORE = "CORE"
+    COMMON = "COMMON"
+    CONTENT = "CONTENT"
 
-class Category(IntEnum):
+
+class Category(StrEnum):
     """
     Broad categories of media types.
     """
-
-    IMAGE = auto()
-    """Image-based media (e.g., JPEG, PNG, SVG)."""
-    AUDIO = auto()
-    """Audio media (e.g., MP3, AAC, OGG)."""
-    STYLE = auto()
-    """Stylesheets (i.e., CSS)."""
-    FONT = auto()
-    """Fonts (e.g., OTF, TTF, WOFF)."""
-    OTHER = auto()
-    """Miscellaneous resources that do not fit in other categories."""
-    FOREIGN = auto()
-    """Non-core resources."""
-    _SENTINEL = auto()
+    CORE = "CORE"
+    IMAGE = "IMAGE"
+    AUDIO = "AUDIO"
+    TEXT_CONTENT = "TEXT_CONTENT"
+    STYLE = "STYLE"
+    FONT = "FONT"
+    OTHER = "OTHER"
+    FOREIGN = "FOREIGN"
 
 
 class MediaType(StrEnum):
@@ -41,45 +41,50 @@ class MediaType(StrEnum):
     """
 
     category: Category
+    resource_type: ResourceType
+
+    # Core
+    MIMETYPE = "text/mimetype", Category.CORE, ResourceType.CORE
+    NCX = "application/x-dtbncx+xml", Category.CORE, ResourceType.CORE
+    OPF = "application/oebps-package+xml", Category.CORE, ResourceType.CORE
+    XML = "application/xml", Category.CORE, ResourceType.CORE
+
+    # Text content
+    TEXT = "text/plain", Category.TEXT_CONTENT, ResourceType.CONTENT
+    XHTML = "application/xhtml+xml", Category.TEXT_CONTENT, ResourceType.CONTENT
+    HTML = "text/html", Category.TEXT_CONTENT, ResourceType.CONTENT
 
     # Images
-    IMAGE_GIF = "image/gif", Category.IMAGE
-    IMAGE_JPEG = "image/jpeg", Category.IMAGE
-    IMAGE_PNG = "image/png", Category.IMAGE
-    IMAGE_SVG = "image/svg+xml", Category.IMAGE
-    IMAGE_WEBP = "image/webp", Category.IMAGE
+    IMAGE_GIF = "image/gif", Category.IMAGE, ResourceType.CONTENT
+    IMAGE_JPEG = "image/jpeg", Category.IMAGE, ResourceType.CONTENT
+    IMAGE_PNG = "image/png", Category.IMAGE, ResourceType.CONTENT
+    IMAGE_SVG = "image/svg+xml", Category.IMAGE, ResourceType.CONTENT
+    IMAGE_WEBP = "image/webp", Category.IMAGE, ResourceType.CONTENT
 
     # Audio
-    AUDIO_MPEG = "audio/mpeg", Category.AUDIO
-    AUDIO_MP4 = "audio/mp4", Category.AUDIO
-    AUDIO_OGG = "audio/ogg", Category.AUDIO
+    AUDIO_MPEG = "audio/mpeg", Category.AUDIO, ResourceType.CONTENT
+    AUDIO_MP4 = "audio/mp4", Category.AUDIO, ResourceType.CONTENT
+    AUDIO_OGG = "audio/ogg", Category.AUDIO, ResourceType.CONTENT
 
     # Style
-    CSS = "text/css", Category.STYLE
+    CSS = "text/css", Category.STYLE, ResourceType.COMMON
 
     # Fonts
-    FONT_TTF = "font/ttf", Category.FONT
-    FONT_OTF = "font/otf", Category.FONT
-    FONT_WOFF = "font/woff", Category.FONT
-    FONT_WOFF2 = "font/woff2", Category.FONT
-    FONT_SFNT = "application/font-sfnt", Category.FONT
-    VND_MS_OPENTYPE = "application/vnd.ms-opentype", Category.FONT
-    APPLICATION_FONT_WOFF = "application/font-woff", Category.FONT
+    FONT_TTF = "font/ttf", Category.FONT, ResourceType.COMMON
+    FONT_OTF = "font/otf", Category.FONT, ResourceType.COMMON
+    FONT_WOFF = "font/woff", Category.FONT, ResourceType.COMMON
+    FONT_WOFF2 = "font/woff2", Category.FONT, ResourceType.COMMON
+    FONT_SFNT = "application/font-sfnt", Category.FONT, ResourceType.COMMON
+    VND_MS_OPENTYPE = "application/vnd.ms-opentype", Category.FONT, ResourceType.COMMON
+    APPLICATION_FONT_WOFF = "application/font-woff", Category.FONT, ResourceType.COMMON
 
     # Other
-    TEXT = "text/plain", Category.OTHER
-    XHTML = "application/xhtml+xml", Category.OTHER
-    JAVASCRIPT = "application/javascript", Category.OTHER
-    ECMASCRIPT = "application/ecmascript", Category.OTHER
-    TEXT_JAVASCRIPT = "text/javascript", Category.OTHER
-    NCX = "application/x-dtbncx+xml", Category.OTHER
-    SMIL_XML = "application/smil+xml", Category.OTHER
+    JAVASCRIPT = "application/javascript", Category.OTHER, ResourceType.UNKNOWN
+    ECMASCRIPT = "application/ecmascript", Category.OTHER, ResourceType.UNKNOWN
+    TEXT_JAVASCRIPT = "text/javascript", Category.OTHER, ResourceType.UNKNOWN
+    SMIL_XML = "application/smil+xml", Category.OTHER, ResourceType.UNKNOWN
 
-    # Foreign
-    MARKDOWN = "text/markdown", Category.FOREIGN
-    MHTML = "message/rfc822", Category.FOREIGN
-
-    def __new__(cls, value: str, category: Category) -> Self:
+    def __new__(cls, value: str, category: Category, resource_type: ResourceType) -> Self:
         obj = str.__new__(cls, value)
         obj._value_ = value
 
@@ -88,9 +93,11 @@ class MediaType(StrEnum):
     def __init__(
         self,
         value: str,
-        category: Category = Category._SENTINEL,  # type: ignore[reportPrivateUsage]
+        category: Category = Category.FOREIGN,
+        resource_type: ResourceType = ResourceType.UNKNOWN,
     ) -> None:
         self.category = category
+        self.resource_type = resource_type
         super().__init__()
 
     @classmethod
@@ -101,6 +108,7 @@ class MediaType(StrEnum):
             obj._value_ = value
             obj._name_ = "FOREIGN"
             obj.category = Category.FOREIGN
+            obj.resource_type = ResourceType.UNKNOWN
             cls._value2member_map_[value] = obj
 
             return obj
@@ -119,10 +127,11 @@ class MediaType(StrEnum):
         Returns:
             A MediaType instance if the media type is recognized, None otherwise.
         """
-
         guessed = guess_file_type(value)
+        if value == "mimetype":
+            guessed = "text/mimetype"  # custom, idk why
         if not guessed:
-            return cls("application/unknown")
+            guessed = "application/unknown"
         instance = cls(guessed)
         return instance
 
@@ -141,11 +150,3 @@ class MediaType(StrEnum):
     def is_video(self) -> bool:
         """Returns whether if the media type is video."""
         return self.startswith("video/")
-
-
-IMAGE_MEDIA_TYPES = [
-    MediaType.IMAGE_JPEG,
-    MediaType.IMAGE_PNG,
-    MediaType.IMAGE_SVG,
-    "image/jpg",
-]

@@ -1,18 +1,13 @@
+import logging
 from enum import Enum, auto
 from typing import Callable
 from zipfile import ZipInfo
 
-from library.epub.media_type import MediaType
+from library.epub.media_type import MediaType, Category, ResourceType
 from library.epub.xml_models.ncx_model import NavPoint
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
 
-
-class ResourceType(Enum):
-    UNKNOWN = auto()
-    CORE = auto()
-    COMMON = auto()
-    CONTENT = auto()
-
+logger = logging.getLogger("resource")
 
 class EPUBResource:
     """Represents a single file in an EPUB archive."""
@@ -23,7 +18,8 @@ class EPUBResource:
         self._read_bytes_func = read_bytes_func
 
         self.media_type = MediaType.from_filename(info.filename)
-        self.resource_type: ResourceType = ResourceType.UNKNOWN
+        self.category = self.media_type.category
+        self.resource_type = self.media_type.resource_type
 
         # OPF
         self.manifest_item: ManifestItem | None = None
@@ -34,12 +30,13 @@ class EPUBResource:
         self.ncx_nav_point: NavPoint | None = None
 
     def __repr__(self) -> str:
-        return f"EPUBResource({self.filename!r}, media_type={str(self.media_type)})"
+        return f"EPUBResource({self.filename!r}, {self.media_type!s}, {self.category!s}, {self.resource_type!s})"
 
     @property
     def content(self) -> bytes:
         if self._content is None:
             self._content: bytes = self._read_bytes_func(self.info)
+        assert self._content is not None, f"could not read content of {self.filename}"
         return self._content
 
     @content.setter
@@ -92,6 +89,7 @@ class ResourceIndex:
         """Add a resource to the index."""
         self._items.append(resource)
         self._by_path[resource.filename] = resource
+        # TODO: add records of the resource to the documents
         if resource.id is not None:
             self._by_id[resource.id] = resource
 
@@ -99,6 +97,7 @@ class ResourceIndex:
         """Remove a resource from the index."""
         self._items.remove(resource)
         self._by_path.pop(resource.filename, None)
+        # TODO: remove records of the resource from the documents
         if resource.id is not None:
             self._by_id.pop(resource.id, None)
 
@@ -106,10 +105,11 @@ class ResourceIndex:
         """Look up a resource by its filename/path."""
         return self._by_path.get(path)
 
-    def by_id(self, id: str) -> EPUBResource | None:
+    def by_id(self, _id: str) -> EPUBResource | None:
         """Look up a resource by its manifest ID."""
-        return self._by_id.get(id)
+        return self._by_id.get(_id)
 
     def rebuild_id_index(self) -> None:
         """Rebuild the ID index (call after OPF enrichment populates IDs)."""
+        logger.debug(f"rebuilding ID index")
         self._by_id = {r.id: r for r in self._items if r.id is not None}
