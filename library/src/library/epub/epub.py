@@ -11,7 +11,7 @@ from library.epub.resources import ResourceIndex, EPUBResource
 from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
 from library.epub.xml_literals import FileName, FileContents
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("epub")
 
 
 class EPUB:
@@ -20,15 +20,19 @@ class EPUB:
         self.path: Path = Path(path)
         self.__skip_dirs: bool = True
         self.__confirmed_epub: bool = False
-        if not path.exists():
+        self._core: EpubCore | None = None
+
+        if not self.path.exists():
             # TODO: None for creating new epub? or pass in the not yet existing path
             raise FileNotFoundError(f"Source {path} was not recognized as directory or epub(zipfile).")
+
         if self.path.is_dir():
             self.source: SourceProtocol = DirectorySource(path, skip_dirs=self.__skip_dirs)
         elif is_zipfile(path):
             self.source: SourceProtocol = ZipFileSource(path, skip_dirs=self.__skip_dirs)
         else:
             raise ValueError("Path must be a directory or a zipfile.")
+        logger.debug(f"Initiated {self}, source: {self.source}")
 
     def __repr__(self):
         return f"EPUB({self.path})"
@@ -47,32 +51,36 @@ class EPUB:
         Raises:
             ValueError: If any check fails.
         """
-        mt = FileName.MIMETYPE
-        mtc = FileContents.MIMETYPE
+        logger.debug("confirming mimetype")
+        mmt = FileName.MIMETYPE
+        mmt_contents = FileContents.MIMETYPE
 
         if self.__confirmed_epub:
+            logger.debug("mimetype already confirmed")
             return True
 
+        logger.debug("reading mimetype file")
         with self.source.open():
-            mimetype_info = self.source.getinfo(mt)
+            mimetype_info = self.source.getinfo(mmt)
             if mimetype_info is None:
-                logger.error(f"{self} is missing the '{mt}' file.")
-                raise ValueError(f"EPUB is missing the '{mt}' file.")
+                logger.error(f"{self} is missing the '{mmt}' file.")
+                raise ValueError(f"EPUB is missing the '{mmt}' file.")
 
             # Check compression: must be ZIP_STORED (0) or None (directory source)
             if mimetype_info.compress_type not in (ZIP_STORED, None):
                 logger.error(f"{self} {mimetype_info.compress_type=}")
                 raise ValueError(
-                    f"EPUB '{mt}' file must be stored uncompressed (ZIP_STORED), "
+                    f"EPUB '{mmt}' file must be stored uncompressed (ZIP_STORED), "
                     f"got compress_type={mimetype_info.compress_type}."
                 )
 
             content = self.source.read_text(mimetype_info)
-            if content.strip() != mtc:
-                logger.error(f"{self} '{mt}' content is not '{mtc}', got {content!r}.")
-                raise ValueError(f"EPUB '{mt}' file must contain '{mtc}', got {content!r}.")
+            if content.strip() != mmt_contents:
+                logger.error(f"{self} '{mmt}' content is not '{mmt_contents}', got {content!r}.")
+                raise ValueError(f"EPUB '{mmt}' file must contain '{mmt_contents}', got {content!r}.")
 
         self.__confirmed_epub = True
+        logger.debug("mimetype confirmed")
         return True
 
     def extract_to(self, dest_dir: str | Path | None = None) -> EPUB:
@@ -143,6 +151,7 @@ class EPUB:
 
     def scan_resources(self) -> "ResourceIndex":
         """Scan the EPUB source and build a ResourceIndex from all files."""
+        logger.debug("scanning EPUB resources")
         with self.source.open():
             resources = [EPUBResource(info, self.source.read_bytes) for info in self.source.infolist()]
         return ResourceIndex(resources)
