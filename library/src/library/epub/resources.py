@@ -29,6 +29,10 @@ class EPUBResource:
         # NCX
         self.ncx_nav_point: NavPoint | None = None
 
+        # NAV
+        self.navs: dict[str, NavPoint] = {}
+        logger.debug(f"{self} loaded")
+
     def __repr__(self) -> str:
         return f"EPUBResource({self.filename!r}, {self.media_type!s}, {self.category!s}, {self.resource_type!s})"
 
@@ -54,6 +58,24 @@ class EPUBResource:
     @property
     def is_spine_item(self) -> bool:
         return self.spine_item_ref is not None
+
+    @property
+    def id(self) -> str | None:
+        if self.manifest_item:
+            return self.manifest_item.id
+        return None
+
+    def get_stats(self) -> dict:
+        return {
+            "filename": self.info.filename,
+            "media_type": self.media_type,
+            "manifest_media_type": self.manifest_item and self.manifest_item.media_type,
+            "id": self.manifest_item and self.manifest_item.id,
+            "spine": bool(self.spine_item_ref),
+            "guide": bool(self.guide_reference),
+            "ncx_label": self.ncx_nav_point and self.ncx_nav_point.nav_label.text,
+            "nav": bool(self.navs),
+        }
 
 
 class ResourceIndex:
@@ -113,3 +135,32 @@ class ResourceIndex:
         """Rebuild the ID index (call after OPF enrichment populates IDs)."""
         logger.debug(f"rebuilding ID index")
         self._by_id = {r.id: r for r in self._items if r.id is not None}
+
+    def core_items(self) -> Generator[EPUBResource, None, None]:
+        for item in self._items:
+            if item.resource_type is ResourceType.CORE:
+                yield item
+
+    def common_items(self) -> Generator[EPUBResource, None, None]:
+        for item in self._items:
+            if item.resource_type is ResourceType.COMMON:
+                yield item
+
+    def content_items(self) -> Generator[EPUBResource, None, None]:
+        for item in self._items:
+            if item.resource_type is ResourceType.CONTENT:
+                yield item
+
+    def unknown_items(self) -> Generator[EPUBResource, None, None]:
+        for item in self._items:
+            if item.resource_type is ResourceType.UNKNOWN:
+                yield item
+
+    def statistics(self) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
+        core = list(item.get_stats() for item in self.core_items())
+        common = list(item.get_stats() for item in self.common_items())
+        content = list(item.get_stats() for item in self.content_items())
+        unknown = list(item.get_stats() for item in self.unknown_items())
+
+        return core, common, content, unknown
+
