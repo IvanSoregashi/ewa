@@ -12,6 +12,7 @@ from zipfile import ZipInfo, ZipFile, Path as ZipPath, is_zipfile
 from library.epub.zip_utils import zipinfo_to_timestamp
 from library.utils import ignore_absolute_paths
 
+logger = logging.getLogger("source")
 
 def _is_a_directory(path: str | ZipInfo | Path | ZipPath) -> bool:
     if isinstance(path, (ZipPath, Path, ZipInfo)):
@@ -19,11 +20,6 @@ def _is_a_directory(path: str | ZipInfo | Path | ZipPath) -> bool:
     if isinstance(path, str):
         return Path(path).is_dir()
     raise NotImplementedError(f"Path {path} of type {type(path)} is not supported")
-
-
-class SourceType(Enum):
-    DIRECTORY = 0
-    ZIPFILE = 1
 
 
 class SourceProtocol(Protocol):
@@ -53,7 +49,6 @@ class DirectorySource:
     def __init__(self, path: str | Path, skip_dirs: bool = False) -> None:
         self.root = Path(path).absolute()
         self.skip_dirs = skip_dirs
-        self.log = logging.getLogger(self.__repr__())
         if not self.root.is_dir():
             raise NotADirectoryError(f"Path {path} is not a directory")
 
@@ -101,7 +96,7 @@ class DirectorySource:
         return [info.filename for info in self.infolist()]
 
     def read_bytes(self, path: str | ZipInfo | Path) -> bytes:
-        self.log.warning(f"reading {path} bytes")
+        logger.warning(f"{self} reading {path} bytes")
         return self._to_absolute_path(path).read_bytes()
 
     def read_text(self, path: str | ZipInfo | Path, encoding: str = "utf-8") -> str:
@@ -109,9 +104,9 @@ class DirectorySource:
 
     @contextmanager
     def open(self):
-        self.log.debug(f"opening {self}")
+        logger.debug(f"{self} opening")
         yield self
-        self.log.debug(f"closing {self}")
+        logger.debug(f"{self} closing")
 
     def write_to_zipfile(self, zip_file: ZipFile, path: str | Path | ZipInfo, compress_type: int | None = None) -> None:
         absolute_path = self._to_absolute_path(path)
@@ -119,11 +114,11 @@ class DirectorySource:
         zip_file.write(filename=absolute_path, arcname=relative_path, compress_type=compress_type)
 
     def extract(self, destination: str | Path, member: str | ZipInfo) -> str:
-        self.log.info(f"{self}.extract({destination}, {member.filename if isinstance(member, ZipInfo) else member})")
+        logger.info(f"{self} extract({destination}, {member.filename if isinstance(member, ZipInfo) else member})")
         return shutil.copy2(src=self._to_absolute_path(member), dst=destination)
 
     def extract_all(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None) -> None:
-        self.log.info(f"{self}.extract_all({repr(destination)}, {exclude_members=})")
+        logger.info(f"{self} extract_all({repr(destination)}, {exclude_members=})")
         ignore = None
         if exclude_members is not None:
             exclude_members = [self._to_absolute_path(m) for m in exclude_members]
@@ -135,7 +130,6 @@ class ZipFileSource:
     def __init__(self, path: str | Path, skip_dirs: bool = False) -> None:
         self.root = Path(path).absolute()
         self.skip_dirs = skip_dirs
-        self.log = logging.getLogger(self.__repr__())
         self.zip_file: ZipFile | None = None
         if not is_zipfile(path):
             raise ValueError("Path is not a ZipFile")
@@ -145,7 +139,7 @@ class ZipFileSource:
 
     def _should_be_open(self):
         if self.zip_file is None:
-            self.log.error("This operation requires source to be open.")
+            logger.error(f"{self} This operation requires source to be open.")
             raise IOError("This operation requires source to be open.")
 
     def getinfo(self, path: str | ZipPath | ZipInfo) -> ZipInfo | None:
@@ -182,14 +176,15 @@ class ZipFileSource:
             return self.zip_file.namelist()
 
     def read_bytes(self, path: str | ZipInfo | ZipPath) -> bytes:
-        self.log.warning(f"reading the {path} bytes")
         if _is_a_directory(path):
-            self.log.error(f"Path {path} is a directory, cannot read bytes")
+            logger.error(f"{self} Path {path} is a directory, cannot read bytes")
             raise IsADirectoryError(f"Path {path} is a directory, cannot read bytes")
         if isinstance(path, ZipPath):
+            logger.debug(f"{self} reading the {path.at} bytes")
             self._should_be_open()
             return path.read_bytes()
         with self.open():
+            logger.debug(f"{self} reading the {path if isinstance(path, str) else path.filename} bytes")
             return self.zip_file.read(path)
 
     def read_text(self, path: str | ZipInfo | ZipPath, encoding: str = "utf-8") -> str:
@@ -199,10 +194,10 @@ class ZipFileSource:
     def open(self) -> Generator[Self, None, None]:
         if self.zip_file is None:
             with ZipFile(self.root) as zip_file:
-                self.log.debug(f"opening {self}")
+                logger.debug(f"{self} opening")
                 self.zip_file = zip_file
                 yield self
-                self.log.debug(f"closing {self}")
+                logger.debug(f"{self} closing")
                 self.zip_file = None
         else:
             yield self
@@ -229,7 +224,7 @@ class ZipFileSource:
     def extract(self, destination: str | Path, member: str | ZipInfo) -> str:
         with self.open():
             member = member if isinstance(member, ZipInfo) else self.getinfo(member)
-            self.log.info(f"{self}.extract({destination}, {member.filename})")
+            logger.info(f"{self} extract({destination}, {member.filename})")
             result = self.zip_file.extract(member=member, path=destination)
 
             # When using extractall (or extract) file's mtime is not preserved
@@ -240,7 +235,7 @@ class ZipFileSource:
             return result
 
     def extract_all(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None) -> None:
-        self.log.info(f"{self}.extract_all({repr(destination)}, {exclude_members=})")
+        logger.info(f"{self} extract_all({repr(destination)}, {exclude_members=})")
         destination = Path(destination)
         with self.open():
             members = self.infolist()
