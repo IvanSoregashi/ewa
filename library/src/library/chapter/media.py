@@ -7,7 +7,7 @@ from library.epub.media_type import MediaType
 
 class MediaResource:
     """Represents a related media file (image, font, etc.) for a Chapter.
-    
+
     Supports lazy loading of content bytes via a provided callback function.
     """
 
@@ -26,11 +26,6 @@ class MediaResource:
         return f"MediaResource({self.filename!r}, media_type={str(self.media_type)})"
 
     @property
-    def loaded(self) -> bool:
-        """Returns True if the content bytes are already in memory."""
-        return self._content is not None
-
-    @property
     def content(self) -> bytes:
         """Returns the content bytes, loading them if necessary."""
         if self._content is None:
@@ -46,8 +41,7 @@ class MediaResource:
     @classmethod
     def from_file(cls, path: str | Path) -> Self:
         """Create a MediaResource from a local file path (lazy loaded)."""
-        path = Path(path)
-        return cls(str(path), read_bytes_func=lambda: path.read_bytes())
+        return cls(str(path), read_bytes_func=lambda: Path(path).read_bytes())
 
     @classmethod
     def from_bytes(cls, filename: str, content: bytes) -> Self:
