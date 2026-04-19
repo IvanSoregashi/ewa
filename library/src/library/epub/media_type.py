@@ -4,6 +4,7 @@ from typing import Self, override
 
 from library.filetypes import guess_file_type
 
+
 class ResourceType(StrEnum):
     UNKNOWN = "UNKNOWN"
     CORE = "CORE"
@@ -15,6 +16,7 @@ class Category(StrEnum):
     """
     Broad categories of media types.
     """
+
     CORE = "CORE"
     IMAGE = "IMAGE"
     AUDIO = "AUDIO"

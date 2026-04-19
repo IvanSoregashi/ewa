@@ -5,7 +5,7 @@ from pathlib import Path
 
 from epub.serene_panda import orchestration
 from ewa.ui import print_success, print_error
-from ewa.cli.print_table import print_table_from_models
+from ewa.cli.print_table import print_table_from_models, print_table_from_dicts
 from ewa.cli.progress import DisplayProgress
 from ewa.main import settings
 from epub.tables import EpubBookTable, EpubContentsTable
@@ -59,6 +59,19 @@ def dups(move: bool = typer.Option(False, "-m", "--move"), cleanup: bool = typer
 @app.command()
 def test():
     orchestration.extract_container_files()
+
+
+@app.command("showres")
+def check_epub_resources(epub: Path = typer.Argument(None, exists=True)):
+    from library.epub.epub import EPUB
+
+    e = EPUB(epub)
+    core, common, content, unknown = e.core.resources.statistics()
+    print_table_from_dicts(title="CORE", dicts=core)
+    print_table_from_dicts(title="COMMON", dicts=common)
+    print_table_from_dicts(title="CONTENT", dicts=content)
+    if unknown:
+        print_table_from_dicts(title="UNKNOWN", dicts=unknown)
 
 
 @app.command("rub")
