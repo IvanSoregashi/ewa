@@ -35,7 +35,7 @@ class EPUB:
         logger.debug(f"Initiated {self}, source: {self.source}")
 
     def __repr__(self):
-        return f"EPUB({self.path})"
+        return f"EPUB({self.path.name!r})"
 
     def confirm_mimetype(self) -> bool:
         """Confirm that this source is a valid EPUB by checking the mimetype file.
@@ -63,21 +63,22 @@ class EPUB:
         with self.source.open():
             mimetype_info = self.source.getinfo(mmt)
             if mimetype_info is None:
-                logger.error(f"{self} is missing the '{mmt}' file.")
-                raise ValueError(f"EPUB is missing the '{mmt}' file.")
+                message = f"{self} is missing the '{mmt!s}' file."
+                logger.error(message)
+                raise ValueError(message)
 
             # Check compression: must be ZIP_STORED (0) or None (directory source)
-            if mimetype_info.compress_type not in (ZIP_STORED, None):
-                logger.error(f"{self} {mimetype_info.compress_type=}")
-                raise ValueError(
-                    f"EPUB '{mmt}' file must be stored uncompressed (ZIP_STORED), "
-                    f"got compress_type={mimetype_info.compress_type}."
-                )
+            compress_type = mimetype_info.compress_type
+            if compress_type not in (ZIP_STORED, None):
+                message = f"{self} '{mmt!s}' file must be stored uncompressed (ZIP_STORED=0), got {compress_type=}."
+                logger.error(message)
+                # raise ValueError(message)  # can still work with it
 
             content = self.source.read_text(mimetype_info)
             if content.strip() != mmt_contents:
-                logger.error(f"{self} '{mmt}' content is not '{mmt_contents}', got {content!r}.")
-                raise ValueError(f"EPUB '{mmt}' file must contain '{mmt_contents}', got {content!r}.")
+                message = f"{self} '{mmt!s}' content is not '{mmt_contents!r}', got {content!r}."
+                logger.error(message)
+                raise ValueError(message)
 
         self.__confirmed_epub = True
         logger.debug("mimetype confirmed")
@@ -130,6 +131,7 @@ class EPUB:
 
                     # Check if we have a version in memory (loaded)
                     resource = resources.by_path(zip_info.filename) if resources else None
+                    # TODO: REDO THIS
                     if resource and resource.loaded:
                         # Write bytes from memory
                         # TODO make a proper method for this use case
@@ -149,7 +151,7 @@ class EPUB:
             yield self
         self.package_into(destination)
 
-    def scan_resources(self) -> "ResourceIndex":
+    def scan_resources(self) -> ResourceIndex:
         """Scan the EPUB source and build a ResourceIndex from all files."""
         logger.debug("scanning EPUB resources")
         with self.source.open():
@@ -157,10 +159,11 @@ class EPUB:
         return ResourceIndex(resources)
 
     @property
-    def core(self) -> "EpubCore":
+    def core(self) -> EpubCore:
         """Lazily initialize and return the EpubCore for this EPUB."""
         if self._core is None:
             self.confirm_mimetype()
             resources = self.scan_resources()
-            self._core = EpubCore(resources)
+            self._core: EpubCore = EpubCore(resources)
+            assert self._core is not None, f"{self} epub_core could not be initialized."
         return self._core
