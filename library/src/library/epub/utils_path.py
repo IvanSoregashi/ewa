@@ -143,7 +143,11 @@ def get_relative_href(relative_to: strPath, absolute_href: StrPathT) -> StrPathT
     return cls(path)
 
 
-def __absolute_from_relative_href(href: str, source_file: str) -> str:
+# os.path.relpath - relative path including the walkback os.path.relpath(target, start)
+# os.path.abspath - can resolve walkbacks - /dir/../dir1/1
+
+
+def get_absolute_posix_href(href: str, source_file: str) -> str:
     """Resolve a manifest href (relative to OPF by default) to an absolute EPUB path."""
     href = strip_fragment(href)
     source_dir = posixpath.dirname(source_file)
