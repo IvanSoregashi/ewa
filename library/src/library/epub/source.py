@@ -4,7 +4,6 @@ import shutil
 
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
-from enum import Enum
 from pathlib import Path
 from typing import Protocol, Self
 from zipfile import ZipInfo, ZipFile, Path as ZipPath, is_zipfile
@@ -13,6 +12,7 @@ from library.epub.zip_utils import zipinfo_to_timestamp
 from library.utils import ignore_absolute_paths
 
 logger = logging.getLogger("source")
+
 
 def _is_a_directory(path: str | ZipInfo | Path | ZipPath) -> bool:
     if isinstance(path, (ZipPath, Path, ZipInfo)):
@@ -53,7 +53,7 @@ class DirectorySource:
             raise NotADirectoryError(f"Path {path} is not a directory")
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.root.name})"
+        return f"{self.__class__.__name__}({self.root.name!r})"
 
     def _to_zipinfo(self, name: str) -> ZipInfo | None:
         if not (self.root / name).exists():
@@ -96,7 +96,7 @@ class DirectorySource:
         return [info.filename for info in self.infolist()]
 
     def read_bytes(self, path: str | ZipInfo | Path) -> bytes:
-        logger.warning(f"{self} reading {path} bytes")
+        logger.warning(f"{self} reading {path!r} bytes")
         return self._to_absolute_path(path).read_bytes()
 
     def read_text(self, path: str | ZipInfo | Path, encoding: str = "utf-8") -> str:
@@ -135,7 +135,7 @@ class ZipFileSource:
             raise ValueError("Path is not a ZipFile")
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.root.name})"
+        return f"{self.__class__.__name__}({self.root.name!r})"
 
     def _should_be_open(self):
         if self.zip_file is None:
@@ -177,14 +177,15 @@ class ZipFileSource:
 
     def read_bytes(self, path: str | ZipInfo | ZipPath) -> bytes:
         if _is_a_directory(path):
-            logger.error(f"{self} Path {path} is a directory, cannot read bytes")
-            raise IsADirectoryError(f"Path {path} is a directory, cannot read bytes")
+            message = f"{self} Path {path!r} is a directory, cannot read bytes"
+            logger.error(message)
+            raise IsADirectoryError(message)
         if isinstance(path, ZipPath):
-            logger.debug(f"{self} reading the {path.at} bytes")
+            logger.debug(f"{self} reading the {path.at!r} bytes")
             self._should_be_open()
             return path.read_bytes()
         with self.open():
-            logger.debug(f"{self} reading the {path if isinstance(path, str) else path.filename} bytes")
+            logger.debug(f"{self} reading the {(path if isinstance(path, str) else path.filename)!r} bytes")
             return self.zip_file.read(path)
 
     def read_text(self, path: str | ZipInfo | ZipPath, encoding: str = "utf-8") -> str:
@@ -224,7 +225,7 @@ class ZipFileSource:
     def extract(self, destination: str | Path, member: str | ZipInfo) -> str:
         with self.open():
             member = member if isinstance(member, ZipInfo) else self.getinfo(member)
-            logger.info(f"{self} extract({destination}, {member.filename})")
+            logger.info(f"{self} extract({destination!r}, {member.filename!r})")
             result = self.zip_file.extract(member=member, path=destination)
 
             # When using extractall (or extract) file's mtime is not preserved
@@ -235,7 +236,7 @@ class ZipFileSource:
             return result
 
     def extract_all(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None) -> None:
-        logger.info(f"{self} extract_all({repr(destination)}, {exclude_members=})")
+        logger.info(f"{self} extract_all({destination!r}, {exclude_members=})")
         destination = Path(destination)
         with self.open():
             members = self.infolist()
