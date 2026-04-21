@@ -1,13 +1,13 @@
 import logging
-from enum import Enum, auto
-from typing import Callable
+from typing import Callable, Generator
 from zipfile import ZipInfo
 
-from library.epub.media_type import MediaType, Category, ResourceType
+from library.epub.media_type import MediaType, ResourceType
 from library.epub.xml_models.ncx_model import NavPoint
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
 
 logger = logging.getLogger("resource")
+
 
 class EPUBResource:
     """Represents a single file in an EPUB archive."""
@@ -23,6 +23,7 @@ class EPUBResource:
 
         # OPF
         self.manifest_item: ManifestItem | None = None
+        self.source_sequense: int | None = None
         self.spine_item_ref: SpineItemRef | None = None
         self.guide_reference: GuideReference | None = None
 
@@ -31,16 +32,17 @@ class EPUBResource:
 
         # NAV
         self.navs: dict[str, NavPoint] = {}
-        logger.debug(f"{self} loaded")
+        logger.debug(f"{self} stats loaded ({self.media_type!s}, {self.category!s}, {self.resource_type!s})")
 
     def __repr__(self) -> str:
-        return f"EPUBResource({self.filename!r}, {self.media_type!s}, {self.category!s}, {self.resource_type!s})"
+        return f"EPUBResource({self.filename!r})"
 
     @property
     def content(self) -> bytes:
         if self._content is None:
+            logger.debug(f"{self} reading content")
             self._content: bytes = self._read_bytes_func(self.info)
-        assert self._content is not None, f"could not read content of {self.filename}"
+        assert self._content is not None, f"{self} could not read content"
         return self._content
 
     @content.setter
@@ -94,7 +96,7 @@ class ResourceIndex:
                 self.add(r)
 
     def __repr__(self) -> str:
-        return f"ResourceIndex({len(self._items)} resources)"
+        return f"ResourceIndex({len(self._items)})"
 
     def __iter__(self):
         return iter(self._items)
@@ -133,7 +135,7 @@ class ResourceIndex:
 
     def rebuild_id_index(self) -> None:
         """Rebuild the ID index (call after OPF enrichment populates IDs)."""
-        logger.debug(f"rebuilding ID index")
+        logger.debug("rebuilding ID index")
         self._by_id = {r.id: r for r in self._items if r.id is not None}
 
     def core_items(self) -> Generator[EPUBResource, None, None]:
@@ -163,4 +165,3 @@ class ResourceIndex:
         unknown = list(item.get_stats() for item in self.unknown_items())
 
         return core, common, content, unknown
-
