@@ -2,7 +2,7 @@ import logging
 from typing import Callable, Generator
 from zipfile import ZipInfo
 
-from library.epub.media_type import MediaType, ResourceType
+from library.epub.media_type import MediaType, ResourceType, Category
 from library.epub.xml_models.ncx_model import NavPoint
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
 
@@ -79,6 +79,16 @@ class EPUBResource:
             "nav": bool(self.navs),
         }
 
+    def parse_linked_resources(self) -> list:
+        if self.resource_type in [ResourceType.COMMON, ResourceType.UNKNOWN]:
+            return []
+        elif self.category in [Category.IMAGE, Category.AUDIO, Category.STYLE]:
+            return []
+        elif self.media_type in [MediaType.TEXT, MediaType.OPF, MediaType.MIMETYPE, MediaType.XML, MediaType.NCX]:
+            return []
+        elif self.media_type in [MediaType.HTML, MediaType.XHTML]:
+            return [] # head + body search
+        raise RuntimeError(f"{self} Unknown type ({self.media_type!s}, {self.category!s}, {self.resource_type!s})")
 
 class ResourceIndex:
     """Auto-indexed collection of EPUBResource objects.
