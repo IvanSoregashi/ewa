@@ -1,8 +1,10 @@
 from enum import StrEnum
 from pathlib import Path
-from typing import Self, override
-
+from typing import Self, override, Any
+import logging
 from library.filetypes import guess_file_type
+
+logger = logging.getLogger("media_type")
 
 
 class ResourceType(StrEnum):
@@ -20,7 +22,7 @@ class Category(StrEnum):
     CORE = "CORE"
     IMAGE = "IMAGE"
     AUDIO = "AUDIO"
-    TEXT_CONTENT = "TEXT_CONTENT"
+    MARKUP_CONTENT = "MARKUP_CONTENT"
     STYLE = "STYLE"
     FONT = "FONT"
     OTHER = "OTHER"
@@ -52,9 +54,8 @@ class MediaType(StrEnum):
     XML = "application/xml", Category.CORE, ResourceType.CORE
 
     # Text content
-    TEXT = "text/plain", Category.TEXT_CONTENT, ResourceType.CONTENT
-    XHTML = "application/xhtml+xml", Category.TEXT_CONTENT, ResourceType.CONTENT
-    HTML = "text/html", Category.TEXT_CONTENT, ResourceType.CONTENT
+    XHTML = "application/xhtml+xml", Category.MARKUP_CONTENT, ResourceType.CONTENT
+    HTML = "text/html", Category.MARKUP_CONTENT, ResourceType.CONTENT
 
     # Images
     IMAGE_GIF = "image/gif", Category.IMAGE, ResourceType.CONTENT
@@ -104,7 +105,7 @@ class MediaType(StrEnum):
 
     @classmethod
     @override
-    def _missing_(cls, value: object) -> Self:
+    def _missing_(cls, value: Any) -> Self:
         if value and isinstance(value, str):
             obj = str.__new__(cls, value)
             obj._value_ = value
@@ -112,13 +113,13 @@ class MediaType(StrEnum):
             obj.category = Category.FOREIGN
             obj.resource_type = ResourceType.UNKNOWN
             cls._value2member_map_[value] = obj
-
+            logger.warning(f"MediaType - initializing unknown value {value!r}.")
             return obj
 
         raise ValueError(f"{value} is not a valid {cls.__name__}")
 
     @classmethod
-    def from_filename(cls, value: str | Path) -> Self | None:
+    def from_filename(cls, value: str | Path) -> Self:
         """
         Detect media type from filename or path. If a mimetype for the
         path is found, but is not supported by MediaType, return it as a string.
@@ -127,7 +128,7 @@ class MediaType(StrEnum):
             value: The file path or name to guess file type from.
 
         Returns:
-            A MediaType instance if the media type is recognized, None otherwise.
+            A MediaType instance.
         """
         guessed = guess_file_type(value)
         if value == "mimetype":

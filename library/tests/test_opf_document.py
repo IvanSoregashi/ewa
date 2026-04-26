@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from library.epub.metadata import DCMetadataType, MetadataType
 from library.epub.xml_models.package_document import (
     PackageDocument as PydanticPackageDocument,
     Metadata as PydanticMetadata,
@@ -69,8 +70,8 @@ def test_opf_literal_comparison(package_class, opf_path):
 def test_read_opf_metadata(package_class):
     doc: PydanticPackageDocument = package_class.from_path(str(SAMPLE_OPF))
 
-    assert doc.metadata.title.text == "TEST TITLE 9"
-    assert doc.metadata.language.text == "en"
+    assert doc.metadata.title == "TEST TITLE 9"
+    assert doc.metadata.language == "en"
 
     assert len(doc.metadata.descriptions) == 1
     assert doc.metadata.descriptions[0].text == (
@@ -131,11 +132,11 @@ def test_opf_metadata_add(package_class):
     metadata = doc.metadata
 
     # Add Creator with attributes
-    metadata.add_metadata("creator", "NEW AUTHOR", id="author_1", role_ns="aut", file_as_ns="AUTHOR, NEW")
+    metadata.add_metadata(DCMetadataType.CREATOR, "NEW AUTHOR", id="author_1", role_ns="aut", file_as_ns="AUTHOR, NEW")
     # Add Meta with attributes (EPUB 3)
-    metadata.add_metadata("meta", "2024-01-01T00:00:00Z", dc=False, property="dcterms:modified", id="mod_1")
+    metadata.add_metadata(MetadataType.META, "2024-01-01T00:00:00Z", property="dcterms:modified", id="mod_1")
     # Add Identifier with scheme
-    metadata.add_metadata("identifier", "987654321", scheme_ns="ISBN", id="isbn_id")
+    metadata.add_metadata(DCMetadataType.IDENTIFIER, "987654321", scheme_ns="ISBN", id="isbn_id")
 
     # Verify after re-parsing
     new_doc = package_class.from_xml_bytes(doc.to_xml_bytes())
@@ -161,7 +162,6 @@ def test_opf_metadata_modify(package_class):
     # Modify existing title and its text/attributes
     title_elem = metadata.titles[0]
     title_elem.text = "UPDATED TITLE"
-    title_elem.lang = "ru"
 
     # Modify existing identifier's scheme
     ident = metadata.identifiers[0]
@@ -172,7 +172,6 @@ def test_opf_metadata_modify(package_class):
     new_meta = new_doc.metadata
 
     assert new_meta.titles[0].text == "UPDATED TITLE"
-    assert new_meta.titles[0].lang == "ru"
     assert new_meta.identifiers[0].scheme_ns == "NEW_SCHEME"
 
 

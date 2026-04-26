@@ -50,7 +50,6 @@ def strip_fragment(href: StrPathT) -> StrPathT:
     Returns:
         The part before the fragment.
     """
-
     return split_fragment(href)[0]
 
 
@@ -72,7 +71,6 @@ def get_fragment(href: strPath) -> str | None:
     Returns:
         The fragment or None.
     """
-
     return split_fragment(str(href))[1]
 
 
@@ -143,14 +141,26 @@ def get_relative_href(relative_to: strPath, absolute_href: StrPathT) -> StrPathT
     return cls(path)
 
 
-# os.path.relpath - relative path including the walkback os.path.relpath(target, start)
-# os.path.abspath - can resolve walkbacks - /dir/../dir1/1
+def posix_relative_href(anchor: str, absolute_href: str) -> str:
+    """Get a relative link, from two absolute hrefs.
+
+    Args:
+        anchor: absolute path to the file containing the link (str).
+        absolute_href: absolute link to the attachment file (str).
+
+    Returns:
+        link to the attachment file, relative to anchor (str).
+    """
+    href, fragment = split_fragment(absolute_href)
+    source_dir = posixpath.dirname(anchor)
+    relpath = posixpath.relpath(href, source_dir) if source_dir else href
+    return relpath + fragment if fragment else relpath
 
 
-def get_absolute_posix_href(href: str, source_file: str) -> str:
+def posix_absolute_href(absolute_path: str, href: str) -> str:
     """Resolve a manifest href (relative to OPF by default) to an absolute EPUB path."""
-    href = strip_fragment(href)
-    source_dir = posixpath.dirname(source_file)
-    if source_dir:
-        href = posixpath.join(source_dir, href)
-    return href
+    href, fragment = split_fragment(href)
+    source_dir = posixpath.dirname(absolute_path)
+    absolute_href = posixpath.join(source_dir, href) if source_dir else href
+    absolute_href = posixpath.normpath(absolute_href)
+    return absolute_href + fragment if fragment else absolute_href

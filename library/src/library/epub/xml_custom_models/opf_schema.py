@@ -4,7 +4,7 @@ Mirrors xml_pydantic/package_document.py without pydantic-xml.
 """
 
 from library.epub.epub_namespaces import XMLNamespace, OPF_NSMAP
-from library.epub.concepts.metadata import DCMetadataType, MetadataType
+from library.epub.metadata import DCMetadataType, MetadataType
 from library.xml.document_custom import XMLDocumentSchema, XMLElement
 from library.xml.descriptor_fields import AttrField, TextField, ChildField, ChildListField
 
@@ -36,7 +36,7 @@ class DCElement(XMLElement, ns=XMLNamespace.DC):
     text = TextField()
 
 
-class DCMeta(DCElement, tag=MetadataType.DC_META, ns=XMLNamespace.DC):
+class DCMeta(DCElement, tag=DCMetadataType.META, ns=XMLNamespace.DC):
     """<meta> in the dc/opf namespace (old EPUB 2 style)."""
 
 
@@ -68,16 +68,16 @@ class Metadata(XMLElement, tag="metadata", ns=XMLNamespace.OPF):
     dc_metas = ChildListField(DCMeta)  # default tag/ns from DCMeta
 
     @property
-    def title(self) -> DCElement:
-        return self.titles[0] if self.titles else None
+    def title(self) -> str:
+        return self.titles[0].text if self.titles else ""
 
     @property
-    def language(self) -> DCElement:
-        return self.languages[0] if self.languages else None
+    def language(self) -> str:
+        return self.languages[0].text if self.languages else ""
 
-    def add_metadata(self, tag: DCMetadataType | MetadataType, text: str, dc: bool = True, **kwargs):
+    def add_metadata(self, tag: DCMetadataType | MetadataType, text: str, **kwargs):
         """Uniform helper to add metadata items."""
-        if dc:
+        if isinstance(tag, DCMetadataType):
             new_item = DCElement.create(tag=tag, text=text, **kwargs)
             attr_name = f"{tag}s"
             if hasattr(self, attr_name):

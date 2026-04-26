@@ -11,13 +11,7 @@ EPUB1 = "C:/Users/Ivan/Projects/ewa/library/tests/samples/source/a-monster-secon
 DIRECTORY1 = "C:/Users/Ivan/Projects/ewa/library/tests/samples/source/a-monster-second-chance"
 
 
-@pytest.fixture(
-    params=[
-        ARCHIVE,
-        DIRECTORY,
-    ],
-    ids=["zipfile", "directory"],
-)
+@pytest.fixture(params=[ARCHIVE, DIRECTORY], ids=["zipfile", "directory"])
 def epub_path(request):
     return request.param
 

@@ -1,6 +1,6 @@
 from pydantic_xml import BaseXmlModel, attr, element
 
-from library.epub.concepts.metadata import DCMetadataType, MetadataType
+from library.epub.metadata import DCMetadataType, MetadataType
 from library.epub.epub_namespaces import NamespacePrefix, OPF_NSMAP
 
 
@@ -35,7 +35,7 @@ class DCDate(DCElement, tag=DCMetadataType.DATE):
     event_ns: str | None = attr(name="event", ns=NamespacePrefix.OPF, default=None)
 
 
-class DCMeta(DCElement, tag=MetadataType.DC_META):
+class DCMeta(DCElement, tag=DCMetadataType.META):
     pass
 
 
@@ -65,7 +65,7 @@ class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_N
     coverages: list[DCElement] = element(tag=DCMetadataType.COVERAGE, default=[])
     relations: list[DCElement] = element(tag=DCMetadataType.RELATION, default=[])
     metas: list[Meta] = element(tag=MetadataType.META, default=[])
-    dc_metas: list[DCMeta] = element(tag=MetadataType.DC_META, default=[])
+    dc_metas: list[DCMeta] = element(tag=DCMetadataType.META, default=[])
 
     @property
     def title(self) -> str | None:
@@ -77,16 +77,30 @@ class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_N
 
     def add_metadata(self, tag: DCMetadataType | MetadataType, text: str, dc: bool = True, **kwargs):
         """Uniform helper to add metadata items."""
-        if dc:
-            new_item = DCElement(text=text, **kwargs)
-            # Find matching list: titles, creators, etc.
-            attr_name = f"{tag}s"
-            if hasattr(self, attr_name):
-                getattr(self, attr_name).append(new_item)
-        else:
+        new_item = None
+        if tag is MetadataType.META:
             # EPUB 3 style <meta property="...">
             new_item = Meta(text=text, **kwargs)
             self.metas.append(new_item)
+            return
+        if tag == DCMetadataType.IDENTIFIER:
+            new_item = DCIdentifier(text=text, **kwargs)
+        if tag == DCMetadataType.TITLE:
+            new_item = DCTitle(text=text, **kwargs)
+        if tag == DCMetadataType.LANGUAGE:
+            new_item = DCLanguage(text=text, **kwargs)
+        if tag == DCMetadataType.CREATOR or tag == DCMetadataType.CONTRIBUTOR:
+            new_item = DCCreator(text=text, **kwargs)
+        if tag == DCMetadataType.DATE:
+            new_item = DCDate(text=text, **kwargs)
+        if new_item is None:
+            new_item = DCElement(text=text, **kwargs)
+        attr_name = f"{tag}s"  # Find matching list: titles, creators, etc.
+        if tag is DCMetadataType.META:
+            new_item = DCMeta(text=text, **kwargs)
+            attr_name = "dc_metas"
+        if hasattr(self, attr_name):
+            getattr(self, attr_name).append(new_item)
 
     def remove_metadata(
         self, tag: DCMetadataType | MetadataType, text: str | None = None, id: str | None = None, dc: bool = True

@@ -1,9 +1,6 @@
 import time
 from datetime import datetime
-from pathlib import Path
 from zipfile import ZipInfo
-
-from library.epub.utils import strip_fragment
 
 
 def zip_info_now() -> tuple[int, int, int, int, int, int]:
@@ -15,9 +12,3 @@ def zip_info_now() -> tuple[int, int, int, int, int, int]:
 
 def zipinfo_to_timestamp(zipinfo: ZipInfo) -> int:
     return int(time.mktime(zipinfo.date_time + (0, 0, -1)))  # Add dummy values for day of week, etc.
-
-
-def info_to_zipinfo(info: ZipInfo | str | Path) -> ZipInfo:
-    if isinstance(info, ZipInfo):
-        return info
-    return ZipInfo(filename=str(strip_fragment(info)), date_time=zip_info_now())

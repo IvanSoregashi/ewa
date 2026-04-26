@@ -4,7 +4,7 @@ from enum import StrEnum
 
 from library.epub.media_type import MediaType, Category, ResourceType
 from library.epub.resources import ResourceIndex, EPUBResource
-from library.epub.utils_path import get_absolute_posix_href, strip_fragment
+from library.epub.utils_path import posix_absolute_href, strip_fragment
 from library.epub.xml_literals import FileName
 from library.epub.xml_models.container_model import ContainerDocument
 from library.epub.xml_models.ncx_model import NCXDocument, NavPoint
@@ -37,10 +37,10 @@ class EpubCore:
         self.resources = resources
 
         # Core documents (populated during parsing)
-        self._opf_path: str | None = None
-        self.package: PackageDocument | None = None
-        self.ncx: NCXDocument | None = None
-        self.nav: NavDocument | None = None
+        self._opf_path: str
+        self.package: PackageDocument
+        self.ncx: NCXDocument
+        self.nav: NavDocument
 
         # Core resource references (populated during enrichment)
         self.mimetype_resource: EPUBResource | None = None
@@ -117,14 +117,14 @@ class EpubCore:
     def _enrich_from_opf(self) -> None:
         """Enrich resources with manifest, spine, and guide data from the OPF."""
         logger.debug(f"{self} enriching resources from opf data")
-        opf_path = self._opf_path
+        opf_path: str = self._opf_path
         if self.package is None:
             raise
 
         # --- Manifest ---
         logger.debug(f"{self} processing {len(self.package.manifest.items)} manifest items")
         for item in self.package.manifest.items:
-            abs_path = get_absolute_posix_href(item.href, opf_path)
+            abs_path = posix_absolute_href(opf_path, item.href)
             resource = self.resources.by_path(abs_path)
             if resource is None:
                 logger.warning(f"{self} manifest item {item.id!r} references missing file: {abs_path!r}")
@@ -149,12 +149,8 @@ class EpubCore:
                         resource.media_type = MediaType(imt)
                     case _:
                         logger.warning(f"{self} type mismatch {abs_path!r}, {rmt!r}, {imt!r}")
-            if resource.media_type.value == imt:
-                logger.debug(f"{self} switching type of {resource.filename!r} from {rmt!r} to {imt!r}")
-
-            # Override media type from manifest if present
-            # if item.media_type:
-            #     resource.media_type = MediaType(item.media_type)
+                if resource.media_type.value == imt:
+                    logger.debug(f"{self} switching type of {resource.filename!r} from {rmt!r} to {imt!r}")
 
         # Rebuild ID index now that IDs are populated
         self.resources.rebuild_id_index()
@@ -167,21 +163,21 @@ class EpubCore:
                 logger.warning(f"{self} spine itemref {itemref.idref!r} references unknown manifest ID.")
                 continue
 
-            chapter_match = re.fullmatch("^chapter_(\d+)$", itemref.idref)
+            chapter_match = re.fullmatch(r"^chapter_(\d+)$", itemref.idref)
             chapter_number = int(chapter_match.group(1)) if chapter_match else None
             number_match = re.search(r"(\d+)", itemref.idref)
             number_number = int(number_match.group(1)) if number_match else None
 
             logger.info(f"{self} spine {itemref.idref=}, {index=}, {chapter_number=}, {number_number=}")
 
-            resource.source_sequense = chapter_number
+            resource.source_sequence = chapter_number
             resource.spine_item_ref = itemref
 
         # --- Guide ---
         if self.package.guide:
             logger.debug(f"{self} processing {len(self.package.guide.references)} guide references")
             for ref in self.package.guide.references:
-                abs_path = get_absolute_posix_href(ref.href, opf_path)
+                abs_path = posix_absolute_href(opf_path, ref.href)
                 resource = self.resources.by_path(abs_path)
                 if resource is None:
                     logger.warning(f"{self} guide reference {ref.type!r} references missing file: {abs_path!r}")
@@ -248,8 +244,7 @@ class EpubCore:
         logger.debug(f"{self} walking NCX navPoints ({len(nav_points)})")
         for nav_point in nav_points:
             if nav_point.content and nav_point.content.src:
-                rel_path = strip_fragment(nav_point.content.src)
-                abs_path = get_absolute_posix_href(rel_path, ncx_path)
+                abs_path = posix_absolute_href(ncx_path, nav_point.content.src)
                 resource = self.resources.by_path(abs_path)
                 if resource is not None:
                     if resource.ncx_nav_point is None:
@@ -289,8 +284,7 @@ class EpubCore:
         logger.debug(f"{self} walking NAV items ({len(items)}) of {epub_type!r} type")
         for item in items:
             if item.link and item.link.href:
-                rel_path = strip_fragment(item.link.href)
-                abs_path = get_absolute_posix_href(rel_path, nav_path)
+                abs_path = posix_absolute_href(nav_path, item.link.href)
                 resource = self.resources.by_path(abs_path)
                 if resource is None:
                     logger.warning(f"{self} path {nav_path!r} not found")

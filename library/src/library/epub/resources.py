@@ -2,9 +2,15 @@ import logging
 from typing import Callable, Generator
 from zipfile import ZipInfo
 
+from lxml import html
+from lxml.html import HtmlElement
+from pygments.lexers import resource
+
 from library.epub.media_type import MediaType, ResourceType, Category
+from library.epub.utils_path import get_relative_href, get_absolute_href, posix_absolute_href, posix_relative_href
 from library.epub.xml_models.ncx_model import NavPoint
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
+from library.utils_xhtml import parse_html_attachments
 
 logger = logging.getLogger("resource")
 
@@ -15,15 +21,19 @@ class EPUBResource:
     def __init__(self, info: ZipInfo, read_bytes_func: Callable[[str | ZipInfo], bytes]) -> None:
         self.info: ZipInfo = info
         self._content: bytes | None = None
+        self._html: HtmlElement | None = None
         self._read_bytes_func = read_bytes_func
 
         self.media_type = MediaType.from_filename(info.filename)
         self.category = self.media_type.category
         self.resource_type = self.media_type.resource_type
 
+        self.stylesheets = dict()
+        self.illustrations = dict()
+
         # OPF
         self.manifest_item: ManifestItem | None = None
-        self.source_sequense: int | None = None
+        self.source_sequence: int | None = None
         self.spine_item_ref: SpineItemRef | None = None
         self.guide_reference: GuideReference | None = None
 
@@ -32,6 +42,7 @@ class EPUBResource:
 
         # NAV
         self.navs: dict[str, NavPoint] = {}
+
         logger.debug(f"{self} stats loaded ({self.media_type!s}, {self.category!s}, {self.resource_type!s})")
 
     def __repr__(self) -> str:
@@ -48,6 +59,19 @@ class EPUBResource:
     @content.setter
     def content(self, value: bytes) -> None:
         self._content = value
+
+    @property
+    def html(self) -> HtmlElement:
+        if self.category is Category.MARKUP_CONTENT:
+            raise RuntimeError(f"{self} Unknown type ({self.media_type!s}, {self.category!s}, {self.resource_type!s})")
+        if self._html is None:
+            self._html = html.document_fromstring(self.content)
+        assert self._html is not None, f"{self} could not read content"
+        return self._html
+
+    @html.setter
+    def html(self, value: HtmlElement) -> None:
+        self._html = value
 
     @property
     def filename(self) -> str:
@@ -74,21 +98,25 @@ class EPUBResource:
             "manifest_media_type": self.manifest_item and self.manifest_item.media_type,
             "id": self.manifest_item and self.manifest_item.id,
             "spine": bool(self.spine_item_ref),
+            "styles": len(self.stylesheets),
+            "images": len(self.illustrations),
             "guide": bool(self.guide_reference),
             "ncx_label": self.ncx_nav_point and self.ncx_nav_point.nav_label.text,
             "nav": bool(self.navs),
         }
 
-    def parse_linked_resources(self) -> list:
-        if self.resource_type in [ResourceType.COMMON, ResourceType.UNKNOWN]:
-            return []
-        elif self.category in [Category.IMAGE, Category.AUDIO, Category.STYLE]:
-            return []
-        elif self.media_type in [MediaType.TEXT, MediaType.OPF, MediaType.MIMETYPE, MediaType.XML, MediaType.NCX]:
-            return []
-        elif self.media_type in [MediaType.HTML, MediaType.XHTML]:
-            return [] # head + body search
+    def parse_linked_resources(self) -> None:
+        if self.category is Category.MARKUP_CONTENT:
+            head_links, body_links = parse_html_attachments(self.content)
+            self.stylesheets = {
+                relative_link: posix_absolute_href(self.filename, relative_link) for relative_link in head_links
+            }
+            self.illustrations = {
+                relative_link: posix_absolute_href(self.filename, relative_link) for relative_link in body_links
+            }
+            return None
         raise RuntimeError(f"{self} Unknown type ({self.media_type!s}, {self.category!s}, {self.resource_type!s})")
+
 
 class ResourceIndex:
     """Auto-indexed collection of EPUBResource objects.
@@ -133,7 +161,7 @@ class ResourceIndex:
         self._by_path.pop(resource.filename, None)
         # TODO: remove records of the resource from the documents
         if resource.id is not None:
-            self._by_id.pop(resource.id, None)
+            self._by_id.pop(resource.id)
 
     def by_path(self, path: str) -> EPUBResource | None:
         """Look up a resource by its filename/path."""
@@ -175,3 +203,7 @@ class ResourceIndex:
         unknown = list(item.get_stats() for item in self.unknown_items())
 
         return core, common, content, unknown
+
+    def interlink_resources(self):
+        for item in self._items:
+            item.parse_linked_resources()
