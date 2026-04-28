@@ -4,13 +4,12 @@ from zipfile import ZipInfo
 
 from lxml import html
 from lxml.html import HtmlElement
-from pygments.lexers import resource
 
 from library.epub.media_type import MediaType, ResourceType, Category
-from library.epub.utils_path import get_relative_href, get_absolute_href, posix_absolute_href, posix_relative_href
+from library.epub.utils_path import posix_absolute_href
 from library.epub.xml_models.ncx_model import NavPoint
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
-from library.utils_xhtml import parse_html_attachments
+from library.utils_xhtml import parse_stylesheets_and_images
 
 logger = logging.getLogger("resource")
 
@@ -30,6 +29,7 @@ class EPUBResource:
 
         self.stylesheets = dict()
         self.illustrations = dict()
+        self.linked_by = dict()
 
         # OPF
         self.manifest_item: ManifestItem | None = None
@@ -105,17 +105,13 @@ class EPUBResource:
             "nav": bool(self.navs),
         }
 
-    def parse_linked_resources(self) -> None:
-        if self.category is Category.MARKUP_CONTENT:
-            head_links, body_links = parse_html_attachments(self.content)
-            self.stylesheets = {
-                relative_link: posix_absolute_href(self.filename, relative_link) for relative_link in head_links
-            }
-            self.illustrations = {
-                relative_link: posix_absolute_href(self.filename, relative_link) for relative_link in body_links
-            }
-            return None
-        raise RuntimeError(f"{self} Unknown type ({self.media_type!s}, {self.category!s}, {self.resource_type!s})")
+    def parse_links(self) -> tuple[dict[str, HtmlElement], dict[str, HtmlElement]]:
+        if self.category is not Category.MARKUP_CONTENT:
+            raise RuntimeError(f"{self} Unknown type ({self.media_type!s}, {self.category!s}, {self.resource_type!s})")
+        stylesheets, images = parse_stylesheets_and_images(self.html)
+        stylesheets = {posix_absolute_href(self.filename, link): element for link, element in stylesheets.items()}
+        images = {posix_absolute_href(self.filename, link): element for link, element in images.items()}
+        return stylesheets, images
 
 
 class ResourceIndex:
@@ -206,4 +202,19 @@ class ResourceIndex:
 
     def interlink_resources(self):
         for item in self._items:
-            item.parse_linked_resources()
+            if item.category is not Category.MARKUP_CONTENT:
+                continue
+
+            stylesheets, images = item.parse_links()
+
+            for link, element in stylesheets.items():
+                linked_resource = self.by_path(link)
+                assert linked_resource is not None, f"Could not find link {link}"
+                item.stylesheets[linked_resource] = element
+                linked_resource.linked_by[item] = element
+
+            for link, element in images.items():
+                linked_resource = self.by_path(link)
+                assert linked_resource is not None, f"Could not find link {link}"
+                item.illustrations[linked_resource] = element
+                linked_resource.linked_by[item] = element

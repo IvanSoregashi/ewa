@@ -13,12 +13,12 @@ def from_html_head_parse_frontmatter(head: HtmlElement) -> dict:
     return {}
 
 
-def from_html_head_parse_links(head: HtmlElement) -> list:
-    stylesheets = []
+def from_html_head_parse_links(head: HtmlElement) -> dict[str, HtmlElement]:
+    stylesheets = {}
     for element, attribute, link, pos in head.iterlinks():
         attrs = element.attrib
         if attrs.get("rel") == "stylesheet" and attrs.get("type") == "text/css":
-            stylesheets.append(link)
+            stylesheets[link] = element
             continue
         logger.warning(f"found non-style attachment {element.tag, attrs, element.text_content()}, discarding")
     return stylesheets
@@ -39,13 +39,15 @@ def from_html_body_parse_highest_header(body: HtmlElement) -> str | None:
     return None
 
 
-def from_html_body_parse_attachments(body: HtmlElement, tag: str | None = None) -> list:
-    images = []
+def from_html_body_parse_attachments(body: HtmlElement, tag: str | None = None) -> dict[str, HtmlElement]:
+    images = {}
+    tags = (tag,) or ("img", "image", "picture", "source")
     for element, attribute, link, pos in body.iterlinks():
         if link.startswith("#"):
+            logger.warning(f"unknown link {attribute} {link}")
             continue
-        if element.tag in ("img", "image", "picture", "source"):
-            images.append(link)
+        if element.tag in tags:
+            images[link] = element
             continue
         logger.info(f"found non-image attachment {element.tag, element.attrib, element.text_content()}, discarding")
     return images
@@ -82,3 +84,16 @@ def parse_html_attachments(file_content: str | bytes) -> tuple[list, list]:
     body: HtmlElement = tree.find(".//body")
     body_attachments = from_html_body_parse_attachments(body)
     return head_attachments, body_attachments
+
+
+def parse_stylesheets_and_images(tree: HtmlElement) -> tuple[dict[str, HtmlElement], dict[str, HtmlElement]]:
+    stylesheets = from_html_head_parse_links(tree.find(".//head"))
+    images = from_html_head_parse_links(tree.find(".//body"))
+    return stylesheets, images
+
+
+def parse_links(tree: HtmlElement) -> dict[str, HtmlElement]:
+    attachments = {}
+    for element, attribute, link, pos in tree.iterlinks():
+        attachments[link] = element
+    return attachments

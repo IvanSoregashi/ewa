@@ -20,6 +20,8 @@ class EPUB:
         self.path: Path = Path(path)
         self.__skip_dirs: bool = True
         self.__confirmed_epub: bool = False
+
+        self._resources: ResourceIndex | None = None
         self._core: EpubCore | None = None
 
         if not self.path.exists():
@@ -83,6 +85,30 @@ class EPUB:
         self.__confirmed_epub = True
         logger.debug("mimetype confirmed")
         return True
+
+    def scan_resources(self) -> ResourceIndex:
+        """Scan the EPUB source and build a ResourceIndex from all files."""
+        logger.debug("scanning EPUB resources")
+        with self.source.open():
+            resources = [EPUBResource(info, self.source.read_bytes) for info in self.source.infolist()]
+        return ResourceIndex(resources)
+
+    @property
+    def resources(self) -> ResourceIndex:
+        """Lazily initialize and return the ResourceIndex for this EPUB."""
+        if self._resources is None:
+            self.confirm_mimetype()
+            self._resources: ResourceIndex = self.scan_resources()
+        assert self._resources is not None, f"{self} resource_index could not be initialized."
+        return self._resources
+
+    @property
+    def core(self) -> EpubCore:
+        """Lazily initialize and return the EpubCore for this EPUB."""
+        if self._core is None:
+            self._core: EpubCore = EpubCore(self.resources)
+        assert self._core is not None, f"{self} epub_core could not be initialized."
+        return self._core
 
     def extract_to(self, dest_dir: str | Path | None = None) -> EPUB:
         if dest_dir is None:
@@ -150,20 +176,3 @@ class EPUB:
         with self.source.open():
             yield self
         self.package_into(destination)
-
-    def scan_resources(self) -> ResourceIndex:
-        """Scan the EPUB source and build a ResourceIndex from all files."""
-        logger.debug("scanning EPUB resources")
-        with self.source.open():
-            resources = [EPUBResource(info, self.source.read_bytes) for info in self.source.infolist()]
-        return ResourceIndex(resources)
-
-    @property
-    def core(self) -> EpubCore:
-        """Lazily initialize and return the EpubCore for this EPUB."""
-        if self._core is None:
-            self.confirm_mimetype()
-            resources = self.scan_resources()
-            self._core: EpubCore = EpubCore(resources)
-            assert self._core is not None, f"{self} epub_core could not be initialized."
-        return self._core
