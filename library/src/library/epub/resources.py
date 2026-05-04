@@ -2,20 +2,15 @@ import logging
 from typing import Callable, Generator
 from zipfile import ZipInfo
 
-from lxml import html, etree
+from lxml import html
 from lxml.html import HtmlElement
 from lxml.etree import Element
 
 from library.epub.media_type import MediaType, ResourceType, Category
 from library.epub.utils_path import posix_absolute_href
-from library.epub.xml_literals import FileName
-from library.epub.xml_models.container_model import ContainerDocument
-from library.epub.xml_models.nav_model import NavDocument
-from library.epub.xml_models.ncx_model import NavPoint, NCXDocument
-from library.epub.xml_models.package_document import PackageDocument
+from library.epub.xml_models.ncx_model import NavPoint
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
 from library.utils_xhtml import parse_links
-from library.xml.document_pydantic import XMLDocumentModel
 from library.xml.utils import etree_from_bytes
 
 logger = logging.getLogger("resource")
@@ -98,24 +93,6 @@ class EPUBResource:
     def xml_tree(self, value: Element) -> None:
         logger.info(f"{self} reassigning the xml_tree data")
         self._xml_tree = value
-
-    @property
-    def xml_document(self) -> XMLDocumentModel | ContainerDocument | PackageDocument | NCXDocument | NavDocument:
-        if self.resource_type is not ResourceType.CORE:
-            raise RuntimeError(f"{self} Invalid type for .xml_document (({self._params()})")
-        if self._xml_document is None:
-            if self.media_type is MediaType.OPF:
-                self._xml_document = PackageDocument.from_xml_tree(self.xml_tree)
-            elif self.media_type is MediaType.NCX:
-                self._xml_document = NCXDocument.from_xml_tree(self.xml_tree)
-            elif self.media_type is MediaType.XML and self.filename == FileName.CONTAINER:
-                self._xml_document = ContainerDocument.from_xml_tree(self.xml_tree)
-            elif self.media_type is MediaType.XHTML and self.resource_type is ResourceType.CORE:
-                self._xml_document = NavDocument.from_xml_tree(self.xml_tree)
-            else:
-                raise RuntimeError(f"{self} Invalid type for .xml_document (({self._params()})")
-        assert self._xml_document is not None, f"{self} could not read content for xml_document"
-        return self._xml_document
 
     @property
     def filename(self) -> str:
