@@ -95,5 +95,6 @@ def parse_stylesheets_and_images(tree: HtmlElement) -> tuple[dict[str, HtmlEleme
 def parse_links(tree: HtmlElement) -> dict[str, HtmlElement]:
     attachments = {}
     for element, attribute, link, pos in tree.iterlinks():
+        logger.info(f"found link {attribute} {link}")
         attachments[link] = element
     return attachments

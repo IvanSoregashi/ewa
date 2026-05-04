@@ -2,14 +2,21 @@ import logging
 from typing import Callable, Generator
 from zipfile import ZipInfo
 
-from lxml import html
+from lxml import html, etree
 from lxml.html import HtmlElement
+from lxml.etree import Element
 
 from library.epub.media_type import MediaType, ResourceType, Category
 from library.epub.utils_path import posix_absolute_href
-from library.epub.xml_models.ncx_model import NavPoint
+from library.epub.xml_literals import FileName
+from library.epub.xml_models.container_model import ContainerDocument
+from library.epub.xml_models.nav_model import NavDocument
+from library.epub.xml_models.ncx_model import NavPoint, NCXDocument
+from library.epub.xml_models.package_document import PackageDocument
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
 from library.utils_xhtml import parse_links
+from library.xml.document_pydantic import XMLDocumentModel
+from library.xml.utils import etree_from_bytes
 
 logger = logging.getLogger("resource")
 
@@ -21,6 +28,7 @@ class EPUBResource:
         self.info: ZipInfo = info
         self._content: bytes | None = None
         self._html: HtmlElement | None = None
+        self._xml_tree: Element | None = None
         self._read_bytes_func = read_bytes_func
 
         self.media_type = MediaType.from_filename(info.filename)
@@ -42,10 +50,13 @@ class EPUBResource:
         # NAV
         self.navs: dict[str, NavPoint] = {}
 
-        logger.debug(f"{self} stats loaded ({self.media_type!s}, {self.category!s}, {self.resource_type!s})")
+        # logger.debug(f"{self} stats loaded ({self.media_type!s}, {self.category!s}, {self.resource_type!s})")
 
     def __repr__(self) -> str:
         return f"EPUBResource({self.filename!r})"
+
+    def _params(self) -> str:
+        return f"({self.media_type!s}, {self.category!s}, {self.resource_type!s})"
 
     @property
     def content(self) -> bytes:
@@ -57,20 +68,54 @@ class EPUBResource:
 
     @content.setter
     def content(self, value: bytes) -> None:
+        logger.info(f"{self} reassigning the byte contents")
         self._content = value
 
     @property
     def html(self) -> HtmlElement:
-        if self.category is Category.MARKUP_CONTENT:
-            raise RuntimeError(f"{self} Unknown type ({self.media_type!s}, {self.category!s}, {self.resource_type!s})")
+        if self.category is not Category.MARKUP_CONTENT:
+            raise RuntimeError(f"{self} Invalid type for .html ({self._params()})")
         if self._html is None:
             self._html = html.document_fromstring(self.content)
-        assert self._html is not None, f"{self} could not read content"
+        assert self._html is not None, f"{self} could not read content for html"
         return self._html
 
     @html.setter
     def html(self, value: HtmlElement) -> None:
+        logger.info(f"{self} reassigning the html data")
         self._html = value
+
+    @property
+    def xml_tree(self) -> Element:
+        if not self.media_type.is_xml():
+            raise RuntimeError(f"{self} Invalid type for .xml_tree (({self._params()})")
+        if self._xml_tree is None:
+            self._xml_tree = etree_from_bytes(self.content)
+        assert self._xml_tree is not None, f"{self} could not read content for xml_tree"
+        return self._xml_tree
+
+    @xml_tree.setter
+    def xml_tree(self, value: Element) -> None:
+        logger.info(f"{self} reassigning the xml_tree data")
+        self._xml_tree = value
+
+    @property
+    def xml_document(self) -> XMLDocumentModel | ContainerDocument | PackageDocument | NCXDocument | NavDocument:
+        if self.resource_type is not ResourceType.CORE:
+            raise RuntimeError(f"{self} Invalid type for .xml_document (({self._params()})")
+        if self._xml_document is None:
+            if self.media_type is MediaType.OPF:
+                self._xml_document = PackageDocument.from_xml_tree(self.xml_tree)
+            elif self.media_type is MediaType.NCX:
+                self._xml_document = NCXDocument.from_xml_tree(self.xml_tree)
+            elif self.media_type is MediaType.XML and self.filename == FileName.CONTAINER:
+                self._xml_document = ContainerDocument.from_xml_tree(self.xml_tree)
+            elif self.media_type is MediaType.XHTML and self.resource_type is ResourceType.CORE:
+                self._xml_document = NavDocument.from_xml_tree(self.xml_tree)
+            else:
+                raise RuntimeError(f"{self} Invalid type for .xml_document (({self._params()})")
+        assert self._xml_document is not None, f"{self} could not read content for xml_document"
+        return self._xml_document
 
     @property
     def filename(self) -> str:
@@ -81,14 +126,13 @@ class EPUBResource:
         self.info.filename = value
 
     @property
-    def is_spine_item(self) -> bool:
-        return self.spine_item_ref is not None
-
-    @property
     def id(self) -> str | None:
         if self.manifest_item:
             return self.manifest_item.id
         return None
+
+    def is_spine_item(self) -> bool:
+        return self.spine_item_ref is not None
 
     def get_stats(self) -> dict:
         return {
@@ -97,7 +141,8 @@ class EPUBResource:
             "manifest_media_type": self.manifest_item and self.manifest_item.media_type,
             "id": self.manifest_item and self.manifest_item.id,
             "spine": bool(self.spine_item_ref),
-            "links": len(self.linked_to),
+            "links_to": len(self.linked_to),
+            "links_by": len(self.linked_by),
             "guide": bool(self.guide_reference),
             "ncx_label": self.ncx_nav_point and self.ncx_nav_point.nav_label.text,
             "nav": bool(self.navs),
@@ -106,6 +151,7 @@ class EPUBResource:
     def parse_links(self) -> dict[str, HtmlElement]:
         if self.category is not Category.MARKUP_CONTENT:
             raise RuntimeError(f"{self} Unknown type ({self.media_type!s}, {self.category!s}, {self.resource_type!s})")
+        logger.debug(f"{self} parsing links")
         return {posix_absolute_href(self.filename, link): element for link, element in parse_links(self.html).items()}
 
 
@@ -204,4 +250,4 @@ class ResourceIndex:
                 linked_resource = self.by_path(link)
                 assert linked_resource is not None, f"Could not find link {link}"
                 item.linked_to[linked_resource] = element
-                linked_resource.linked_by[item] = element
+                linked_resource.linked_by[item] = item

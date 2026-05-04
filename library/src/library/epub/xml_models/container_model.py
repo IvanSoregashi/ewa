@@ -15,7 +15,7 @@ class RootFiles(RootXmlModel, tag="rootfiles", ns=NamespacePrefix.CONTAINER, nsm
 
 class ContainerDocument(XMLDocumentModel, tag="container", ns=NamespacePrefix.CONTAINER, nsmap=CONTAINER_NSMAP):
     version: str = attr()
-    rootfiles_wrapper: RootFiles = element(tag="rootfiles", ns=NamespacePrefix.CONTAINER)
+    rootfiles_wrapper: RootFiles = element(tag="rootfiles", ns=NamespacePrefix.CONTAINER, default=[])
 
     @property
     def rootfiles(self) -> list[RootFile]:
@@ -26,7 +26,7 @@ class ContainerDocument(XMLDocumentModel, tag="container", ns=NamespacePrefix.CO
     @property
     def opf_path(self) -> str | None:
         """Returns the full-path of the first OEBPS package rootfile."""
-        for rootfile in self.rootfiles_wrapper.root:
+        for rootfile in self.rootfiles:
             if rootfile.media_type == "application/oebps-package+xml":
                 return rootfile.full_path
         return None

@@ -1,4 +1,3 @@
-import json
 from collections.abc import Callable
 from datetime import datetime
 from enum import StrEnum
@@ -6,11 +5,10 @@ from typing import Any, Self, TypedDict, NotRequired
 from pathlib import Path
 from uuid import uuid4
 
-from lxml import html
 from pydantic import BaseModel, ConfigDict, Field
 
 from library.chapter.media import MediaResource
-from library.chapter.xhtml_utils import parse_html_content
+from library.utils_xhtml import parse_html_content
 from library.filetypes import guess_file_type
 
 
@@ -109,6 +107,7 @@ class Chapter(BaseModel):
     @tags.setter
     def tags(self, value: list[str]) -> None:
         self.metadata.tags = value
+
     # ----------------------------------------------------------------------------------------------------
     @classmethod
     def from_epub(
@@ -131,8 +130,8 @@ class Chapter(BaseModel):
         # enrich ChapterMetadata?
         # find all references to media resources in the chapter
         # load all resources into memory (?) initialize MediaResource classes
-        media: list
-        return cls(metadata=metadata, content=content, media=media)
+        media: list = []
+        return cls(metadata=metadata, content=chapter_bytes, media=media)
 
     @classmethod
     def from_filesystem(cls, path: str) -> Self:
@@ -145,7 +144,7 @@ class Chapter(BaseModel):
             case ContentType.MHTML:
                 return cls()
             case _:
-                raise ValueError(f"Unknown media type {media_type}")
+                raise ValueError(f"Unknown media type {content_type}")
 
     @classmethod
     def from_url(cls, url: str) -> Self:

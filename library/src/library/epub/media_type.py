@@ -142,6 +142,18 @@ class MediaType(StrEnum):
     def __str__(self) -> str:
         return self._value_
 
+    def is_xml(self) -> bool:
+        """Returns whether the media type is xml."""
+        if self is self.XML or self is self.OPF or self is self.NCX:
+            return True
+        return False
+
+    def is_html(self) -> bool:
+        """Returns whether the media type is html."""
+        if self is self.HTML or self is self.XHTML:
+            return True
+        return False
+
     def is_css(self) -> bool:
         """Returns whether the media type is CSS."""
         return self is self.CSS

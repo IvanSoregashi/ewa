@@ -34,7 +34,7 @@ def fix_opf_namespace(content: str) -> str:
     return re.sub(r"(<package[^>]+)>", r'\1 xmlns:opf="http://www.idpf.org/2007/opf">', content, count=1)
 
 
-def etree_from_bytes(xml_bytes: bytes) -> etree._Element:
+def etree_from_bytes(xml_bytes: bytes) -> etree.Element:
     parser = etree.XMLParser(remove_blank_text=True, remove_comments=True)
     for _ in range(3):
         try:

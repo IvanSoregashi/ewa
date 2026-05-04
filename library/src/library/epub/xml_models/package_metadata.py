@@ -121,7 +121,3 @@ class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_N
                 setattr(self, attr_name, [x for x in current if not should_remove(x)])
         else:
             self.metas = [x for x in self.metas if not should_remove(x)]
-
-    def normalize_ewa1(self):
-        # TODO: Normalization
-        pass
