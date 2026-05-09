@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Callable, Generator
 from zipfile import ZipInfo
 
-from lxml import html
+from lxml import html, etree
 from lxml.html import HtmlElement
 from lxml.etree import Element
 from dataclasses import dataclass, field
@@ -16,7 +16,7 @@ from library.epub.media_type import MediaType, ResourceType, Category
 from library.epub.utils_path import posix_absolute_href
 from library.epub.xml_models.ncx_model import NavPoint
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
-from library.utils_xhtml import parse_links
+from library.epub.zip_utils import apply_zipinfo_timestamp_to_file
 from library.xml.utils import etree_from_bytes
 
 logger = logging.getLogger("resource")
@@ -51,12 +51,14 @@ class EPUBLink:
 class EPUBResource:
     """Represents a single file in an EPUB archive."""
 
-    def __init__(self, info: ZipInfo, read_bytes_func: Callable[[str | ZipInfo], bytes]) -> None:
+    def __init__(self, info: ZipInfo, read_bytes_func: Callable[[ZipInfo], bytes]) -> None:
         self.info: ZipInfo = info
+        self._read_bytes_func = read_bytes_func
+
         self._content: bytes | None = None
+        self._text: str | None = None
         self._html: HtmlElement | None = None
         self._xml_tree: Element | None = None
-        self._read_bytes_func = read_bytes_func
 
         self.media_type = MediaType.from_filename(info.filename)
         self.category = self.media_type.category
@@ -68,9 +70,9 @@ class EPUBResource:
 
         # OPF
         self.manifest_item: ManifestItem | None = None
-        self.source_sequence: int | None = None
         self.spine_item_ref: SpineItemRef | None = None
         self.guide_reference: GuideReference | None = None
+        self.source_sequence: int | None = None
 
         # NCX
         self.ncx_nav_point: NavPoint | None = None
@@ -85,6 +87,13 @@ class EPUBResource:
 
     def _params(self) -> str:
         return f"({self.media_type!s}, {self.category!s}, {self.resource_type!s})"
+
+    @classmethod
+    def from_filesystem_path(cls, path: Path) -> EPUBResource:
+        if not path.exists():
+            raise ValueError(f"{path} does not exist, cannot create EPUBResource")
+        info = ZipInfo.from_file(path, arcname=path.name, strict_timestamps=False)
+        return cls(info=info, read_bytes_func=lambda i: Path(i.filename).read_bytes())
 
     @property
     def content(self) -> bytes:
@@ -112,10 +121,12 @@ class EPUBResource:
     def html(self, value: HtmlElement) -> None:
         logger.info(f"{self} reassigning the html data")
         self._html = value
+        # TODO: pretty_print, encoding via global env variable # encoding: Literal["unicode"] | None = None (for str)
+        self.content = html.tostring(value, pretty_print=True)
 
     @property
     def xml_tree(self) -> Element:
-        if not self.media_type.is_xml():
+        if not self.media_type.is_xml() and not self.is_nav_document():
             raise RuntimeError(f"{self} Invalid type for .xml_tree (({self._params()})")
         if self._xml_tree is None:
             self._xml_tree = etree_from_bytes(self.content)
@@ -126,6 +137,8 @@ class EPUBResource:
     def xml_tree(self, value: Element) -> None:
         logger.info(f"{self} reassigning the xml_tree data")
         self._xml_tree = value
+        # TODO: pretty_print, encoding via global env variable # encoding: Literal["unicode"] | None = None (for str)
+        self.content = etree.tostring(value, pretty_print=True)
 
     @property
     def filename(self) -> str:
@@ -135,14 +148,27 @@ class EPUBResource:
     def filename(self, value: str) -> None:
         self.info.filename = value
 
+    def write_to_filesystem(self, path: Path) -> EPUBResource:
+        if path.exists():
+            logger.warning(f"{self}, file {path} exists, nothing to write.")
+        else:
+            byte_count = path.write_bytes(self.content)
+            apply_zipinfo_timestamp_to_file(self.info, path)
+            logger.info(f"{self}, written {byte_count} bytes to {path}.")
+        return EPUBResource.from_filesystem_path(path)
+
     @property
     def id(self) -> str | None:
+        # TODO: setter
         if self.manifest_item:
             return self.manifest_item.id
         return None
 
     def is_spine_item(self) -> bool:
         return self.spine_item_ref is not None
+
+    def is_nav_document(self) -> bool:
+        return self.media_type is MediaType.XHTML and self.resource_type is ResourceType.CORE
 
     def get_stats(self) -> dict:
         return {

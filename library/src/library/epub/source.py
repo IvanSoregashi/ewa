@@ -1,5 +1,4 @@
 import logging
-import os
 import shutil
 
 from collections.abc import Generator, Iterable
@@ -8,7 +7,8 @@ from pathlib import Path
 from typing import Protocol, Self
 from zipfile import ZipInfo, ZipFile, Path as ZipPath, is_zipfile
 
-from library.epub.zip_utils import zipinfo_to_timestamp
+from library.asserts import require
+from library.epub.zip_utils import apply_zipinfo_timestamp_to_file
 from library.utils import ignore_absolute_paths
 
 logger = logging.getLogger("source")
@@ -58,11 +58,7 @@ class DirectorySource:
     def _to_zipinfo(self, name: str) -> ZipInfo | None:
         if not (self.root / name).exists():
             return None
-        return ZipInfo.from_file(
-            self.root / name,
-            arcname=name,
-            strict_timestamps=False,
-        )
+        return ZipInfo.from_file(self.root / name, arcname=name, strict_timestamps=False)
 
     def _to_absolute_path(self, path: str | ZipInfo | Path) -> Path:
         if isinstance(path, ZipInfo):
@@ -222,22 +218,34 @@ class ZipFileSource:
             with zip_file.open(zip_info, "w") as dest:
                 dest.write(data_bytes)
 
-    def extract(self, destination: str | Path, member: str | ZipInfo) -> str:
-        with self.open():
-            member = member if isinstance(member, ZipInfo) else self.getinfo(member)
-            logger.info(f"{self} extract({destination!r}, {member.filename!r})")
-            result = self.zip_file.extract(member=member, path=destination)
+    def extract(self, destination: Path, member: str | ZipInfo) -> str:
+        """Extract a single element from source.
 
-            # When using extractall (or extract) file's mtime is not preserved
-            full_path = destination / member.filename
-            timestamp = zipinfo_to_timestamp(member)
-            os.utime(full_path, times=(timestamp, timestamp))
+        Args:
+            destination: destination filename (Path) or destination directory (must exist) (Path).
+            member: member to extract to (str | ZipInfo).
+        """
+        with self.open():
+            info = member if isinstance(member, ZipInfo) else require(self.getinfo(member))
+            if destination.is_dir():
+                destination = destination / info.filename
+            logger.info(f"{self} extract({destination!r}, {info.filename!r})")
+            result = self.zip_file.extract(member=info, path=destination)
+            apply_zipinfo_timestamp_to_file(info, destination)  # preserving mtime
 
             return result
 
-    def extract_all(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None) -> None:
+    def extract_all(self, destination: Path, exclude_members: Iterable[str | ZipInfo] | None = None) -> None:
+        """Extract all data from source.
+
+        Args:
+            destination: destination directory (must exist) (Path).
+            exclude_members: member to not extract.
+        """
         logger.info(f"{self} extract_all({destination!r}, {exclude_members=})")
         destination = Path(destination)
+        assert destination.is_dir(), "destination must be a directory"
+
         with self.open():
             members = self.infolist()
             if exclude_members is not None:
@@ -246,8 +254,6 @@ class ZipFileSource:
 
             self.zip_file.extractall(path=destination, members=members)
 
-            # When using extractall (or extract) file's mtime is not preserved
             for file_zip_info in members:
                 full_path = destination / file_zip_info.filename
-                timestamp = zipinfo_to_timestamp(file_zip_info)
-                os.utime(full_path, times=(timestamp, timestamp))  # Set the access and modification times
+                apply_zipinfo_timestamp_to_file(file_zip_info, full_path)  # preserving mtime
