@@ -62,12 +62,12 @@ class NavList(CommonAttributes, tag="ol"):
         self.items.append(new_item)
         return new_item
 
-    def remove_item(self, item: NavListItem | None = None, id: str | None = None):
+    def remove_item(self, item: NavListItem | None = None, _id: str | None = None):
         """Remove a nav list item by its id or object reference."""
         if item is not None:
             self.items = [i for i in self.items if i is not item]
-        elif id is not None:
-            self.items = [i for i in self.items if i.id != id]
+        elif _id is not None:
+            self.items = [i for i in self.items if i.id != _id]
 
 
 NavInline.model_rebuild()
