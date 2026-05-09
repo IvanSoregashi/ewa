@@ -8,9 +8,7 @@ StrPathT = TypeVar("StrPathT", str, Path, strPath)
 
 
 def split_fragment(href: StrPathT) -> tuple[StrPathT, str | None]:
-    """
-    Given an href, split it into the part before the fragment
-    identifier (#...) and the fragment identifier itself.
+    """Given an href, split it into the part before the fragment identifier (#...) and the fragment identifier itself.
 
     >>> split_fragment("chapter1.xhtml#section2")
     ('chapter1.xhtml', 'section2')
@@ -34,8 +32,7 @@ def split_fragment(href: StrPathT) -> tuple[StrPathT, str | None]:
 
 
 def strip_fragment(href: StrPathT) -> StrPathT:
-    """
-    Given an href, return the part before the fragment identifier (#...).
+    """Given an href, return the part before the fragment identifier (#...).
 
     >>> strip_fragment("chapter1.xhtml#section2")
     'chapter1.xhtml'
@@ -54,9 +51,7 @@ def strip_fragment(href: StrPathT) -> StrPathT:
 
 
 def get_fragment(href: strPath) -> str | None:
-    """
-    Given an href, return the fragment identifier (#...) or None if
-    there is none.
+    """Given an href, return the fragment identifier (#...) or None if there is none.
 
     >>> get_fragment("chapter1.xhtml#section2")
     'section2'
@@ -75,8 +70,7 @@ def get_fragment(href: strPath) -> str | None:
 
 
 def normalize_path(path: StrPathT) -> StrPathT:
-    """
-    Normalize a path by removing ..'s
+    """Normalize a path by removing ..'s
 
     >>> normalize_path("a/b/../c")
     'a/c'
@@ -93,8 +87,7 @@ def normalize_path(path: StrPathT) -> StrPathT:
 
 
 def get_absolute_href(origin_href: strPath, href: StrPathT) -> StrPathT:
-    """
-    Get absolute href from an origin and a relative href.
+    """Get absolute href from an origin and a relative href.
 
     >>> get_absolute_href("OEBPS/chapter1.xhtml", "../images/pic.png")
     'images/pic.png'
@@ -117,8 +110,7 @@ def get_absolute_href(origin_href: strPath, href: StrPathT) -> StrPathT:
 
 
 def get_relative_href(relative_to: strPath, absolute_href: StrPathT) -> StrPathT:
-    """
-    Get relative href from an absolute href and a base href.
+    """Get relative href from an absolute href and a base href.
 
     >>> get_relative_href("OEBPS/chapter1.xhtml", "OEBPS/images/pic.png")
     'images/pic.png'

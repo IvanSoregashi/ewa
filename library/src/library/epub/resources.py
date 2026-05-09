@@ -1,10 +1,16 @@
 import logging
+from pathlib import Path
 from typing import Callable, Generator
 from zipfile import ZipInfo
 
 from lxml import html
 from lxml.html import HtmlElement
 from lxml.etree import Element
+from dataclasses import dataclass, field
+
+from pydantic_xml import BaseXmlModel
+
+from library.epub.epub_link import EPUBLinkType
 
 from library.epub.media_type import MediaType, ResourceType, Category
 from library.epub.utils_path import posix_absolute_href
@@ -14,6 +20,32 @@ from library.utils_xhtml import parse_links
 from library.xml.utils import etree_from_bytes
 
 logger = logging.getLogger("resource")
+
+
+@dataclass
+class EPUBLink:
+    resource: EPUBResource
+    filename: str = field(init=False)
+    element: HtmlElement | BaseXmlModel
+    link: str
+    link_type: EPUBLinkType = field(init=False)
+    absolute_path: str | None = field(default=None)
+
+    def __post_init__(self):
+        self.filename = self.resource.filename
+        self.link_type = EPUBLinkType.from_link(self.link)
+        if self.link_type == EPUBLinkType.RELATIVE_PATH:
+            self.absolute_path = posix_absolute_href(self.filename, self.link)
+
+    @classmethod
+    def from_iterlinks(cls, resource: EPUBResource, link_data: tuple[HtmlElement, dict[str, str], str, int]):
+        element, attribute, link, pos = link_data
+        logger.info(f"link: {link!r}, pos: {pos!r}, attribute: {attribute!r}, element: {element!r}")
+        return cls(resource=resource, element=element, link=link)
+
+    @classmethod
+    def from_etree_element(cls, resource: EPUBResource):
+        pass
 
 
 class EPUBResource:
@@ -30,8 +62,9 @@ class EPUBResource:
         self.category = self.media_type.category
         self.resource_type = self.media_type.resource_type
 
-        self.linked_to = dict()
-        self.linked_by = dict()
+        self._modified = False
+        self.linked_to: list[EPUBLink] = list()
+        self.linked_by: list[EPUBLink] = list()
 
         # OPF
         self.manifest_item: ManifestItem | None = None
@@ -125,11 +158,11 @@ class EPUBResource:
             "nav": bool(self.navs),
         }
 
-    def parse_links(self) -> dict[str, HtmlElement]:
+    def parse_links(self) -> list[EPUBLink]:
         if self.category is not Category.MARKUP_CONTENT:
             raise RuntimeError(f"{self} Unknown type ({self.media_type!s}, {self.category!s}, {self.resource_type!s})")
         logger.debug(f"{self} parsing links")
-        return {posix_absolute_href(self.filename, link): element for link, element in parse_links(self.html).items()}
+        return [EPUBLink.from_iterlinks(self, link_data) for link_data in self.html.iterlinks()]
 
 
 class ResourceIndex:
@@ -223,8 +256,9 @@ class ResourceIndex:
             if item.category is not Category.MARKUP_CONTENT:
                 continue
 
-            for link, element in item.parse_links().items():
-                linked_resource = self.by_path(link)
-                assert linked_resource is not None, f"Could not find link {link}"
-                item.linked_to[linked_resource] = element
-                linked_resource.linked_by[item] = item
+            for epub_link in item.parse_links():
+                item.linked_to.append(epub_link)
+                if epub_link.absolute_path is not None:
+                    linked_resource = self.by_path(epub_link.absolute_path)
+                    assert linked_resource is not None, f"not found {epub_link.absolute_path}({epub_link.link})"
+                    linked_resource.linked_by.append(epub_link)
