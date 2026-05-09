@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Self
 from zipfile import is_zipfile, ZipFile, ZIP_STORED, ZIP_DEFLATED, ZipInfo
 
-from library.epub.epub_core import EpubCore
+from library.epub.epub_core import EpubCore, EpubSpecification
 from library.epub.resources import ResourceIndex, EPUBResource
 from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
 from library.epub.xml_literals import FileName, FileContents
@@ -85,6 +85,14 @@ class EPUB:
         self.__confirmed_epub = True
         logger.debug("mimetype confirmed")
         return True
+
+    def is_specification(self, specification: EpubSpecification):
+        match specification:
+            case EpubSpecification.SERENE_PANDA_ENCRYPTED:
+                strict_font = self.source.getinfo(FileName.SP_FONT)
+                return strict_font is not None
+            case _:
+                raise ValueError(f"Specification {specification} is not Implemented")
 
     def scan_resources(self) -> ResourceIndex:
         """Scan the EPUB source and build a ResourceIndex from all files."""
