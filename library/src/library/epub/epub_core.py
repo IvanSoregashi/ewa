@@ -288,3 +288,33 @@ class EpubCore:
             [r for r in self.resources if r.is_spine_item()],
             key=lambda r: r.spine_index,
         )
+
+    # -----------------------------------------------------------------------
+    #
+    # -----------------------------------------------------------------------
+
+    def remove_resource(self, resource: EPUBResource) -> None:
+        resource._deleted = True
+        if resource.manifest_item is not None:
+            self.package_document.manifest.remove_item(resource.manifest_item)
+            self.package_resource._modified = True
+        if resource.spine_item_ref is not None:
+            self.package_document.spine.remove_itemref(resource.spine_item_ref)
+            self.package_resource._modified = True
+        if resource.guide_reference is not None:
+            self.package_document.guide.remove_reference(resource.guide_reference)
+            self.package_resource._modified = True
+        if self.package_resource._modified:
+            self.package_resource.content = self.package_document.to_xml_bytes()
+        if resource.ncx_nav_point is not None:
+            self.ncx_document.nav_map.remove_nav_point(point=resource.ncx_nav_point)
+            self.ncx_resource._modified = True
+        if resource.navs:
+            raise NotImplementedError("Nav removal not implemented yet.")
+            self.nav_resource._modified = True
+        if resource.linked_by:
+            for link in resource.linked_by:
+                logger.debug(f"{self} removing link {link!r}")
+                link.element.getparent().remove(link.element)
+                link.resource.linked_to.remove(link)
+                link.resource._modified = True

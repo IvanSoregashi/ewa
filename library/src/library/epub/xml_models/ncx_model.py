@@ -30,34 +30,46 @@ class NavPoint(BaseXmlModel, tag="navPoint", nsmap=NCX_NSMAP):
     content: Content = element()
     nav_points: list[NavPoint] = element(tag="navPoint", default=[])
 
-    def add_nav_point(self, content: Content, id: str | None = None, **kwargs) -> "NavPoint":
-        new_point = NavPoint(content=content, id=id, **kwargs)
+    def add_nav_point(self, content: Content, _id: str | None = None, **kwargs) -> NavPoint:
+        new_point = NavPoint(content=content, id=_id, **kwargs)
         self.nav_points.append(new_point)
         return new_point
 
-    def remove_nav_point(self, point: "NavPoint | None" = None, id: str | None = None):
+    def remove_nav_point(self, point: NavPoint | None = None, _id: str | None = None):
         """Remove a navPoint by its id or object reference."""
         if point is not None:
             self.nav_points = [p for p in self.nav_points if p is not point]
-        elif id is not None:
-            self.nav_points = [p for p in self.nav_points if p.id != id]
+            for nav_point in self.nav_points:
+                if nav_point.nav_points:
+                    nav_point.remove_nav_point(point=point)
+        elif _id is not None:
+            self.nav_points = [p for p in self.nav_points if p.id != _id]
+            for nav_point in self.nav_points:
+                if nav_point.nav_points:
+                    nav_point.remove_nav_point(_id=_id)
 
 
 class NavMap(BaseXmlModel, tag="navMap", nsmap=NCX_NSMAP):
     nav_infos: list[TextElement] = element(tag="navInfo", default=[])
     nav_points: list[NavPoint] = element(tag="navPoint", default=[])
 
-    def add_nav_point(self, content: Content, id: str | None = None, **kwargs) -> NavPoint:
-        new_point = NavPoint(content=content, id=id, **kwargs)
+    def add_nav_point(self, content: Content, _id: str | None = None, **kwargs) -> NavPoint:
+        new_point = NavPoint(content=content, id=_id, **kwargs)
         self.nav_points.append(new_point)
         return new_point
 
-    def remove_nav_point(self, point: NavPoint | None = None, id: str | None = None):
+    def remove_nav_point(self, point: NavPoint | None = None, _id: str | None = None):
         """Remove a navPoint by its id or object reference."""
         if point is not None:
             self.nav_points = [p for p in self.nav_points if p is not point]
-        elif id is not None:
-            self.nav_points = [p for p in self.nav_points if p.id != id]
+            for nav_point in self.nav_points:
+                if nav_point.nav_points:
+                    nav_point.remove_nav_point(point=point)
+        elif _id is not None:
+            self.nav_points = [p for p in self.nav_points if p.id != _id]
+            for nav_point in self.nav_points:
+                if nav_point.nav_points:
+                    nav_point.remove_nav_point(_id=_id)
 
 
 class PageTarget(BaseXmlModel, tag="pageTarget", nsmap=NCX_NSMAP):

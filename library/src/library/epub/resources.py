@@ -16,7 +16,7 @@ from library.epub.media_type import MediaType, ResourceType, Category
 from library.epub.utils_path import posix_absolute_href
 from library.epub.xml_models.ncx_model import NavPoint
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
-from library.epub.zip_utils import apply_zipinfo_timestamp_to_file
+from library.epub.utils_zip import apply_zipinfo_timestamp_to_file
 from library.xml.utils import etree_from_bytes
 
 logger = logging.getLogger("resource")
@@ -26,7 +26,7 @@ logger = logging.getLogger("resource")
 class EPUBLink:
     resource: EPUBResource
     filename: str = field(init=False)
-    element: HtmlElement | BaseXmlModel
+    element: HtmlElement  # | BaseXmlModel
     link: str
     link_type: EPUBLinkType = field(init=False)
     absolute_path: str | None = field(default=None)
@@ -65,6 +65,7 @@ class EPUBResource:
         self.resource_type = self.media_type.resource_type
 
         self._modified = False
+        self._deleted = False
         self.linked_to: list[EPUBLink] = list()
         self.linked_by: list[EPUBLink] = list()
 
@@ -97,6 +98,11 @@ class EPUBResource:
 
     @property
     def content(self) -> bytes:
+        if self._modified:
+            if self._html is not None:
+                self._content = html.tostring(self._html, pretty_print=True)
+            if self._xml_tree is not None:
+                self._content = etree.tostring(self._xml_tree, pretty_print=True)
         if self._content is None:
             logger.debug(f"{self} reading content")
             self._content: bytes = self._read_bytes_func(self.info)

@@ -8,7 +8,7 @@ from typing import Protocol, Self
 from zipfile import ZipInfo, ZipFile, Path as ZipPath, is_zipfile
 
 from library.asserts import require
-from library.epub.zip_utils import apply_zipinfo_timestamp_to_file
+from library.epub.utils_zip import apply_zipinfo_timestamp_to_file
 from library.utils import ignore_absolute_paths
 
 logger = logging.getLogger("source")

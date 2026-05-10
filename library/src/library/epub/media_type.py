@@ -74,6 +74,7 @@ class MediaType(StrEnum):
 
     # Fonts
     FONT_TTF = "font/ttf", Category.FONT, ResourceType.COMMON
+    FONT_TTF_OLD = "application/x-font-truetype", Category.FONT, ResourceType.COMMON
     FONT_OTF = "font/otf", Category.FONT, ResourceType.COMMON
     FONT_WOFF = "font/woff", Category.FONT, ResourceType.COMMON
     FONT_WOFF2 = "font/woff2", Category.FONT, ResourceType.COMMON

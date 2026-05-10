@@ -24,7 +24,7 @@ ALL_OPF_DIR = Path("~").expanduser() / ".ewa" / "epub" / "opf"
 ALL_OPF_PATHS = list(ALL_OPF_DIR.glob("*.opf"))
 
 
-@pytest.fixture(params=ALL_OPF_PATHS)
+@pytest.fixture(params=ALL_SAMPLES)
 def opf_path(request: pytest.FixtureRequest) -> Path:
     return request.param
 
