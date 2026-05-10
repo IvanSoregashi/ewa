@@ -122,7 +122,7 @@ class DirectorySource:
         shutil.copytree(src=self.root, dst=destination, dirs_exist_ok=True, ignore=ignore)
 
 
-class ZipFileSource:
+class ZipFileSource(SourceProtocol):
     def __init__(self, path: str | Path, skip_dirs: bool = False) -> None:
         self.root = Path(path).absolute()
         self.skip_dirs = skip_dirs
@@ -151,8 +151,8 @@ class ZipFileSource:
 
     def getpath(self, path: str | ZipPath | ZipInfo) -> ZipPath:
         self._should_be_open()
-        info = self.getinfo(path)
-        return ZipPath(root=self.zip_file, at=info.filename)
+        info = require(self.getinfo(path))
+        return ZipPath(root=require(self.zip_file), at=info.filename)
 
     def infolist(self) -> list[ZipInfo]:
         with self.open():
@@ -200,13 +200,14 @@ class ZipFileSource:
             yield self
 
     def write_to_zipfile(self, zip_file: ZipFile, path: str | Path | ZipInfo, compress_type: int | None = None) -> None:
-        zip_info = self.getinfo(path)
+        zip_info = require(self.getinfo(path))
         if not zip_file.fp:
             raise ValueError("Attempt to write to ZIP archive that was already closed")
         if zip_file._writing:
             raise ValueError("Can't write to ZIP archive while an open writing handle exists")
 
         if zip_info.is_dir():
+            logger.warning(f"{self} writing a directory to ZIP archive, this should not happen.")
             zip_info.compress_size = 0
             zip_info.CRC = 0
             zip_file.mkdir(zip_info)
@@ -218,13 +219,14 @@ class ZipFileSource:
             with zip_file.open(zip_info, "w") as dest:
                 dest.write(data_bytes)
 
-    def extract(self, destination: Path, member: str | ZipInfo) -> str:
+    def extract(self, destination: str | Path, member: str | ZipInfo) -> str:
         """Extract a single element from source.
 
         Args:
-            destination: destination filename (Path) or destination directory (must exist) (Path).
+            destination: destination filename (str | Path) or destination directory (must exist) (Path).
             member: member to extract to (str | ZipInfo).
         """
+        destination: Path = Path(destination)
         with self.open():
             info = member if isinstance(member, ZipInfo) else require(self.getinfo(member))
             if destination.is_dir():
@@ -235,7 +237,7 @@ class ZipFileSource:
 
             return result
 
-    def extract_all(self, destination: Path, exclude_members: Iterable[str | ZipInfo] | None = None) -> None:
+    def extract_all(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None) -> None:
         """Extract all data from source.
 
         Args:
@@ -243,7 +245,7 @@ class ZipFileSource:
             exclude_members: member to not extract.
         """
         logger.info(f"{self} extract_all({destination!r}, {exclude_members=})")
-        destination = Path(destination)
+        destination: Path = Path(destination)
         assert destination.is_dir(), "destination must be a directory"
 
         with self.open():
