@@ -1,5 +1,6 @@
 import logging
 import re
+from collections.abc import Generator
 from enum import StrEnum
 
 from library.epub.media_type import MediaType, Category, ResourceType
@@ -39,12 +40,12 @@ class EpubCore:
 
         self.mimetype_resource = require(self.resources.by_path(FileName.MIMETYPE), "MIMETYPE")
         self.container_resource = require(self.resources.by_path(FileName.CONTAINER), "CONTAINER")
-        self.container_document = ContainerDocument.from_xml_tree(self.container_resource.xml_tree)
+        self.container_document = ContainerDocument.from_xml_bytes(self.container_resource.content)
         assert len(self.container_document.opf_paths) == 1, "EPUB's with several package documents are not supported"
 
         opf_path = require(self.container_document.opf_path, "opf_path")
         self.package_resource = require(self.resources.by_path(opf_path), "package_resource")
-        self.package_document = PackageDocument.from_xml_tree(self.package_resource.xml_tree)
+        self.package_document = PackageDocument.from_xml_bytes(self.package_resource.content)
 
         self.ncx_resource: EPUBResource | None = None
         self._ncx_document: NCXDocument | None = None
@@ -68,23 +69,24 @@ class EpubCore:
     def ncx_document(self) -> NCXDocument:
         if self._ncx_document is None:
             resource = require(self.ncx_resource, "ncx_resource")
-            self._ncx_document = NCXDocument.from_xml_tree(resource.xml_tree)
+            self._ncx_document = NCXDocument.from_xml_bytes(resource.content)
         return require(self._ncx_document)
 
     @property
     def nav_document(self) -> NavDocument:
         if self._nav_document is None:
             resource = require(self.nav_resource, "nav_resource")
-            self._nav_document = NavDocument.from_xml_tree(resource.xml_tree)
+            self._nav_document = NavDocument.from_xml_bytes(resource.content)
         return require(self._nav_document)
 
     def sync(self) -> None:
         """Serialize all core models (package, ncx, nav) back to their respective resources."""
-        if self.package_resource and self.package_document:
+        logger.debug(f"{self} sync core documents")
+        if self.package_resource and self.package_resource.is_modified:
             self.package_resource.content = self.package_document.to_xml_bytes()
-        if self.ncx_resource and self.ncx_document:
+        if self.ncx_resource and self.ncx_resource.is_modified:
             self.ncx_resource.content = self.ncx_document.to_xml_bytes()
-        if self.nav_resource and self.nav_document:
+        if self.nav_resource and self.nav_resource.is_modified:
             self.nav_resource.content = self.nav_document.to_xml_bytes()
 
     # -----------------------------------------------------------------------
@@ -286,35 +288,77 @@ class EpubCore:
         """Resources in spine order."""
         return sorted(
             [r for r in self.resources if r.is_spine_item()],
-            key=lambda r: r.spine_index,
+            key=lambda r: r.source_sequence or 9999,
         )
+
+    @property
+    def markup_content(self) -> list[EPUBResource]:
+        return [
+            r
+            for r in self.resources
+            if r.resource_type is ResourceType.CONTENT and r.category is Category.MARKUP_CONTENT
+        ]
+
+    def writing_sequence(self) -> Generator[EPUBResource, None, None]:
+        #yield self.mimetype_resource
+        yield self.container_resource
+        yield self.package_resource
+        if self.ncx_resource and not self.ncx_resource.is_deleted:
+            yield self.ncx_resource
+        if self.nav_resource and not self.nav_resource.is_deleted:
+            yield self.nav_resource
+        yielded = {self.mimetype_resource, self.container_resource, self.package_resource, self.ncx_resource, self.nav_resource}
+        for resource in self.resources.core_items():
+            if resource not in yielded and not resource.is_deleted:
+                yield resource
+                yielded.add(resource)
+        for resource in self.resources.common_items():
+            if resource not in yielded and not resource.is_deleted:
+                yield resource
+                yielded.add(resource)
+        for resource in self.spine:
+            if resource not in yielded and not resource.is_deleted:
+                yield resource
+                yielded.add(resource)
+        for resource in self.resources:
+            if resource not in yielded and not resource.is_deleted:
+                yield resource
+                yielded.add(resource)
 
     # -----------------------------------------------------------------------
     #
     # -----------------------------------------------------------------------
 
     def remove_resource(self, resource: EPUBResource) -> None:
-        resource._deleted = True
+        resource.is_deleted = True
         if resource.manifest_item is not None:
             self.package_document.manifest.remove_item(resource.manifest_item)
-            self.package_resource._modified = True
+            self.package_resource.is_modified = True
         if resource.spine_item_ref is not None:
             self.package_document.spine.remove_itemref(resource.spine_item_ref)
-            self.package_resource._modified = True
+            self.package_resource.is_modified = True
         if resource.guide_reference is not None:
             self.package_document.guide.remove_reference(resource.guide_reference)
-            self.package_resource._modified = True
-        if self.package_resource._modified:
-            self.package_resource.content = self.package_document.to_xml_bytes()
+            self.package_resource.is_modified = True
+        if self.package_resource.is_modified:
+            logger.info(f"package_resource was modified")
+            self.package_resource.xml_tree = self.package_document.to_xml_tree(
+                skip_empty=True, exclude_none=True, exclude_unset=True
+            )
         if resource.ncx_nav_point is not None:
             self.ncx_document.nav_map.remove_nav_point(point=resource.ncx_nav_point)
-            self.ncx_resource._modified = True
+            self.ncx_resource.is_modified = True
         if resource.navs:
             raise NotImplementedError("Nav removal not implemented yet.")
-            self.nav_resource._modified = True
+            self.nav_resource.is_modified = True
         if resource.linked_by:
             for link in resource.linked_by:
                 logger.debug(f"{self} removing link {link!r}")
                 link.element.getparent().remove(link.element)
                 link.resource.linked_to.remove(link)
-                link.resource._modified = True
+                link.resource.is_modified = True
+
+    def cleanup(self):
+        ibook_resource = self.resources.by_path(FileName.IBOOKS_OPTIONS)
+        if ibook_resource is not None:
+            ibook_resource.is_deleted = True
