@@ -1,17 +1,22 @@
 import logging
+import time
 
 import typer
 from pathlib import Path
 
 from epub.serene_panda import orchestration
+from epub.utils import string_to_int_hash64
 from ewa.ui import print_success, print_error
 from ewa.cli.print_table import print_table_from_models, print_table_from_dicts
 from ewa.cli.progress import DisplayProgress
 from ewa.main import settings
 from epub.tables import EpubBookTable, EpubContentsTable
-from epub.epub_classes import EPUB
 from epub.constants import duplicates_directory, epub_dir
+from library.epub.epub_core import EpubSpecification
+from library.epub.utils_css import parse_css_urls, replace_css_url
+from library.epub.utils_path import posix_relative_href
 from library.utils import sanitize_filename
+from library.epub.epub import EPUB
 
 app = typer.Typer(help="Epub Plugin")
 
@@ -61,17 +66,58 @@ def test():
     orchestration.extract_container_files()
 
 
+@app.command()
+def decrypt(epub_path: Path = typer.Argument(None, exists=True)):
+    epub = EPUB(epub_path)
+    if not epub.is_specification(EpubSpecification.SERENE_PANDA_ENCRYPTED):
+        logger.debug(f"EPUB {epub_path.name!r} is not SERENE_PANDA_ENCRYPTED.")
+        return
+
+    assert len(epub.core.fonts) == 1, "SEVERAL FONTS FOUND"
+    with epub.source.open():
+        font_resource = epub.core.fonts[0]
+        new_font_name = f"{string_to_int_hash64(font_resource.content)}_{Path(font_resource.filename).name}"
+        new_font_path = settings.profile_dir / "epub" / "serene_panda" / "fonts" / new_font_name
+        font_resource.write_to_filesystem(new_font_path)
+
+        (settings.current_dir / "changes").mkdir(parents=True, exist_ok=True)
+
+        epub.core.remove_resource(font_resource)
+
+        for style_resource in epub.core.styles:
+            relative_path = posix_relative_href(anchor=style_resource.filename, absolute_href=font_resource.filename)
+            if relative_path in parse_css_urls(style_resource.content):
+                style_resource.content = replace_css_url(style_resource.content, relative_path, new_font_name)
+                style_resource.is_modified = True
+
+        dictionary = orchestration.translation_dictionary()
+        for content_resource in epub.core.markup_content:
+            if not content_resource.is_spine_item():
+                logger.warning(f"content_resource {content_resource.filename} is not in the spine")
+            content_resource.content = content_resource.content.decode("utf-8").translate(dictionary).encode("utf-8")
+            content_resource.is_modified = True
+
+    epub.core.cleanup()
+    new_name = epub.path.with_stem(epub.path.stem.replace("(Encoded)", "").strip()).name
+    epub.package_into(destination=settings.current_dir / "changes" / new_name)
+
+
 @app.command("showres")
 def check_epub_resources(epub: Path = typer.Argument(None, exists=True)):
     from library.epub.epub import EPUB
 
+    start_time = time.time()
     e = EPUB(epub)
-    core, common, content, unknown = e.core.resources.statistics()
-    print_table_from_dicts(title="CORE", dicts=core)
-    print_table_from_dicts(title="COMMON", dicts=common)
-    print_table_from_dicts(title="CONTENT", dicts=content)
-    if unknown:
-        print_table_from_dicts(title="UNKNOWN", dicts=unknown)
+    with e.source.open():
+        e.resources.interlink_resources()
+        core, common, content, unknown = e.core.resources.statistics()
+        print_table_from_dicts(title="CORE", dicts=core)
+        print_table_from_dicts(title="COMMON", dicts=common)
+        print_table_from_dicts(title="CONTENT", dicts=content)
+        if unknown:
+            print_table_from_dicts(title="UNKNOWN", dicts=unknown)
+    end_time = time.time()
+    print_success(f"success in {end_time - start_time:.5f} seconds")
 
 
 @app.command("rub")
@@ -127,7 +173,10 @@ def count(
     if rows:
         with EpubContentsTable() as table:
             print_success(f"Counting epub file records in {table.model.__tablename__} SQL table...")
-            print_success(f"{table.count_rows()} total rows found")
+            print_success(f"{table.count_rows()} total rows of files found")
+        with EpubBookTable() as table:
+            print_success(f"Counting epub file records in {table.model.__tablename__} SQL table...")
+            print_success(f"{table.count_rows()} total rows of epubs found")
 
 
 @app.command()
