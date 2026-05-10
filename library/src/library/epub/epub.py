@@ -1,11 +1,12 @@
 import logging
 import tempfile
-from collections.abc import Generator, Iterable
+from collections.abc import Generator, Iterable, Container
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Self
 from zipfile import is_zipfile, ZipFile, ZIP_STORED, ZIP_DEFLATED, ZipInfo
 
+from library.asserts import require
 from library.epub.epub_core import EpubCore, EpubSpecification
 from library.epub.resources import ResourceIndex, EPUBResource
 from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
@@ -127,56 +128,119 @@ class EPUB:
         self.source.extract_all(destination=dest_dir)
         return EPUB(dest_dir)
 
-    def package_into(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None):
-        exclude_members = [m.filename if isinstance(m, ZipInfo) else m for m in (exclude_members or [])]
+    def package_into(
+        self,
+        destination: str | Path,
+        exclude_members: Iterable[str | ZipInfo] | None = None,
+        validity_check: bool = True,
+    ):
+        """
+
+        Args:
+            destination: either non-existing path to epub, or path to existing directory.
+            exclude_members: list of files to exclude from packaging.
+            validity_check: minimal confirmation of epub's validity before archiving.
+        """
+        if validity_check:
+            self.confirm_mimetype()
+
         destination: Path = Path(destination)
-        self.confirm_mimetype()
-
-        # If core is active, sync models back to resources before packing
-        if self._core:
-            self._core.sync()
-
+        # destination ensure path file
         if destination.suffix.lower() != ".epub":
             if destination.is_dir():
                 destination = destination / self.path.name
             else:
                 raise NotADirectoryError(f"Path {destination} is neither a directory nor a epub.")
+
+        # destination ensure file path is available
         if destination.suffix.lower() == ".epub":
             if destination.exists():
                 raise FileExistsError(f"File {destination} already exists.")
             if not destination.parent.exists():
+                # TODO Create folder?
                 raise FileNotFoundError(f"Directory {destination.parent} does not exist.")
 
-        # If resources are already scanned, use them to find modified content
-        resources = self._core.resources if self._core else None
+        if self._core is not None:
+            self._core.sync()
+
+        # exclude_members
+        exclude = {m if isinstance(m, ZipInfo) else require(self.source.getinfo(m)) for m in (exclude_members or [])}
 
         try:
-            with self.source.open(), ZipFile(destination, "w", compression=ZIP_DEFLATED) as zipf:
-                mimetype_info = self.source.getinfo(FileName.MIMETYPE)
-                self.source.write_to_zipfile(zipf, mimetype_info, compress_type=ZIP_STORED)
-
-                for zip_info in self.source.infolist():
-                    if zip_info.filename in exclude_members:
-                        continue
-                    if zip_info.filename == FileName.MIMETYPE:
-                        continue
-                    if self.__skip_dirs and zip_info.is_dir():
-                        continue
-
-                    # Check if we have a version in memory (loaded)
-                    resource = resources.by_path(zip_info.filename) if resources else None
-                    # TODO: REDO THIS
-                    if resource and resource.loaded:
-                        # Write bytes from memory
-                        # TODO make a proper method for this use case
-                        zipf.writestr(zip_info.filename, resource.content)
-                    else:
-                        # Stream untouched bytes from source
-                        self.source.write_to_zipfile(zipf, zip_info)
-
+            if self._core is not None:
+                self._package_from_core(destination=destination, exclude_members=exclude)
+            elif self._resources is not None:
+                self._package_from_infolist(destination=destination, exclude_members=exclude)
+            else:
+                self._package_from_resource_list(destination=destination, exclude_members=exclude)
         except Exception as e:
             logger.error(f"package_into: failed to compress into EPUB: {e}")
             raise e
+        logger.info(f"{self} successfully packaged into EPUB({destination}).")
+
+    def _package_from_infolist(self, destination: Path, exclude_members: Container[ZipInfo]):
+        with self.source.open(), ZipFile(destination, "w", compression=ZIP_DEFLATED) as zipf:
+            mimetype_info = require(self.source.getinfo(FileName.MIMETYPE))
+            # TODO: CAN SAVE READS HERE, JUST WRITE THE DEAFULT DATA
+            self.source.write_to_zipfile(zipf, mimetype_info, compress_type=ZIP_STORED)
+
+            for zip_info in self.source.infolist():
+                if zip_info in exclude_members:
+                    continue
+                if zip_info.filename == FileName.MIMETYPE:
+                    continue
+                if self.__skip_dirs and zip_info.is_dir():
+                    continue
+                self.source.write_to_zipfile(zipf, zip_info)
+
+    def _package_from_resource_list(self, destination: Path, exclude_members: Container[ZipInfo]):
+        with self.source.open(), ZipFile(destination, "w", compression=ZIP_DEFLATED) as zipf:
+            mimetype_info = require(self.source.getinfo(FileName.MIMETYPE))
+            # TODO: CAN SAVE READS HERE, JUST WRITE THE DEAFULT DATA
+            self.source.write_to_zipfile(zipf, mimetype_info, compress_type=ZIP_STORED)
+
+            for resource in self.resources:
+                if resource.original_info in exclude_members:
+                    continue
+                if self.__skip_dirs and resource.original_info.is_dir():
+                    continue
+                if resource.filename == FileName.MIMETYPE:
+                    continue
+                if resource.is_deleted:
+                    continue
+
+                if resource.is_modified:
+                    logger.debug(f"Writing modified {resource}.")
+                    zip_info = resource.info
+                    # TODO is there data that needs to be modified?
+                    # Write bytes from memory
+                    zipf.writestr(zip_info, resource.content)
+                else:
+                    logger.debug(f"Writing original {resource}.")
+                    # Stream untouched bytes from source
+                    self.source.write_to_zipfile(zipf, resource.original_info)
+
+    def _package_from_core(self, destination: Path, exclude_members: Container[ZipInfo]):
+        with self.source.open(), ZipFile(destination, "w", compression=ZIP_DEFLATED) as zipf:
+            mimetype_info = require(self.source.getinfo(FileName.MIMETYPE))
+            # TODO: CAN SAVE READS HERE, JUST WRITE THE DEAFULT DATA
+            self.source.write_to_zipfile(zipf, mimetype_info, compress_type=ZIP_STORED)
+
+            for resource in self.core.writing_sequence():
+                if resource.original_info in exclude_members:
+                    continue
+                if self.__skip_dirs and resource.original_info.is_dir():
+                    continue
+
+                if resource.is_modified:
+                    logger.debug(f"Writing modified {resource}.")
+                    zip_info = resource.info
+                    # Write bytes from memory
+                    zipf.writestr(zip_info, resource.content)
+                else:
+                    logger.debug(f"Writing original {resource}.")
+                    # Stream untouched bytes from source
+                    self.source.write_to_zipfile(zipf, resource.original_info)
 
     @contextmanager
     def stream_to(self, destination: str | Path) -> Generator[Self, None, None]:
@@ -184,3 +248,13 @@ class EPUB:
         with self.source.open():
             yield self
         self.package_into(destination)
+
+    def save_changes_to_a_dir(self, directory: Path):
+        for resource in self.resources:
+            if resource.is_deleted:
+                logger.info(f"{resource} has been deleted.")
+                continue
+            if resource.is_modified:
+                filepath = directory / resource.filename
+                filepath.parent.mkdir(parents=True, exist_ok=True)
+                resource.write_to_filesystem(filepath)
