@@ -81,7 +81,13 @@ class EPUBResource:
         # NAV
         self.navs: dict[str, NavPoint] = {}
 
-        # logger.debug(f"{self} stats loaded ({self.media_type!s}, {self.category!s}, {self.resource_type!s})")
+    def parsed_outgoing_link(
+        self,
+        element: HtmlElement | BaseXmlModel,
+        link_data: tuple[HtmlElement, dict[str, str], str, int] | None = None,
+        link: str | None = None,
+    ) -> None:
+        pass
 
     def __repr__(self) -> str:
         return f"EPUBResource({self.filename!r})"

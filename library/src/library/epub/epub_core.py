@@ -300,14 +300,20 @@ class EpubCore:
         ]
 
     def writing_sequence(self) -> Generator[EPUBResource, None, None]:
-        #yield self.mimetype_resource
+        # yield self.mimetype_resource
         yield self.container_resource
         yield self.package_resource
         if self.ncx_resource and not self.ncx_resource.is_deleted:
             yield self.ncx_resource
         if self.nav_resource and not self.nav_resource.is_deleted:
             yield self.nav_resource
-        yielded = {self.mimetype_resource, self.container_resource, self.package_resource, self.ncx_resource, self.nav_resource}
+        yielded = {
+            self.mimetype_resource,
+            self.container_resource,
+            self.package_resource,
+            self.ncx_resource,
+            self.nav_resource,
+        }
         for resource in self.resources.core_items():
             if resource not in yielded and not resource.is_deleted:
                 yield resource
@@ -341,7 +347,7 @@ class EpubCore:
             self.package_document.guide.remove_reference(resource.guide_reference)
             self.package_resource.is_modified = True
         if self.package_resource.is_modified:
-            logger.info(f"package_resource was modified")
+            logger.info("package_resource was modified")
             self.package_resource.xml_tree = self.package_document.to_xml_tree(
                 skip_empty=True, exclude_none=True, exclude_unset=True
             )
