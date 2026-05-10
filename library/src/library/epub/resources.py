@@ -52,7 +52,7 @@ class EPUBResource:
     """Represents a single file in an EPUB archive."""
 
     def __init__(self, info: ZipInfo, read_bytes_func: Callable[[ZipInfo], bytes]) -> None:
-        self.info: ZipInfo = info
+        self.original_info: ZipInfo = info
         self._read_bytes_func = read_bytes_func
 
         self._content: bytes | None = None
@@ -64,8 +64,8 @@ class EPUBResource:
         self.category = self.media_type.category
         self.resource_type = self.media_type.resource_type
 
-        self._modified = False
-        self._deleted = False
+        self.is_modified = False
+        self.is_deleted = False
         self.linked_to: list[EPUBLink] = list()
         self.linked_by: list[EPUBLink] = list()
 
@@ -98,14 +98,14 @@ class EPUBResource:
 
     @property
     def content(self) -> bytes:
-        if self._modified:
+        if self.is_modified:
             if self._html is not None:
-                self._content = html.tostring(self._html, pretty_print=True)
+                self.content = html.tostring(self.html, pretty_print=True)
             if self._xml_tree is not None:
-                self._content = etree.tostring(self._xml_tree, pretty_print=True)
+                self.content = etree.tostring(self.xml_tree, pretty_print=True, xml_declaration=True, encoding="utf-8")
         if self._content is None:
             logger.debug(f"{self} reading content")
-            self._content: bytes = self._read_bytes_func(self.info)
+            self._content: bytes = self._read_bytes_func(self.original_info)
         assert self._content is not None, f"{self} could not read content"
         return self._content
 
@@ -128,7 +128,7 @@ class EPUBResource:
         logger.info(f"{self} reassigning the html data")
         self._html = value
         # TODO: pretty_print, encoding via global env variable # encoding: Literal["unicode"] | None = None (for str)
-        self.content = html.tostring(value, pretty_print=True)
+        # self.content = html.tostring(value, pretty_print=True)
 
     @property
     def xml_tree(self) -> Element:
@@ -144,22 +144,30 @@ class EPUBResource:
         logger.info(f"{self} reassigning the xml_tree data")
         self._xml_tree = value
         # TODO: pretty_print, encoding via global env variable # encoding: Literal["unicode"] | None = None (for str)
-        self.content = etree.tostring(value, pretty_print=True)
+        # self.content = etree.tostring(self.xml_tree, pretty_print=True, xml_declaration=True, encoding="utf-8")
 
     @property
     def filename(self) -> str:
-        return self.info.filename
+        return self.original_info.filename
 
     @filename.setter
     def filename(self, value: str) -> None:
-        self.info.filename = value
+        self.original_info.filename = value
+
+    @property
+    def info(self) -> ZipInfo:
+        info = self.original_info
+        info.CRC = 0
+        info.file_size = 0
+        info.compress_size = 0
+        return info
 
     def write_to_filesystem(self, path: Path) -> EPUBResource:
         if path.exists():
             logger.warning(f"{self}, file {path} exists, nothing to write.")
         else:
             byte_count = path.write_bytes(self.content)
-            apply_zipinfo_timestamp_to_file(self.info, path)
+            apply_zipinfo_timestamp_to_file(self.original_info, path)
             logger.info(f"{self}, written {byte_count} bytes to {path}.")
         return EPUBResource.from_filesystem_path(path)
 
@@ -178,7 +186,7 @@ class EPUBResource:
 
     def get_stats(self) -> dict:
         return {
-            "filename": self.info.filename,
+            "filename": self.original_info.filename,
             "media_type": self.media_type,
             "manifest_media_type": self.manifest_item and self.manifest_item.media_type,
             "id": self.manifest_item and self.manifest_item.id,
