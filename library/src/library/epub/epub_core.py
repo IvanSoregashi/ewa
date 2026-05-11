@@ -5,7 +5,7 @@ from enum import StrEnum
 
 from library.epub.media_type import MediaType, Category, ResourceType
 from library.epub.resources import ResourceIndex, EPUBResource
-from library.epub.utils_path import posix_absolute_href
+from library.epub.utils_href import posix_absolute_href
 from library.epub.xml_literals import FileName
 from library.epub.xml_models.container_model import ContainerDocument
 from library.epub.xml_models.ncx_model import NCXDocument, NavPoint

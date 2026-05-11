@@ -13,7 +13,7 @@ from pydantic_xml import BaseXmlModel
 from library.epub.epub_link import EPUBLinkType
 
 from library.epub.media_type import MediaType, ResourceType, Category
-from library.epub.utils_path import posix_absolute_href
+from library.epub.utils_href import posix_absolute_href
 from library.epub.xml_models.ncx_model import NavPoint
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
 from library.epub.utils_zip import apply_zipinfo_timestamp_to_file
