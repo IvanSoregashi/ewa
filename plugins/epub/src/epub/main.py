@@ -5,16 +5,15 @@ import typer
 from pathlib import Path
 
 from epub.serene_panda import orchestration
-from epub.utils import string_to_int_hash64
 from ewa.ui import print_success, print_error
 from ewa.cli.print_table import print_table_from_models, print_table_from_dicts
 from ewa.cli.progress import DisplayProgress
 from ewa.main import settings
 from epub.tables import EpubBookTable, EpubContentsTable
-from epub.constants import duplicates_directory, epub_dir
+from epub.constants import duplicates_directory, epub_dir, serene_panda_fonts_dir
 from library.epub.epub_core import EpubSpecification
 from library.epub.utils_css import parse_css_urls, replace_css_url
-from library.epub.utils_path import posix_relative_href
+from library.epub.utils_href import posix_relative_href
 from library.utils import sanitize_filename
 from library.epub.epub import EPUB
 
@@ -68,26 +67,27 @@ def test():
 
 @app.command()
 def decrypt(epub_path: Path = typer.Argument(None, exists=True)):
-    epub = EPUB(epub_path)
-    if not epub.is_specification(EpubSpecification.SERENE_PANDA_ENCRYPTED):
-        logger.debug(f"EPUB {epub_path.name!r} is not SERENE_PANDA_ENCRYPTED.")
-        return
+    changes_dir = settings.current_dir / "changes"
+    changes_dir.mkdir(parents=True, exist_ok=True)
 
-    assert len(epub.core.fonts) == 1, "SEVERAL FONTS FOUND"
-    with epub.source.open():
+    new_name = epub_path.with_stem(epub_path.stem.replace("(Encoded)", "").strip()).name
+    destination = changes_dir / new_name
+
+    with EPUB(epub_path).stream_to(destination) as epub:
+        epub.require_specification(EpubSpecification.SERENE_PANDA_ENCRYPTED)
+
+        assert len(epub.core.fonts) == 1, "SEVERAL FONTS FOUND"
         font_resource = epub.core.fonts[0]
-        new_font_name = f"{string_to_int_hash64(font_resource.content)}_{Path(font_resource.filename).name}"
-        new_font_path = settings.profile_dir / "epub" / "serene_panda" / "fonts" / new_font_name
-        font_resource.write_to_filesystem(new_font_path)
-
-        (settings.current_dir / "changes").mkdir(parents=True, exist_ok=True)
+        font_resource.write_to_filesystem(serene_panda_fonts_dir / font_resource.hash_prefixed_name)
 
         epub.core.remove_resource(font_resource)
 
         for style_resource in epub.core.styles:
             relative_path = posix_relative_href(anchor=style_resource.filename, absolute_href=font_resource.filename)
             if relative_path in parse_css_urls(style_resource.content):
-                style_resource.content = replace_css_url(style_resource.content, relative_path, new_font_name)
+                style_resource.content = replace_css_url(
+                    style_resource.content, relative_path, font_resource.hash_prefixed_name
+                )
                 style_resource.is_modified = True
 
         dictionary = orchestration.translation_dictionary()
@@ -95,11 +95,10 @@ def decrypt(epub_path: Path = typer.Argument(None, exists=True)):
             if not content_resource.is_spine_item():
                 logger.warning(f"content_resource {content_resource.filename} is not in the spine")
             content_resource.content = content_resource.content.decode("utf-8").translate(dictionary).encode("utf-8")
+            # content_resource.content = pretty_print_bs4_bytes(content_resource.content)
             content_resource.is_modified = True
 
-    epub.core.cleanup()
-    new_name = epub.path.with_stem(epub.path.stem.replace("(Encoded)", "").strip()).name
-    epub.package_into(destination=settings.current_dir / "changes" / new_name)
+        epub.core.cleanup()
 
 
 @app.command("showres")
