@@ -59,7 +59,7 @@ class EPUBResource:
         self._hex_hash: str | None = None
         self._text: str | None = None
         self._html: HtmlElement | None = None
-        self._xml_tree: Element | None = None
+        self._xml: Element | None = None
 
         self.media_type = MediaType.from_filename(info.filename)
         self.category = self.media_type.category
@@ -100,11 +100,11 @@ class EPUBResource:
         if self.is_modified:
             if self._html is not None:
                 self.content = html.tostring(self.html, pretty_print=True)
-            if self._xml_tree is not None:
-                self.content = etree.tostring(self.xml_tree, pretty_print=True, xml_declaration=True, encoding="utf-8")
+            if self._xml is not None:
+                self.content = etree.tostring(self.xml, pretty_print=True, xml_declaration=True, encoding="utf-8")
         if self._content is None:
             logger.debug(f"{self} reading content")
-            self._content: bytes = self._read_bytes_func(self.original_info)
+            self._content: bytes = self._read_bytes_func(self.info)
         assert self._content is not None, f"{self} could not read content"
         return self._content
 
@@ -141,20 +141,20 @@ class EPUBResource:
         # self.content = html.tostring(value, pretty_print=True)
 
     @property
-    def xml_tree(self) -> Element:
+    def xml(self) -> Element:
         if not self.media_type.is_xml() and not self.is_nav_document():
-            raise RuntimeError(f"{self} Invalid type for .xml_tree (({self._params()})")
-        if self._xml_tree is None:
-            self._xml_tree = etree_from_bytes(self.content)
-        assert self._xml_tree is not None, f"{self} could not read content for xml_tree"
-        return self._xml_tree
+            raise RuntimeError(f"{self} Invalid type for .xml ({self._params()})")
+        if self._xml is None:
+            self._xml = etree_from_bytes(self.content)
+        assert self._xml is not None, f"{self} could not read content for xml"
+        return self._xml
 
-    @xml_tree.setter
-    def xml_tree(self, value: Element) -> None:
-        logger.info(f"{self} reassigning the xml_tree data")
-        self._xml_tree = value
+    @xml.setter
+    def xml(self, value: Element) -> None:
+        logger.info(f"{self} reassigning the xml data")
+        self._xml = value
         # TODO: pretty_print, encoding via global env variable # encoding: Literal["unicode"] | None = None (for str)
-        # self.content = etree.tostring(self.xml_tree, pretty_print=True, xml_declaration=True, encoding="utf-8")
+        # self.content = etree.tostring(self.xml, pretty_print=True, xml_declaration=True, encoding="utf-8")
 
     @property
     def filename(self) -> str:
