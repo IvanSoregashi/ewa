@@ -56,6 +56,7 @@ class EPUBResource:
         self._read_bytes_func = read_bytes_func
 
         self._content: bytes | None = None
+        self._hex_hash: str | None = None
         self._text: str | None = None
         self._html: HtmlElement | None = None
         self._xml_tree: Element | None = None
@@ -113,6 +114,17 @@ class EPUBResource:
         self._content = value
 
     @property
+    def hex_hash(self):
+        if self._hex_hash is None:
+            self._hex_hash = md5(self.content).hexdigest()
+        assert self._hex_hash is not None
+        return self._hex_hash
+
+    @property
+    def int64_hash(self):
+        return int(self.hex_hash, 16) % SQLITE_MAX_INT
+
+    @property
     def html(self) -> HtmlElement:
         if self.category is not Category.MARKUP_CONTENT:
             raise RuntimeError(f"{self} Invalid type for .html ({self._params()})")
@@ -159,6 +171,10 @@ class EPUBResource:
         info.file_size = 0
         info.compress_size = 0
         return info
+
+    @property
+    def hash_prefixed_name(self):
+        return f"{self.int64_hash}_{Path(self.filename).name}"
 
     def write_to_filesystem(self, path: Path) -> EPUBResource:
         if path.exists():
