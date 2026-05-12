@@ -7,9 +7,10 @@ from lxml import html, etree
 from lxml.html import HtmlElement
 from lxml.etree import Element
 from dataclasses import dataclass, field
+from hashlib import md5
 
-from pydantic_xml import BaseXmlModel
 
+from epub.utils import SQLITE_MAX_INT
 from library.epub.epub_link import EPUBLinkType
 
 from library.epub.media_type import MediaType, ResourceType, Category
