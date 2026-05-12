@@ -15,6 +15,12 @@ from library.epub.xml_literals import FileName, FileContents
 logger = logging.getLogger("epub")
 
 
+class EpubError(Exception): ...
+
+
+class EpubSpecificationError(EpubError): ...
+
+
 class EPUB:
     def __init__(self, path: str | Path) -> None:
         """Initialize an EPUB object with path to epub file or a directory."""
@@ -94,6 +100,12 @@ class EPUB:
                 return strict_font is not None
             case _:
                 raise ValueError(f"Specification {specification} is not Implemented")
+
+    def require_specification(self, specification: EpubSpecification):
+        if not self.is_specification(specification):
+            message = f"{self} does not adhere to specification {specification.value!r}"
+            logger.error(message)
+            raise EpubSpecificationError(message)
 
     def scan_resources(self) -> ResourceIndex:
         """Scan the EPUB source and build a ResourceIndex from all files."""
@@ -200,9 +212,9 @@ class EPUB:
             self.source.write_to_zipfile(zipf, mimetype_info, compress_type=ZIP_STORED)
 
             for resource in self.resources:
-                if resource.original_info in exclude_members:
+                if resource.info in exclude_members:
                     continue
-                if self.__skip_dirs and resource.original_info.is_dir():
+                if self.__skip_dirs and resource.info.is_dir():
                     continue
                 if resource.filename == FileName.MIMETYPE:
                     continue
@@ -211,14 +223,14 @@ class EPUB:
 
                 if resource.is_modified:
                     logger.debug(f"Writing modified {resource}.")
-                    zip_info = resource.info
+                    zip_info = resource.null_info
                     # TODO is there data that needs to be modified?
                     # Write bytes from memory
                     zipf.writestr(zip_info, resource.content)
                 else:
                     logger.debug(f"Writing original {resource}.")
                     # Stream untouched bytes from source
-                    self.source.write_to_zipfile(zipf, resource.original_info)
+                    self.source.write_to_zipfile(zipf, resource.info)
 
     def _package_from_core(self, destination: Path, exclude_members: Container[ZipInfo]):
         with self.source.open(), ZipFile(destination, "w", compression=ZIP_DEFLATED) as zipf:
@@ -227,27 +239,30 @@ class EPUB:
             self.source.write_to_zipfile(zipf, mimetype_info, compress_type=ZIP_STORED)
 
             for resource in self.core.writing_sequence():
-                if resource.original_info in exclude_members:
+                if resource.info in exclude_members:
                     continue
-                if self.__skip_dirs and resource.original_info.is_dir():
+                if self.__skip_dirs and resource.info.is_dir():
                     continue
 
                 if resource.is_modified:
                     logger.debug(f"Writing modified {resource}.")
-                    zip_info = resource.info
+                    zip_info = resource.null_info
                     # Write bytes from memory
                     zipf.writestr(zip_info, resource.content)
                 else:
                     logger.debug(f"Writing original {resource}.")
                     # Stream untouched bytes from source
-                    self.source.write_to_zipfile(zipf, resource.original_info)
+                    self.source.write_to_zipfile(zipf, resource.info)
 
     @contextmanager
     def stream_to(self, destination: str | Path) -> Generator[Self, None, None]:
-
-        with self.source.open():
-            yield self
-        self.package_into(destination)
+        try:
+            with self.source.open():
+                yield self
+        except EpubError:
+            logger.error(f"{self} will not be packaged to {destination!r}.")
+        else:
+            self.package_into(destination)
 
     def save_changes_to_a_dir(self, directory: Path):
         for resource in self.resources:

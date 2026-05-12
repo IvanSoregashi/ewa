@@ -52,7 +52,7 @@ class EPUBResource:
     """Represents a single file in an EPUB archive."""
 
     def __init__(self, info: ZipInfo, read_bytes_func: Callable[[ZipInfo], bytes]) -> None:
-        self.original_info: ZipInfo = info
+        self.info: ZipInfo = info
         self._read_bytes_func = read_bytes_func
 
         self._content: bytes | None = None
@@ -80,14 +80,6 @@ class EPUBResource:
 
         # NAV
         self.navs: dict[str, NavPoint] = {}
-
-    def parsed_outgoing_link(
-        self,
-        element: HtmlElement | BaseXmlModel,
-        link_data: tuple[HtmlElement, dict[str, str], str, int] | None = None,
-        link: str | None = None,
-    ) -> None:
-        pass
 
     def __repr__(self) -> str:
         return f"EPUBResource({self.filename!r})"
@@ -154,15 +146,15 @@ class EPUBResource:
 
     @property
     def filename(self) -> str:
-        return self.original_info.filename
+        return self.info.filename
 
     @filename.setter
     def filename(self, value: str) -> None:
-        self.original_info.filename = value
+        self.info.filename = value
 
     @property
-    def info(self) -> ZipInfo:
-        info = self.original_info
+    def null_info(self) -> ZipInfo:
+        info = self.info
         info.CRC = 0
         info.file_size = 0
         info.compress_size = 0
@@ -173,7 +165,7 @@ class EPUBResource:
             logger.warning(f"{self}, file {path} exists, nothing to write.")
         else:
             byte_count = path.write_bytes(self.content)
-            apply_zipinfo_timestamp_to_file(self.original_info, path)
+            apply_zipinfo_timestamp_to_file(self.info, path)
             logger.info(f"{self}, written {byte_count} bytes to {path}.")
         return EPUBResource.from_filesystem_path(path)
 
@@ -192,7 +184,7 @@ class EPUBResource:
 
     def get_stats(self) -> dict:
         return {
-            "filename": self.original_info.filename,
+            "filename": self.info.filename,
             "media_type": self.media_type,
             "manifest_media_type": self.manifest_item and self.manifest_item.media_type,
             "id": self.manifest_item and self.manifest_item.id,
