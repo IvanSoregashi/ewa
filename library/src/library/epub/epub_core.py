@@ -348,9 +348,7 @@ class EpubCore:
             self.package_resource.is_modified = True
         if self.package_resource.is_modified:
             logger.info("package_resource was modified")
-            self.package_resource.xml_tree = self.package_document.to_xml_tree(
-                skip_empty=True, exclude_none=True, exclude_unset=True
-            )
+            self.package_resource.content = self.package_document.to_xml_bytes()
         if resource.ncx_nav_point is not None:
             self.ncx_document.nav_map.remove_nav_point(point=resource.ncx_nav_point)
             self.ncx_resource.is_modified = True
