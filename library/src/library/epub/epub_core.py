@@ -42,17 +42,16 @@ class EpubCore:
         self.resources = resources
 
         self.mimetype_resource = require(self.resources.by_path(FileName.MIMETYPE), "MIMETYPE")
-        self.container_resource = require(self.resources.by_path(FileName.CONTAINER), "CONTAINER")
-        self.container_document = ContainerDocument.from_xml_bytes(self.container_resource.content)
-        assert len(self.container_document.opf_paths) == 1, "EPUB's with several package documents are not supported"
+        self.container_resource: EpubContainerResource = require(self.resources.by_path(FileName.CONTAINER), "CONTAINER")
+        assert len(self.container_resource.document.opf_paths) == 1, "EPUB's with several package documents are not supported"
 
-        opf_path = require(self.container_document.opf_path, "opf_path")
-        self.package_resource = require(self.resources.by_path(opf_path), "package_resource")
-        self.package_document = PackageDocument.from_xml_bytes(self.package_resource.content)
+        opf_path = require(self.container_resource.document.opf_path, "opf_path")
+        self.package_resource: EpubOpfResource = require(self.resources.by_path(opf_path), "package_resource")
+        self.package_document: PackageDocument = self.package_resource.document
 
-        self.ncx_resource: EPUBResource | None = None
+        self.ncx_resource: EpubNcxResource | None = None
         self._ncx_document: NCXDocument | None = None
-        self.nav_resource: EPUBResource | None = None
+        self.nav_resource: EpubHtmlResource | None = None
         self._nav_document: NavDocument | None = None
 
         self.cover_resource: EPUBResource | None = None
@@ -81,16 +80,6 @@ class EpubCore:
             resource = require(self.nav_resource, "nav_resource")
             self._nav_document = NavDocument.from_xml_bytes(resource.content)
         return require(self._nav_document)
-
-    def sync(self) -> None:
-        """Serialize all core models (package, ncx, nav) back to their respective resources."""
-        logger.debug(f"{self} sync core documents")
-        if self.package_resource and self.package_resource.is_modified:
-            self.package_resource.content = self.package_document.to_xml_bytes()
-        if self.ncx_resource and self.ncx_resource.is_modified:
-            self.ncx_resource.content = self.ncx_document.to_xml_bytes()
-        if self.nav_resource and self.nav_resource.is_modified:
-            self.nav_resource.content = self.nav_document.to_xml_bytes()
 
     # -----------------------------------------------------------------------
     # OPF enrichment
@@ -343,27 +332,31 @@ class EpubCore:
         if resource.manifest_item is not None:
             self.package_document.manifest.remove_item(resource.manifest_item)
             self.package_resource.is_modified = True
-        if resource.spine_item_ref is not None:
-            self.package_document.spine.remove_itemref(resource.spine_item_ref)
-            self.package_resource.is_modified = True
-        if resource.guide_reference is not None:
-            self.package_document.guide.remove_reference(resource.guide_reference)
-            self.package_resource.is_modified = True
+        if resource.role == EpubRole.HTML:
+            resource: EpubHtmlResource
+            if resource.spine_item_ref is not None:
+                self.package_document.spine.remove_itemref(resource.spine_item_ref)
+                self.package_resource.is_modified = True
+            if resource.guide_reference is not None:
+                self.package_document.guide.remove_reference(resource.guide_reference)
+                self.package_resource.is_modified = True
+            if resource.ncx_nav_point is not None:
+                self.ncx_document.nav_map.remove_nav_point(point=resource.ncx_nav_point)
+                self.ncx_resource.is_modified = True
+            if resource.navs:
+                raise NotImplementedError("Nav removal not implemented yet.")
+                self.nav_resource.is_modified = True
         if self.package_resource.is_modified:
             logger.info("package_resource was modified")
             self.package_resource.content = self.package_document.to_xml_bytes()
-        if resource.ncx_nav_point is not None:
-            self.ncx_document.nav_map.remove_nav_point(point=resource.ncx_nav_point)
-            self.ncx_resource.is_modified = True
-        if resource.navs:
-            raise NotImplementedError("Nav removal not implemented yet.")
-            self.nav_resource.is_modified = True
+
         if resource.linked_by:
             for link in resource.linked_by:
                 logger.debug(f"{self} removing link {link!r}")
                 link.element.getparent().remove(link.element)
-                link.resource.linked_to.remove(link)
-                link.resource.is_modified = True
+                linked_res: EpubHtmlResource = self.resources.by_path(link.filename)
+                linked_res.linked_to.remove(link)
+                linked_res.is_modified = True
 
     def remove_garbage(self):
         ibook_resource = self.resources.by_path(FileName.IBOOKS_OPTIONS)
