@@ -3,8 +3,8 @@ import re
 from collections.abc import Generator
 from enum import StrEnum
 
-from library.epub.media_type import MediaType, Category, ResourceType
 from library.epub.resources import ResourceIndex, EPUBResource
+from library.epub.media_type import MediaType, EpubRole
 from library.epub.utils_href import posix_absolute_href
 from library.epub.xml_literals import FileName
 from library.epub.xml_models.container_model import ContainerDocument
@@ -115,7 +115,7 @@ class EpubCore:
                 self.cover_resource = resource
 
             if item.properties and "nav" in item.properties:
-                resource.resource_type = ResourceType.CORE
+                resource.role = EpubRole.NAV
                 logger.debug(f"{self} found nav file: {resource.filename!r}")
                 if self.nav_resource is not None:
                     logger.warning(f"{self} found second nav file {resource.filename!r}")
@@ -268,20 +268,28 @@ class EpubCore:
     # Convenience properties
     # -----------------------------------------------------------------------
 
+    def resources_by_role(self, role: EpubRole) -> list[EPUBResource]:
+        """All resources in the EPUB with certain role."""
+        return [r for r in self.resources if r.role == role]
+
     @property
     def styles(self) -> list[EPUBResource]:
         """All CSS stylesheets in the EPUB."""
-        return [r for r in self.resources if r.media_type.category == Category.STYLE]
+        return self.resources_by_role(EpubRole.STYLE)
 
     @property
     def fonts(self) -> list[EPUBResource]:
         """All font files in the EPUB."""
-        return [r for r in self.resources if r.media_type.category == Category.FONT]
+        return self.resources_by_role(EpubRole.FONT)
 
     @property
     def images(self) -> list[EPUBResource]:
         """All image files in the EPUB."""
-        return [r for r in self.resources if r.media_type.category == Category.IMAGE]
+        return self.resources_by_role(EpubRole.IMAGE)
+
+    @property
+    def markup_content(self) -> list[EPUBResource]:
+        return self.resources_by_role(EpubRole.HTML)
 
     @property
     def spine(self) -> list[EPUBResource]:
@@ -290,14 +298,6 @@ class EpubCore:
             [r for r in self.resources if r.is_spine_item()],
             key=lambda r: r.source_sequence or 9999,
         )
-
-    @property
-    def markup_content(self) -> list[EPUBResource]:
-        return [
-            r
-            for r in self.resources
-            if r.resource_type is ResourceType.CONTENT and r.category is Category.MARKUP_CONTENT
-        ]
 
     def writing_sequence(self) -> Generator[EPUBResource, None, None]:
         # yield self.mimetype_resource

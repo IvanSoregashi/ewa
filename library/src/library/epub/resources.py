@@ -13,7 +13,7 @@ from hashlib import md5
 from epub.utils import SQLITE_MAX_INT
 from library.epub.epub_link import EPUBLinkType
 
-from library.epub.media_type import MediaType, ResourceType, Category
+from library.epub.media_type import MediaType, type_and_role_from_filename
 from library.epub.utils_href import posix_absolute_href
 from library.epub.xml_models.ncx_model import NavPoint
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference

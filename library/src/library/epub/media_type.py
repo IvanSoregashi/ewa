@@ -1,32 +1,64 @@
 from enum import StrEnum
 from pathlib import Path
 from typing import Self, override, Any
-import logging
+
+from library.epub.xml_literals import FileName
 from library.filetypes import guess_file_type
 
-logger = logging.getLogger("media_type")
 
+class EpubRole(StrEnum):
+    MIMETYPE = "MIMETYPE"
+    CONTAINER = "CONTAINER"
+    OPF = "OPF"
+    NCX = "NCX"
+    NAV = "NAV"
+    COVER = "COVER"
+    XML = "XML"
 
-class ResourceType(StrEnum):
-    UNKNOWN = "UNKNOWN"
-    CORE = "CORE"
-    COMMON = "COMMON"
-    CONTENT = "CONTENT"
-
-
-class Category(StrEnum):
-    """
-    Broad categories of media types.
-    """
-
-    CORE = "CORE"
+    HTML = "HTML"
     IMAGE = "IMAGE"
     AUDIO = "AUDIO"
-    MARKUP_CONTENT = "MARKUP_CONTENT"
+    VIDEO = "VIDEO"
+
     STYLE = "STYLE"
     FONT = "FONT"
-    OTHER = "OTHER"
-    FOREIGN = "FOREIGN"
+    SCRIPT = "SCRIPT"
+
+    UNKNOWN = "UNKNOWN"
+    GARBAGE = "GARBAGE"
+
+    def is_core(self):
+        return (
+            self is self.MIMETYPE
+            or self is self.CONTAINER
+            or self is self.OPF
+            or self is self.NCX
+            or self is self.NAV
+            or self is self.XML
+            or self is self.COVER
+        )
+
+    def is_content(self):
+        return self is self.HTML or self is self.IMAGE or self is self.AUDIO or self is self.VIDEO
+
+    def is_common(self):
+        return self is self.SCRIPT or self is self.STYLE or self is self.FONT
+
+    def is_other(self):
+        return self is self.UNKNOWN or self is self.GARBAGE
+
+    @classmethod
+    def from_media_and_path(cls, media_type: MediaType, path: str | Path):
+        guessed_role = media_type.guess_role()
+        if guessed_role is cls.XML or guessed_role is cls.UNKNOWN:
+            if path == FileName.CONTAINER:
+                return cls.CONTAINER
+            if path == FileName.IBOOKS_OPTIONS:
+                return cls.GARBAGE
+            if path == FileName.MIMETYPE:
+                return cls.MIMETYPE
+
+        return guessed_role
 
 
 class MediaType(StrEnum):
@@ -44,65 +76,45 @@ class MediaType(StrEnum):
         value (str): The media type string.
     """
 
-    category: Category
-    resource_type: ResourceType
-
     # Core
-    MIMETYPE = "text/mimetype", Category.CORE, ResourceType.CORE
-    NCX = "application/x-dtbncx+xml", Category.CORE, ResourceType.CORE
-    OPF = "application/oebps-package+xml", Category.CORE, ResourceType.CORE
-    XML = "application/xml", Category.CORE, ResourceType.CORE
+    NCX = "application/x-dtbncx+xml"
+    OPF = "application/oebps-package+xml"
+    XML = "application/xml"
 
     # Text content
-    XHTML = "application/xhtml+xml", Category.MARKUP_CONTENT, ResourceType.CONTENT
-    HTML = "text/html", Category.MARKUP_CONTENT, ResourceType.CONTENT
+    XHTML = "application/xhtml+xml"
+    HTML = "text/html"
 
     # Images
-    IMAGE_GIF = "image/gif", Category.IMAGE, ResourceType.CONTENT
-    IMAGE_JPEG = "image/jpeg", Category.IMAGE, ResourceType.CONTENT
-    IMAGE_PNG = "image/png", Category.IMAGE, ResourceType.CONTENT
-    IMAGE_SVG = "image/svg+xml", Category.IMAGE, ResourceType.CONTENT
-    IMAGE_WEBP = "image/webp", Category.IMAGE, ResourceType.CONTENT
+    IMAGE_GIF = "image/gif"
+    IMAGE_JPEG = "image/jpeg"
+    IMAGE_PNG = "image/png"
+    IMAGE_SVG = "image/svg+xml"
+    IMAGE_WEBP = "image/webp"
 
     # Audio
-    AUDIO_MPEG = "audio/mpeg", Category.AUDIO, ResourceType.CONTENT
-    AUDIO_MP4 = "audio/mp4", Category.AUDIO, ResourceType.CONTENT
-    AUDIO_OGG = "audio/ogg", Category.AUDIO, ResourceType.CONTENT
+    AUDIO_MPEG = "audio/mpeg"
+    AUDIO_MP4 = "audio/mp4"
+    AUDIO_OGG = "audio/ogg"
 
     # Style
-    CSS = "text/css", Category.STYLE, ResourceType.COMMON
+    CSS = "text/css"
 
     # Fonts
-    FONT_TTF = "font/ttf", Category.FONT, ResourceType.COMMON
-    FONT_TTF_OLD = "application/x-font-truetype", Category.FONT, ResourceType.COMMON
-    FONT_OTF = "font/otf", Category.FONT, ResourceType.COMMON
-    FONT_WOFF = "font/woff", Category.FONT, ResourceType.COMMON
-    FONT_WOFF2 = "font/woff2", Category.FONT, ResourceType.COMMON
-    FONT_SFNT = "application/font-sfnt", Category.FONT, ResourceType.COMMON
-    VND_MS_OPENTYPE = "application/vnd.ms-opentype", Category.FONT, ResourceType.COMMON
-    APPLICATION_FONT_WOFF = "application/font-woff", Category.FONT, ResourceType.COMMON
+    FONT_TTF = "font/ttf"
+    FONT_TTF_OLD = "application/x-font-truetype"
+    FONT_OTF = "font/otf"
+    FONT_WOFF = "font/woff"
+    FONT_WOFF2 = "font/woff2"
+    FONT_SFNT = "application/font-sfnt"
+    VND_MS_OPENTYPE = "application/vnd.ms-opentype"
+    APPLICATION_FONT_WOFF = "application/font-woff"
 
     # Other
-    JAVASCRIPT = "application/javascript", Category.OTHER, ResourceType.UNKNOWN
-    ECMASCRIPT = "application/ecmascript", Category.OTHER, ResourceType.UNKNOWN
-    TEXT_JAVASCRIPT = "text/javascript", Category.OTHER, ResourceType.UNKNOWN
-    SMIL_XML = "application/smil+xml", Category.OTHER, ResourceType.UNKNOWN
-
-    def __new__(cls, value: str, category: Category, resource_type: ResourceType) -> Self:
-        obj = str.__new__(cls, value)
-        obj._value_ = value
-
-        return obj
-
-    def __init__(
-        self,
-        value: str,
-        category: Category = Category.FOREIGN,
-        resource_type: ResourceType = ResourceType.UNKNOWN,
-    ) -> None:
-        self.category = category
-        self.resource_type = resource_type
-        super().__init__()
+    JAVASCRIPT = "application/javascript"
+    ECMASCRIPT = "application/ecmascript"
+    TEXT_JAVASCRIPT = "text/javascript"
+    SMIL_XML = "application/smil+xml"
 
     @classmethod
     @override
@@ -111,10 +123,7 @@ class MediaType(StrEnum):
             obj = str.__new__(cls, value)
             obj._value_ = value
             obj._name_ = "FOREIGN"
-            obj.category = Category.FOREIGN
-            obj.resource_type = ResourceType.UNKNOWN
             cls._value2member_map_[value] = obj
-            logger.warning(f"MediaType - initializing unknown value {value!r}.")
             return obj
 
         raise ValueError(f"{value} is not a valid {cls.__name__}")
@@ -132,8 +141,6 @@ class MediaType(StrEnum):
             A MediaType instance.
         """
         guessed = guess_file_type(value)
-        if value == "mimetype":
-            guessed = "text/mimetype"  # custom, idk why
         if not guessed:
             guessed = "application/unknown"
         instance = cls(guessed)
@@ -142,6 +149,28 @@ class MediaType(StrEnum):
     @override
     def __str__(self) -> str:
         return self._value_
+
+    def guess_role(self):
+        if self.is_html():
+            return EpubRole.HTML
+        if self is self.XML:
+            return EpubRole.XML
+        if self.is_image():
+            return EpubRole.IMAGE
+        if self is self.OPF:
+            return EpubRole.OPF
+        if self is self.NCX:
+            return EpubRole.NCX
+        if self.is_video():
+            return EpubRole.VIDEO
+        if self.is_font():
+            return EpubRole.FONT
+        if self is self.CSS:
+            return EpubRole.STYLE
+        if self.is_audio():
+            return EpubRole.AUDIO
+
+        return EpubRole.UNKNOWN
 
     def is_xml(self) -> bool:
         """Returns whether the media type is xml."""
@@ -155,14 +184,40 @@ class MediaType(StrEnum):
             return True
         return False
 
-    def is_css(self) -> bool:
-        """Returns whether the media type is CSS."""
-        return self is self.CSS
-
     def is_js(self) -> bool:
         """Returns whether the media type is javascript."""
         return self is self.JAVASCRIPT or self is self.ECMASCRIPT or self is self.TEXT_JAVASCRIPT
 
+    def is_audio(self) -> bool:
+        return self.startswith("audio/")
+
     def is_video(self) -> bool:
         """Returns whether if the media type is video."""
         return self.startswith("video/")
+
+    def is_image(self) -> bool:
+        return (
+            self is self.IMAGE_JPEG
+            or self is self.IMAGE_PNG
+            or self is self.IMAGE_GIF
+            or self is self.IMAGE_SVG
+            or self is self.IMAGE_WEBP
+        )
+
+    def is_font(self) -> bool:
+        return (
+            self is self.FONT_TTF
+            or self is self.FONT_TTF_OLD
+            or self is self.FONT_OTF
+            or self is self.FONT_WOFF
+            or self is self.FONT_WOFF2
+            or self is self.FONT_SFNT
+            or self is self.VND_MS_OPENTYPE
+            or self is self.APPLICATION_FONT_WOFF
+        )
+
+
+def type_and_role_from_filename(filename: str | Path) -> tuple[MediaType, EpubRole]:
+    media_type = MediaType.from_filename(filename)
+    role = EpubRole.from_media_and_path(media_type, filename)
+    return media_type, role
