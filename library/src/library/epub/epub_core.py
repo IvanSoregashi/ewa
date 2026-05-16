@@ -3,10 +3,13 @@ import re
 from collections.abc import Generator
 from enum import StrEnum
 
-from library.epub.resources import ResourceIndex, EPUBResource
-from library.epub.media_type import MediaType, EpubRole
+
+from library.epub.epub_link import EPUBLink
+from library.epub.media_type import MediaType, EpubRole, FileName
+from library.epub.resources import EPUBResource, EpubHtmlResource, EpubContainerResource, \
+    EpubOpfResource, EpubNcxResource
+from library.epub.resource_index import ResourceIndex
 from library.epub.utils_href import posix_absolute_href
-from library.epub.xml_literals import FileName
 from library.epub.xml_models.container_model import ContainerDocument
 from library.epub.xml_models.ncx_model import NCXDocument, NavPoint
 from library.epub.xml_models.nav_model import NavDocument, NavListItem
@@ -58,7 +61,7 @@ class EpubCore:
 
         self._enrich_from_opf()
         self._enrich_from_ncx()
-        self._enrich_from_nav()
+        self._iterlinks_navs()
 
         logger.debug(f"{self} initialized")
 
@@ -241,6 +244,7 @@ class EpubCore:
             logger.warning(f"{self} NAV document not found, skipping NAV enrichment")
             return
 
+        # TODO REDO considering 6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
         for nav_elem in self.nav_document.body.navs:
             self._walk_nav_items(nav_elem.epub_type, nav_elem.ol.items)
 
@@ -264,6 +268,24 @@ class EpubCore:
             if item.ol:
                 self._walk_nav_items(epub_type, item.ol.items)
 
+    def _iterlinks_navs(self):
+        logger.debug(f"{self} _iterlinks_navs")
+        nav_res: EpubNavResource = self.nav_resource
+        if nav_res is None:
+            logger.warning(f"{self} NAV document not found, skipping NAV enrichment")
+            return
+
+        for link_data in nav_res.html.iterlinks():
+            epub_link = EPUBLink.from_iterlinks(nav_res.filename, link_data)
+            nav_res.linked_to.append(epub_link)
+            if epub_link.absolute_path is not None:
+                linked_resource = self.resources.by_path(epub_link.absolute_path)
+                assert linked_resource is not None, f"not found {epub_link.absolute_path}({epub_link.link})"
+                assert linked_resource.role is EpubRole.HTML, (
+                    f"Nav document links NON-HTML resource ({epub_link.absolute_path})"
+                )
+                linked_resource.linked_by.append(epub_link)
+
     # -----------------------------------------------------------------------
     # Convenience properties
     # -----------------------------------------------------------------------
@@ -271,25 +293,6 @@ class EpubCore:
     def resources_by_role(self, role: EpubRole) -> list[EPUBResource]:
         """All resources in the EPUB with certain role."""
         return [r for r in self.resources if r.role == role]
-
-    @property
-    def styles(self) -> list[EPUBResource]:
-        """All CSS stylesheets in the EPUB."""
-        return self.resources_by_role(EpubRole.STYLE)
-
-    @property
-    def fonts(self) -> list[EPUBResource]:
-        """All font files in the EPUB."""
-        return self.resources_by_role(EpubRole.FONT)
-
-    @property
-    def images(self) -> list[EPUBResource]:
-        """All image files in the EPUB."""
-        return self.resources_by_role(EpubRole.IMAGE)
-
-    @property
-    def markup_content(self) -> list[EPUBResource]:
-        return self.resources_by_role(EpubRole.HTML)
 
     @property
     def spine(self) -> list[EPUBResource]:
@@ -307,29 +310,29 @@ class EpubCore:
             yield self.ncx_resource
         if self.nav_resource and not self.nav_resource.is_deleted:
             yield self.nav_resource
-        yielded = {
+        yielded = [
             self.mimetype_resource,
             self.container_resource,
             self.package_resource,
             self.ncx_resource,
             self.nav_resource,
-        }
+        ]
         for resource in self.resources.core_items():
             if resource not in yielded and not resource.is_deleted:
                 yield resource
-                yielded.add(resource)
+                yielded.append(resource)
         for resource in self.resources.common_items():
             if resource not in yielded and not resource.is_deleted:
                 yield resource
-                yielded.add(resource)
+                yielded.append(resource)
         for resource in self.spine:
             if resource not in yielded and not resource.is_deleted:
                 yield resource
-                yielded.add(resource)
+                yielded.append(resource)
         for resource in self.resources:
             if resource not in yielded and not resource.is_deleted:
                 yield resource
-                yielded.add(resource)
+                yielded.append(resource)
 
     # -----------------------------------------------------------------------
     #
@@ -362,7 +365,7 @@ class EpubCore:
                 link.resource.linked_to.remove(link)
                 link.resource.is_modified = True
 
-    def cleanup(self):
+    def remove_garbage(self):
         ibook_resource = self.resources.by_path(FileName.IBOOKS_OPTIONS)
         if ibook_resource is not None:
             ibook_resource.is_deleted = True

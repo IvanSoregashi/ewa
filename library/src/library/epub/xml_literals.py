@@ -1,14 +1,6 @@
 from enum import StrEnum
 
 
-class FileName(StrEnum):
-    MIMETYPE = "mimetype"
-    CONTAINER = "META-INF/container.xml"
-    IBOOKS_OPTIONS = "META-INF/com.apple.ibooks.display-options.xml"
-    SP_FONT = "fonts/SerenePanda.ttf"
-    SP_FONT_LOWER_FILENAME = "serenepanda.ttf"
-
-
 class FileContents(StrEnum):
     MIMETYPE = "application/epub+zip"
     EWA_ONE = "application/epub+zip+ewa1"

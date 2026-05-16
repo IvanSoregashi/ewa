@@ -1,5 +1,9 @@
+from dataclasses import dataclass, field
 from urllib.parse import urlparse
 from enum import StrEnum
+
+from lxml.html import HtmlElement
+from library.epub.utils_href import posix_absolute_href
 
 
 class EPUBLinkType(StrEnum):
@@ -35,3 +39,22 @@ class EPUBLinkType(StrEnum):
             return cls.MAILTO
 
         return cls.OTHER_SCHEME
+
+
+@dataclass
+class EPUBLink:
+    filename: str
+    element: HtmlElement  # | BaseXmlModel
+    link: str
+    link_type: EPUBLinkType = field(init=False)
+    absolute_path: str | None = field(default=None)
+
+    def __post_init__(self):
+        self.link_type = EPUBLinkType.from_link(self.link)
+        if self.link_type == EPUBLinkType.RELATIVE_PATH:
+            self.absolute_path = posix_absolute_href(self.filename, self.link)
+
+    @classmethod
+    def from_iterlinks(cls, filename: str, link_data: tuple[HtmlElement, dict[str, str], str, int]):
+        element, attribute, link, pos = link_data
+        return cls(filename=filename, element=element, link=link)

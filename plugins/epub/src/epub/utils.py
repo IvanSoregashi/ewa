@@ -21,13 +21,13 @@ def bt_to_mb(size_in_bytes: int) -> str:
 
 def to_hash(data: str | bytes) -> bytes:
     if isinstance(data, str):
-        data = data.encode("utf-8")
+        data: bytes = data.encode("utf-8")
     return md5(data).digest()
 
 
 def to_hex_hash(data: str | bytes) -> str:
     if isinstance(data, str):
-        data = data.encode("utf-8")
+        data: bytes = data.encode("utf-8")
     return md5(data).hexdigest()
 
 

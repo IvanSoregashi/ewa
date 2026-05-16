@@ -98,7 +98,7 @@ def decrypt(epub_path: Path = typer.Argument(None, exists=True)):
             # content_resource.content = pretty_print_bs4_bytes(content_resource.content)
             content_resource.is_modified = True
 
-        epub.core.cleanup()
+        epub.core.remove_garbage()
 
 
 @app.command("showres")

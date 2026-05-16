@@ -2,8 +2,15 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Self, override, Any
 
-from library.epub.xml_literals import FileName
 from library.filetypes import guess_file_type
+
+
+class FileName(StrEnum):
+    MIMETYPE = "mimetype"
+    CONTAINER = "META-INF/container.xml"
+    IBOOKS_OPTIONS = "META-INF/com.apple.ibooks.display-options.xml"
+    SP_FONT = "fonts/SerenePanda.ttf"
+    SP_FONT_LOWER_ENDSWITH = "serenepanda.ttf"
 
 
 class EpubRole(StrEnum):
