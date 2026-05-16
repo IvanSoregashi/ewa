@@ -1,7 +1,7 @@
 from typing import Literal, overload
 
 from library.epub.media_type import EpubRole, MediaType
-from library.epub.resources import EPUBResource, logger, EpubHtmlResource, EpubXmlResource
+from library.epub.resources import EPUBResource
 
 
 class ResourceIndex:
@@ -61,9 +61,9 @@ class ResourceIndex:
         return [r for r in self._items if r.media_type == media]
 
     @overload
-    def by_role(self, role: Literal[EpubRole.HTML]) -> list[EpubHtmlResource]: ...
+    def by_role(self, role: Literal[EpubRole.HTML]) -> list[EPUBResource]: ...
     @overload
-    def by_role(self, role: Literal[EpubRole.XML]) -> list[EpubXmlResource]: ...
+    def by_role(self, role: Literal[EpubRole.XML]) -> list[EPUBResource]: ...
 
 
     def by_role(self, role: EpubRole) -> list[EPUBResource]:
@@ -71,7 +71,6 @@ class ResourceIndex:
 
     def rebuild_id_index(self) -> None:
         """Rebuild the ID index (call after OPF enrichment populates IDs)."""
-        logger.debug("rebuilding ID index")
         self._by_id = {r.id: r for r in self._items if r.id is not None}
 
     @property
@@ -90,7 +89,7 @@ class ResourceIndex:
         return self.by_role(EpubRole.IMAGE)
 
     @property
-    def markup_content(self) -> list[EpubHtmlResource]:
+    def markup_content(self) -> list[EPUBResource]:
         return self.by_role(EpubRole.HTML)
 
     def core_items(self):

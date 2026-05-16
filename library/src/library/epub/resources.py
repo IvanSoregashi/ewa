@@ -11,9 +11,9 @@ from hashlib import md5
 
 
 from epub.utils import SQLITE_MAX_INT
-from library.epub.epub_link import EPUBLinkType
+from library.epub.epub_link import EPUBLinkType, EPUBLink
 
-from library.epub.media_type import MediaType, type_and_role_from_filename
+from library.epub.media_type import MediaType, type_and_role_from_filename, EpubRole
 from library.epub.utils_href import posix_absolute_href
 from library.epub.xml_models.ncx_model import NavPoint
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
@@ -21,33 +21,6 @@ from library.epub.utils_zip import apply_zipinfo_timestamp_to_file
 from library.xml.utils import etree_from_bytes
 
 logger = logging.getLogger("resource")
-
-
-@dataclass
-class EPUBLink:
-    resource: EPUBResource
-    filename: str = field(init=False)
-    element: HtmlElement  # | BaseXmlModel
-    link: str
-    link_type: EPUBLinkType = field(init=False)
-    absolute_path: str | None = field(default=None)
-
-    def __post_init__(self):
-        self.filename = self.resource.filename
-        self.link_type = EPUBLinkType.from_link(self.link)
-        if self.link_type == EPUBLinkType.RELATIVE_PATH:
-            self.absolute_path = posix_absolute_href(self.filename, self.link)
-
-    @classmethod
-    def from_iterlinks(cls, resource: EPUBResource, link_data: tuple[HtmlElement, dict[str, str], str, int]):
-        element, attribute, link, pos = link_data
-        logger.info(f"link: {link!r}, pos: {pos!r}, attribute: {attribute!r}, element: {element!r}")
-        return cls(resource=resource, element=element, link=link)
-
-    @classmethod
-    def from_etree_element(cls, resource: EPUBResource):
-        pass
-
 
 class EPUBResource:
     """Represents a single file in an EPUB archive."""
@@ -62,9 +35,7 @@ class EPUBResource:
         self._html: HtmlElement | None = None
         self._xml: Element | None = None
 
-        self.media_type = MediaType.from_filename(info.filename)
-        self.category = self.media_type.category
-        self.resource_type = self.media_type.resource_type
+        self.media_type, self.role = type_and_role_from_filename(info.filename)
 
         self.is_modified = False
         self.is_deleted = False
@@ -86,8 +57,8 @@ class EPUBResource:
     def __repr__(self) -> str:
         return f"EPUBResource({self.filename!r})"
 
-    def _params(self) -> str:
-        return f"({self.media_type!s}, {self.category!s}, {self.resource_type!s})"
+    def __params__(self) -> str:
+        return f"({self.media_type.value!r}, {self.role.value!r})"
 
     @classmethod
     def from_filesystem_path(cls, path: Path) -> EPUBResource:
@@ -127,8 +98,8 @@ class EPUBResource:
 
     @property
     def html(self) -> HtmlElement:
-        if self.category is not Category.MARKUP_CONTENT:
-            raise RuntimeError(f"{self} Invalid type for .html ({self._params()})")
+        if self.role is not EpubRole.HTML:
+            raise RuntimeError(f"{self} Invalid type for .html ({self.__params__()})")
         if self._html is None:
             self._html = html.document_fromstring(self.content)
         assert self._html is not None, f"{self} could not read content for html"
@@ -144,7 +115,7 @@ class EPUBResource:
     @property
     def xml(self) -> Element:
         if not self.media_type.is_xml() and not self.is_nav_document():
-            raise RuntimeError(f"{self} Invalid type for .xml ({self._params()})")
+            raise RuntimeError(f"{self} Invalid type for .xml ({self.__params__()})")
         if self._xml is None:
             self._xml = etree_from_bytes(self.content)
         assert self._xml is not None, f"{self} could not read content for xml"
@@ -197,7 +168,7 @@ class EPUBResource:
         return self.spine_item_ref is not None
 
     def is_nav_document(self) -> bool:
-        return self.media_type is MediaType.XHTML and self.resource_type is ResourceType.CORE
+        return self.role is EpubRole.NAV
 
     def get_stats(self) -> dict:
         return {
@@ -214,106 +185,7 @@ class EPUBResource:
         }
 
     def parse_links(self) -> list[EPUBLink]:
-        if self.category is not Category.MARKUP_CONTENT:
-            raise RuntimeError(f"{self} Unknown type ({self.media_type!s}, {self.category!s}, {self.resource_type!s})")
+        if self.role is not EpubRole.HTML:
+            raise RuntimeError(f"{self} Unknown type  ({self.__params__()})")
         logger.debug(f"{self} parsing links")
-        return [EPUBLink.from_iterlinks(self, link_data) for link_data in self.html.iterlinks()]
-
-
-class ResourceIndex:
-    """Auto-indexed collection of EPUBResource objects.
-
-    Provides O(1) lookup by filename and by manifest ID,
-    while maintaining a stable list for iteration.
-    """
-
-    def __init__(self, resources: list[EPUBResource] | None = None) -> None:
-        self._items: list[EPUBResource] = []
-        self._by_path: dict[str, EPUBResource] = {}
-        self._by_id: dict[str, EPUBResource] = {}
-        if resources:
-            for r in resources:
-                self.add(r)
-
-    def __repr__(self) -> str:
-        return f"ResourceIndex({len(self._items)})"
-
-    def __iter__(self):
-        return iter(self._items)
-
-    def __len__(self) -> int:
-        return len(self._items)
-
-    def __contains__(self, item: EPUBResource | str) -> bool:
-        if isinstance(item, str):
-            return item in self._by_path
-        return item in self._items
-
-    def add(self, resource: EPUBResource) -> None:
-        """Add a resource to the index."""
-        self._items.append(resource)
-        self._by_path[resource.filename] = resource
-        # TODO: add records of the resource to the documents
-        if resource.id is not None:
-            self._by_id[resource.id] = resource
-
-    def remove(self, resource: EPUBResource) -> None:
-        """Remove a resource from the index."""
-        self._items.remove(resource)
-        self._by_path.pop(resource.filename, None)
-        # TODO: remove records of the resource from the documents
-        if resource.id is not None:
-            self._by_id.pop(resource.id)
-
-    def by_path(self, path: str) -> EPUBResource | None:
-        """Look up a resource by its filename/path."""
-        return self._by_path.get(path)
-
-    def by_id(self, _id: str) -> EPUBResource | None:
-        """Look up a resource by its manifest ID."""
-        return self._by_id.get(_id)
-
-    def rebuild_id_index(self) -> None:
-        """Rebuild the ID index (call after OPF enrichment populates IDs)."""
-        logger.debug("rebuilding ID index")
-        self._by_id = {r.id: r for r in self._items if r.id is not None}
-
-    def core_items(self) -> Generator[EPUBResource, None, None]:
-        for item in self._items:
-            if item.resource_type is ResourceType.CORE:
-                yield item
-
-    def common_items(self) -> Generator[EPUBResource, None, None]:
-        for item in self._items:
-            if item.resource_type is ResourceType.COMMON:
-                yield item
-
-    def content_items(self) -> Generator[EPUBResource, None, None]:
-        for item in self._items:
-            if item.resource_type is ResourceType.CONTENT:
-                yield item
-
-    def unknown_items(self) -> Generator[EPUBResource, None, None]:
-        for item in self._items:
-            if item.resource_type is ResourceType.UNKNOWN:
-                yield item
-
-    def statistics(self) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
-        core = list(item.get_stats() for item in self.core_items())
-        common = list(item.get_stats() for item in self.common_items())
-        content = list(item.get_stats() for item in self.content_items())
-        unknown = list(item.get_stats() for item in self.unknown_items())
-
-        return core, common, content, unknown
-
-    def interlink_resources(self):
-        for item in self._items:
-            if item.category is not Category.MARKUP_CONTENT:
-                continue
-
-            for epub_link in item.parse_links():
-                item.linked_to.append(epub_link)
-                if epub_link.absolute_path is not None:
-                    linked_resource = self.by_path(epub_link.absolute_path)
-                    assert linked_resource is not None, f"not found {epub_link.absolute_path}({epub_link.link})"
-                    linked_resource.linked_by.append(epub_link)
+        return [EPUBLink.from_iterlinks(self.filename, link_data) for link_data in self.html.iterlinks()]
