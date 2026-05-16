@@ -65,7 +65,6 @@ class ResourceIndex:
     @overload
     def by_role(self, role: Literal[EpubRole.XML]) -> list[EPUBResource]: ...
 
-
     def by_role(self, role: EpubRole) -> list[EPUBResource]:
         return [r for r in self._items if r.role == role]
 

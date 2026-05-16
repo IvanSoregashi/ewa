@@ -6,8 +6,7 @@ from enum import StrEnum
 
 from library.epub.epub_link import EPUBLink
 from library.epub.media_type import MediaType, EpubRole, FileName
-from library.epub.resources import EPUBResource, EpubHtmlResource, EpubContainerResource, \
-    EpubOpfResource, EpubNcxResource
+from library.epub.resources import EPUBResource
 from library.epub.resource_index import ResourceIndex
 from library.epub.utils_href import posix_absolute_href
 from library.epub.xml_models.container_model import ContainerDocument
@@ -270,7 +269,7 @@ class EpubCore:
 
     def _iterlinks_navs(self):
         logger.debug(f"{self} _iterlinks_navs")
-        nav_res: EpubNavResource = self.nav_resource
+        nav_res = self.nav_resource
         if nav_res is None:
             logger.warning(f"{self} NAV document not found, skipping NAV enrichment")
             return

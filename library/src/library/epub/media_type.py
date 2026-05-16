@@ -54,6 +54,9 @@ class EpubRole(StrEnum):
     def is_other(self):
         return self is self.UNKNOWN or self is self.GARBAGE
 
+    def is_html(self):
+        return self is self.HTML or self is self.NAV
+
     @classmethod
     def from_media_and_path(cls, media_type: MediaType, path: str | Path):
         guessed_role = media_type.guess_role()

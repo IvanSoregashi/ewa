@@ -8,7 +8,7 @@ from zipfile import is_zipfile, ZipFile, ZIP_STORED, ZIP_DEFLATED, ZipInfo
 
 from library.asserts import require
 from library.epub.epub_core import EpubCore, EpubSpecification
-from library.epub.resources import ResourceIndex, EPUBResource
+from library.epub.resources import EPUBResource
 from library.epub.resource_index import ResourceIndex
 from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
 from library.epub.xml_literals import FileContents

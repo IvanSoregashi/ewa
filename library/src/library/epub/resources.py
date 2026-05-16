@@ -1,26 +1,25 @@
 import logging
 from pathlib import Path
-from typing import Callable, Generator
+from typing import Callable
 from zipfile import ZipInfo
 
 from lxml import html, etree
 from lxml.html import HtmlElement
 from lxml.etree import Element
-from dataclasses import dataclass, field
 from hashlib import md5
 
 
 from epub.utils import SQLITE_MAX_INT
-from library.epub.epub_link import EPUBLinkType, EPUBLink
+from library.epub.epub_link import EPUBLink
 
-from library.epub.media_type import MediaType, type_and_role_from_filename, EpubRole
-from library.epub.utils_href import posix_absolute_href
+from library.epub.media_type import type_and_role_from_filename, EpubRole
 from library.epub.xml_models.ncx_model import NavPoint
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
 from library.epub.utils_zip import apply_zipinfo_timestamp_to_file
 from library.xml.utils import etree_from_bytes
 
 logger = logging.getLogger("resource")
+
 
 class EPUBResource:
     """Represents a single file in an EPUB archive."""
@@ -98,7 +97,7 @@ class EPUBResource:
 
     @property
     def html(self) -> HtmlElement:
-        if self.role is not EpubRole.HTML:
+        if not self.role.is_html():
             raise RuntimeError(f"{self} Invalid type for .html ({self.__params__()})")
         if self._html is None:
             self._html = html.document_fromstring(self.content)
@@ -159,7 +158,7 @@ class EPUBResource:
 
     @property
     def id(self) -> str | None:
-        # TODO: setter
+        # TODO: setter?
         if self.manifest_item:
             return self.manifest_item.id
         return None
