@@ -8,7 +8,7 @@ from zipfile import is_zipfile, ZipFile, ZIP_STORED, ZIP_DEFLATED, ZipInfo
 
 from library.asserts import require
 from library.epub.epub_core import EpubCore, EpubSpecification
-from library.epub.resources import EPUBResource
+from library.epub.resources import EpubDefaultResource
 from library.epub.resource_index import ResourceIndex
 from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
 from library.epub.xml_literals import FileContents
@@ -113,8 +113,7 @@ class EPUB:
         """Scan the EPUB source and build a ResourceIndex from all files."""
         logger.debug("scanning EPUB resources")
         with self.source.open():
-            resources = [EPUBResource(info, self.source.read_bytes) for info in self.source.infolist()]
-        return ResourceIndex(resources)
+            return ResourceIndex(infolist=self.source.infolist(), stream=self.source.open_stream)
 
     @property
     def resources(self) -> ResourceIndex:

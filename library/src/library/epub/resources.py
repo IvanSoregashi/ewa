@@ -1,27 +1,290 @@
+import io
 import logging
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from io import BytesIO
 from pathlib import Path
-from typing import Callable
+from typing import Callable, BinaryIO, Iterator, Generator, ContextManager
 from zipfile import ZipInfo
 
 from lxml import html, etree
 from lxml.html import HtmlElement
 from lxml.etree import Element
 from hashlib import md5
+from PIL import Image
 
 
 from epub.utils import SQLITE_MAX_INT
 from library.epub.epub_link import EPUBLink
 
-from library.epub.media_type import type_and_role_from_filename, EpubRole
-from library.epub.xml_models.ncx_model import NavPoint
+from library.epub.media_type import type_and_role_from_filename, EpubRole, MediaType
+from library.epub.xml_models.container_model import ContainerDocument
+from library.epub.xml_models.nav_model import NavDocument
+from library.epub.xml_models.ncx_model import NavPoint, NCXDocument
+from library.epub.xml_models.package_document import PackageDocument
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
 from library.epub.utils_zip import apply_zipinfo_timestamp_to_file
+from library.image.optimization import optimize_epub_image
+from library.xml.document_pydantic import XMLDocumentModel
 from library.xml.utils import etree_from_bytes
 
 logger = logging.getLogger("resource")
 
 
-class EPUBResource:
+@dataclass(kw_only=True)
+class LazyLoadFile:
+    info: ZipInfo
+    # read_bytes: Callable[[ZipInfo], bytes]
+    stream_bytes: Callable[[ZipInfo], BinaryIO]
+
+    _content: bytes | None = field(default=None, init=False, repr=False)
+    _hex_hash: str | None = None
+
+    def __repr__(self) -> str:
+        return f"LazyLoadFile({self.info.filename!r})"
+
+    @classmethod
+    def from_filesystem_path(cls, path: Path):
+        if not path.exists():
+            raise ValueError(f"{path} does not exist, cannot create LazyLoadFile")
+        info = ZipInfo.from_file(path, strict_timestamps=False)
+        media_type, role = type_and_role_from_filename(info.filename)
+        return cls(info=info, stream_bytes=lambda i: Path(i.filename).open("rb"), role=role, media_type=media_type)
+
+    @contextmanager
+    def stream(self) -> Generator[BinaryIO, None, None]:
+        if self._content is not None:
+            yield io.BytesIO(self._content)
+        else:
+            with self.stream_bytes(self.info) as stream:
+                yield stream
+
+    @property
+    def content(self) -> bytes:
+        if self._content is None:
+            with self.stream() as stream:
+                self._content: bytes = stream.read()
+        return self._content
+
+    @content.setter
+    def content(self, value: bytes) -> None:
+        logger.info(f"{self} reassigning the byte contents")
+        # TODO should this even exist?
+        self._content = value
+
+    @property
+    def hex_hash(self) -> str:
+        if self._hex_hash is None:
+            self._hex_hash: str = md5(self.content).hexdigest()
+        return self._hex_hash
+
+    @property
+    def int64_hash(self):
+        return int(self.hex_hash, 16) % SQLITE_MAX_INT
+
+    @property
+    def hash_prefixed_name(self):
+        return f"{self.int64_hash}_{Path(self.info.filename).name}"
+
+    def write_to_filesystem(self, path: Path) -> LazyLoadFile:
+        if path.exists():
+            logger.warning(f"{self}, file {path} exists, nothing to write.")
+        else:
+            byte_count = path.write_bytes(self.content)
+            apply_zipinfo_timestamp_to_file(self.info, path)
+            logger.debug(f"{self}, written {byte_count} bytes to {path}.")
+        return self.__class__.from_filesystem_path(path)
+
+
+@dataclass(kw_only=True)
+class LazyLoadXmlFile(LazyLoadFile):
+    _xml: Element | None = None
+
+    @property
+    def xml(self) -> Element:
+        if self._xml is None:
+            self._xml: Element = etree_from_bytes(self.content)
+        return self._xml
+
+
+@dataclass(kw_only=True)
+class LazyLoadHtmlFile(LazyLoadFile):
+    _html: HtmlElement | None = None
+
+    @property
+    def html(self) -> HtmlElement:
+        if self._html is None:
+            self._html: HtmlElement = html.document_fromstring(self.content)
+        return self._html
+
+    def parse_links(self) -> list[EPUBLink]:
+        return [EPUBLink.from_iterlinks(self.info.filename, link_data) for link_data in self.html.iterlinks()]
+
+
+@dataclass(kw_only=True)
+class LazyLoadXmlDocumentFile[D: XMLDocumentModel](LazyLoadFile):
+    document_model: type[D] | None = None
+    _document: D | None = None
+
+    @property
+    def document(self):
+        if self._document is None:
+            self._document: D = self.document_model.from_xml_bytes(self.content)
+        return self._document
+
+
+@dataclass(kw_only=True)
+class LazyLoadImageFile(LazyLoadFile):
+    @contextmanager
+    def stream_image(self) -> Generator[Image.Image, None, None]:
+        with self.stream() as stream:
+            with Image.open(stream) as img:
+                yield img
+
+
+@dataclass(kw_only=True)
+class PackagedResource:
+    linked_by: list[EPUBLink] = field(default_factory=list)
+
+    manifest_item: ManifestItem | None = None
+
+    @property
+    def id(self) -> str | None:
+        if self.manifest_item:
+            return self.manifest_item.id
+        return None
+
+
+@dataclass(kw_only=True)
+class DocumentWithLinks(PackagedResource):
+    linked_to: list[EPUBLink] = field(default_factory=list)
+
+    spine_item_ref: SpineItemRef | None = None
+    guide_reference: GuideReference | None = None
+    source_sequence: int | None = None
+    ncx_nav_point: NavPoint | None = None
+
+
+@dataclass(kw_only=True)
+class RoleBasedResource:
+    media_type: MediaType
+    role: EpubRole
+    is_modified = False
+    is_deleted = False
+
+    def type_and_role_params(self) -> str:
+        return f"({self.media_type.value!r}, {self.role.value!r})"
+
+
+@dataclass(kw_only=True)
+class EpubDefaultResource(RoleBasedResource, PackagedResource, LazyLoadFile): ...
+
+
+@dataclass(kw_only=True)
+class EpubXmlResource(RoleBasedResource, PackagedResource, LazyLoadXmlFile): ...
+
+
+@dataclass(kw_only=True)
+class EpubHtmlResource(RoleBasedResource, LazyLoadHtmlFile, DocumentWithLinks): ...
+
+
+@dataclass(kw_only=True)
+class EpubContainerResource(RoleBasedResource, LazyLoadXmlDocumentFile[ContainerDocument]):
+    document_model: type[ContainerDocument] = ContainerDocument
+
+
+@dataclass(kw_only=True)
+class EpubPackageResource(RoleBasedResource, LazyLoadXmlDocumentFile[PackageDocument]):
+    document_model: type[PackageDocument] = PackageDocument
+
+
+@dataclass(kw_only=True)
+class EpubNcxResource(RoleBasedResource, PackagedResource, LazyLoadXmlDocumentFile[NCXDocument]):
+    document_model: type[NCXDocument] = NCXDocument
+
+
+@dataclass(kw_only=True)
+class EpubNavResource(EpubHtmlResource, LazyLoadXmlDocumentFile[NavDocument]):
+    document_model: type[NavDocument] = NavDocument  # Not tested
+
+
+@dataclass(kw_only=True)
+class EpubImageResource(RoleBasedResource, PackagedResource, LazyLoadImageFile):
+    def optimize(self) -> None | str:
+        if self.info.file_size < 50 * 1024:  # 50kb
+            return None
+        with self.stream_image() as image:
+            original_format = image.format
+            if original_format is None:
+                logger.warning(f"{self} unknown original format of the image.")
+            image, modified = optimize_epub_image(image)
+            if not modified:
+                logger.warning(f"{self} of size ({self.info.file_size / 1024**2:.2f} MB) was not modified.")
+                return None
+            self.is_modified = True
+            buffer = BytesIO()
+            new_path = None
+            if image.mode == "RGB":
+                image.save(buffer, optimize=True, format="JPEG", quality=85)
+                new_path = str(Path(self.info.filename).with_suffix(".jpg"))
+            else:
+                logger.warning(f"{self} Image of unusual format {image.mode, original_format} was modified.")
+                image.save(buffer, optimize=True, format=original_format)
+            self.content = buffer.getvalue()
+            return new_path
+
+
+AnyResource = (
+    EpubHtmlResource
+    | EpubContainerResource
+    | EpubPackageResource
+    | EpubXmlResource
+    | EpubDefaultResource
+    | EpubNcxResource
+)
+
+
+def get_resource_stats(resource) -> dict:
+    return {
+        "filename": resource.info.filename,
+        "media_type": resource.media_type,
+        "manifest_media_type": resource.manifest_item and resource.manifest_item.media_type,
+        "id": resource.manifest_item and resource.manifest_item.id,
+        "spine": bool(resource.spine_item_ref),
+        "links_to": len(resource.linked_to),
+        "links_by": len(resource.linked_by),
+        "guide": bool(resource.guide_reference),
+        "ncx_label": resource.ncx_nav_point and resource.ncx_nav_point.nav_label.text,
+        "nav": bool(resource.navs),
+    }
+
+
+def get_epub_class_by_role(role: EpubRole):
+    match role:
+        case EpubRole.HTML:
+            resource_class = EpubHtmlResource
+        case EpubRole.NCX:
+            resource_class = EpubNcxResource
+        case EpubRole.OPF:
+            resource_class = EpubPackageResource
+        case EpubRole.CONTAINER:
+            resource_class = EpubContainerResource
+        case EpubRole.XML:
+            resource_class = EpubXmlResource
+        case _:
+            resource_class = EpubDefaultResource
+
+    return resource_class
+
+
+def instantiate_resource(info: ZipInfo, stream_bytes: Callable[[ZipInfo], BinaryIO]):
+    media_type, role = type_and_role_from_filename(info.filename)
+    resource_class = get_epub_class_by_role(role)
+
+    return resource_class(info=info, stream_bytes=stream_bytes, role=role, media_type=media_type)
+
+
+class OldEPUBResource:
     """Represents a single file in an EPUB archive."""
 
     def __init__(self, info: ZipInfo, read_bytes_func: Callable[[ZipInfo], bytes]) -> None:
@@ -60,7 +323,7 @@ class EPUBResource:
         return f"({self.media_type.value!r}, {self.role.value!r})"
 
     @classmethod
-    def from_filesystem_path(cls, path: Path) -> EPUBResource:
+    def from_filesystem_path(cls, path: Path) -> OldEPUBResource:
         if not path.exists():
             raise ValueError(f"{path} does not exist, cannot create EPUBResource")
         info = ZipInfo.from_file(path, arcname=path.name, strict_timestamps=False)
@@ -147,14 +410,14 @@ class EPUBResource:
     def hash_prefixed_name(self):
         return f"{self.int64_hash}_{Path(self.filename).name}"
 
-    def write_to_filesystem(self, path: Path) -> EPUBResource:
+    def write_to_filesystem(self, path: Path) -> OldEPUBResource:
         if path.exists():
             logger.warning(f"{self}, file {path} exists, nothing to write.")
         else:
             byte_count = path.write_bytes(self.content)
             apply_zipinfo_timestamp_to_file(self.info, path)
             logger.info(f"{self}, written {byte_count} bytes to {path}.")
-        return EPUBResource.from_filesystem_path(path)
+        return OldEPUBResource.from_filesystem_path(path)
 
     @property
     def id(self) -> str | None:

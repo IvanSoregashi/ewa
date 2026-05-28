@@ -1,15 +1,21 @@
 import logging
 import re
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from enum import StrEnum
 
 
 from library.epub.epub_link import EPUBLink
 from library.epub.media_type import MediaType, EpubRole, FileName
-from library.epub.resources import EPUBResource
+from library.epub.resources import (
+    EpubHtmlResource,
+    EpubContainerResource,
+    EpubPackageResource,
+    EpubDefaultResource,
+    EpubNcxResource,
+    AnyResource,
+)
 from library.epub.resource_index import ResourceIndex
 from library.epub.utils_href import posix_absolute_href
-from library.epub.xml_models.container_model import ContainerDocument
 from library.epub.xml_models.ncx_model import NCXDocument, NavPoint
 from library.epub.xml_models.nav_model import NavDocument, NavListItem
 from library.epub.xml_models.package_document import PackageDocument
@@ -41,20 +47,20 @@ class EpubCore:
         self.resources = resources
 
         self.mimetype_resource = require(self.resources.by_path(FileName.MIMETYPE), "MIMETYPE")
-        self.container_resource = require(self.resources.by_path(FileName.CONTAINER), "CONTAINER")
-        self.container_document = ContainerDocument.from_xml_bytes(self.container_resource.content)
+        self.container_resource: EpubContainerResource = self.resources.by_path(FileName.CONTAINER)
+        self.container_document = require(self.container_resource, "CONTAINER").document
         assert len(self.container_document.opf_paths) == 1, "EPUB's with several package documents are not supported"
 
         opf_path = require(self.container_document.opf_path, "opf_path")
-        self.package_resource = require(self.resources.by_path(opf_path), "package_resource")
+        self.package_resource: EpubPackageResource = require(self.resources.by_path(opf_path), "package_resource")
         self.package_document = PackageDocument.from_xml_bytes(self.package_resource.content)
 
-        self.ncx_resource: EPUBResource | None = None
+        self.ncx_resource: EpubNcxResource | None = None
         self._ncx_document: NCXDocument | None = None
-        self.nav_resource: EPUBResource | None = None
+        self.nav_resource: EpubHtmlResource | None = None
         self._nav_document: NavDocument | None = None
 
-        self.cover_resource: EPUBResource | None = None
+        self.cover_resource: EpubDefaultResource | None = None
 
         logger.debug(f"{self} initializing")
 
@@ -98,7 +104,7 @@ class EpubCore:
     def _enrich_from_opf(self) -> None:
         """Enrich resources with manifest, spine, and guide data from the OPF."""
         logger.debug(f"{self} enriching resources from opf data")
-        opf_path = self.package_resource.filename
+        opf_path = self.package_resource.info.filename
 
         # --- Manifest ---
         logger.debug(f"{self} processing {len(self.package_document.manifest.items)} manifest items")
@@ -118,9 +124,9 @@ class EpubCore:
 
             if item.properties and "nav" in item.properties:
                 resource.role = EpubRole.NAV
-                logger.debug(f"{self} found nav file: {resource.filename!r}")
+                logger.debug(f"{self} found nav file: {resource.info.filename!r}")
                 if self.nav_resource is not None:
-                    logger.warning(f"{self} found second nav file {resource.filename!r}")
+                    logger.warning(f"{self} found second nav file {resource.info.filename!r}")
                 self.nav_resource = resource
 
             rmt = resource.media_type.value
@@ -210,7 +216,7 @@ class EpubCore:
 
     def _walk_ncx_nav_points(self, nav_points: list[NavPoint]) -> None:
         """Recursively walk NCX navPoints and set toc_label on resources."""
-        ncx_path = self.ncx_resource.filename
+        ncx_path = self.ncx_resource.info.filename
         logger.debug(f"{self} walking NCX navPoints ({len(nav_points)})")
         for nav_point in nav_points:
             if nav_point.content and nav_point.content.src:
@@ -249,7 +255,7 @@ class EpubCore:
 
     def _walk_nav_items(self, epub_type: str, items: list[NavListItem]) -> None:
         """Recursively walk NAV list items and set toc_label on resources."""
-        nav_path = self.nav_resource.filename
+        nav_path = self.nav_resource.info.filename
         logger.debug(f"{self} walking NAV items ({len(items)}) of {epub_type!r} type")
         for item in items:
             if item.link and item.link.href:
@@ -275,7 +281,7 @@ class EpubCore:
             return
 
         for link_data in nav_res.html.iterlinks():
-            epub_link = EPUBLink.from_iterlinks(nav_res.filename, link_data)
+            epub_link = EPUBLink.from_iterlinks(nav_res.info.filename, link_data)
             nav_res.linked_to.append(epub_link)
             if epub_link.absolute_path is not None:
                 linked_resource = self.resources.by_path(epub_link.absolute_path)
@@ -289,19 +295,15 @@ class EpubCore:
     # Convenience properties
     # -----------------------------------------------------------------------
 
-    def resources_by_role(self, role: EpubRole) -> list[EPUBResource]:
-        """All resources in the EPUB with certain role."""
-        return [r for r in self.resources if r.role == role]
-
     @property
-    def spine(self) -> list[EPUBResource]:
+    def spine(self) -> list[EpubHtmlResource]:
         """Resources in spine order."""
         return sorted(
             [r for r in self.resources if r.is_spine_item()],
             key=lambda r: r.source_sequence or 9999,
         )
 
-    def writing_sequence(self) -> Generator[EPUBResource, None, None]:
+    def writing_sequence(self) -> Iterator[AnyResource]:
         # yield self.mimetype_resource
         yield self.container_resource
         yield self.package_resource
@@ -337,7 +339,7 @@ class EpubCore:
     #
     # -----------------------------------------------------------------------
 
-    def remove_resource(self, resource: EPUBResource) -> None:
+    def remove_resource(self, resource) -> None:
         resource.is_deleted = True
         if resource.manifest_item is not None:
             self.package_document.manifest.remove_item(resource.manifest_item)

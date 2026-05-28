@@ -4,7 +4,7 @@ import shutil
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Protocol, Self
+from typing import Protocol, Self, Iterator, BinaryIO
 from zipfile import ZipInfo, ZipFile, Path as ZipPath, is_zipfile
 
 from library.asserts import require
@@ -15,11 +15,10 @@ logger = logging.getLogger("source")
 
 
 def _is_a_directory(path: str | ZipInfo | Path | ZipPath) -> bool:
-    if isinstance(path, (ZipPath, Path, ZipInfo)):
-        return path.is_dir()
     if isinstance(path, str):
-        return Path(path).is_dir()
-    raise NotImplementedError(f"Path {path} of type {type(path)} is not supported")
+        path = Path(path)
+    assert isinstance(path, (ZipPath, Path, ZipInfo)), f"path is not of correct type ({type(path)})"
+    return path.is_dir()
 
 
 class SourceProtocol(Protocol):
@@ -37,13 +36,16 @@ class SourceProtocol(Protocol):
     ) -> None: ...
 
     @contextmanager
-    def open(self) -> Generator[Self, None, None]: ...
+    def open(self) -> Iterator[Self]: ...
+
+    @contextmanager
+    def open_stream(self, path: str | ZipInfo | Path | ZipPath) -> Iterator[BinaryIO]: ...
 
     def extract(self, destination: str | Path, member: str | ZipInfo) -> str: ...
     def extract_all(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None) -> None: ...
 
 
-class DirectorySource:
+class DirectorySource(SourceProtocol):
     """Read-only Directory source"""
 
     def __init__(self, path: str | Path, skip_dirs: bool = False) -> None:
@@ -99,10 +101,25 @@ class DirectorySource:
         return self.read_bytes(path).decode(encoding=encoding)
 
     @contextmanager
-    def open(self):
+    def open(self) -> Iterator[Self]:
         logger.debug(f"{self} opening")
         yield self
         logger.debug(f"{self} closing")
+
+    @contextmanager
+    def open_stream(self, path: str | ZipInfo | Path) -> Iterator[BinaryIO]:
+        if _is_a_directory(path):
+            message = f"{self} Path {path!r} is a directory, cannot open stream"
+            logger.error(message)
+            raise IsADirectoryError(message)
+
+        if isinstance(path, (str, ZipInfo)):
+            path = self._to_absolute_path(path)
+        assert isinstance(path, Path), f"path is not of correct type ({type(path)})"
+        logger.debug(f"{self} streaming {path.name!r}")
+
+        with path.open("rb") as stream:
+            yield stream
 
     def write_to_zipfile(self, zip_file: ZipFile, path: str | Path | ZipInfo, compress_type: int | None = None) -> None:
         absolute_path = self._to_absolute_path(path)
@@ -188,7 +205,7 @@ class ZipFileSource(SourceProtocol):
         return self.read_bytes(path).decode(encoding=encoding)
 
     @contextmanager
-    def open(self) -> Generator[Self, None, None]:
+    def open(self) -> Iterator[Self]:
         if self.zip_file is None:
             with ZipFile(self.root) as zip_file:
                 logger.debug(f"{self} opening")
@@ -198,6 +215,26 @@ class ZipFileSource(SourceProtocol):
                 self.zip_file = None
         else:
             yield self
+
+    @contextmanager
+    def open_stream(self, path: str | ZipInfo | ZipPath) -> Iterator[BinaryIO]:
+        if _is_a_directory(path):
+            message = f"{self} Path {path!r} is a directory, cannot open stream"
+            logger.error(message)
+            raise IsADirectoryError(message)
+
+        if isinstance(path, ZipPath):
+            logger.debug(f"{self} streaming {path.at!r}")
+            self._should_be_open()
+            with path.open("rb") as stream:
+                yield stream
+        else:
+            with self.open():
+                filename = path if isinstance(path, str) else path.filename
+                logger.debug(f"{self} streaming {filename!r}")
+
+                with require(self.zip_file).open(path, "r") as stream:
+                    yield stream
 
     def write_to_zipfile(self, zip_file: ZipFile, path: str | Path | ZipInfo, compress_type: int | None = None) -> None:
         zip_info = require(self.getinfo(path))
