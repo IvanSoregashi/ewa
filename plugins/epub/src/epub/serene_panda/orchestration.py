@@ -13,10 +13,10 @@ from epub.serene_panda.font import process_font
 from epub.tables import EpubFileModel, EpubBookTable, EpubContentsTable
 from epub.utils import string_to_int_hash64, to_hex_hash
 from epub.constants import (
+    epub_dir,
     translated_directory,
     translated_r_directory,
     untranslated_directory,
-    epub_dir,
     quarantine_directory,
 )
 from ewa.cli.progress import DisplayProgress, track_unknown, track_sized, track_batch_queue, track_batch_sized
@@ -333,17 +333,6 @@ def find_differences_in_sizes(epub1: Path, epub2: Path) -> bool:
         avg_ratio = int(sum(ratios) / len(ratios)) if len(ratios) else 0
         print_success(f"\t\tdiff success (avg html ratio {avg_ratio}), total files ({len(dict1)}) for {epub1}")
     return True
-
-
-def scan_folder(path: Path | None = None):
-    path = path or epub_dir
-    print_success(f"Scanning {path}...")
-    with DisplayProgress(), EpubContentsTable() as contents_table, EpubBookTable() as book_table:
-        scanning = ScanEpubsInDirectory(path, workers=4)
-        contents_table.write_from_queue_in_thread(track_batch_queue(scanning.queue, TERMINATOR))
-        book_list = scanning.do_scan_with_progress()
-        contents_table.await_write_completion()
-        book_table.upsert_many_dicts(track_batch_sized([row.model_dump() for row in book_list]))
 
 
 def compare_epubs():
