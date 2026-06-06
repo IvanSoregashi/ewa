@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
-from typing import Callable, BinaryIO, Iterator, Generator, ContextManager
+from typing import Callable, BinaryIO, Generator
 from zipfile import ZipInfo
 
 from lxml import html, etree
@@ -135,11 +135,20 @@ class LazyLoadXmlDocumentFile[D: XMLDocumentModel](LazyLoadFile):
 
 @dataclass(kw_only=True)
 class LazyLoadImageFile(LazyLoadFile):
+    _image = None
+
     @contextmanager
     def stream_image(self) -> Generator[Image.Image, None, None]:
+        if self._image is not None:
+            logger.info("stream_image - returning cached image")
+            yield self._image
+            logger.info("stream_image - finished working with cached image")
+            return
         with self.stream() as stream:
             with Image.open(stream) as img:
-                yield img
+                self._image = img
+                yield self._image
+            self._image = None
 
 
 @dataclass(kw_only=True)
@@ -248,6 +257,7 @@ class EpubImageResource(RoleBasedResource, PackagedResource, LazyLoadImageFile):
     def get_info(self):
         with self.stream_image() as image:
             return get_image_info(image=image, filesize=self.info.file_size)
+
 
 AnyResource = (
     EpubHtmlResource

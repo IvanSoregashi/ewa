@@ -1,9 +1,7 @@
 from pathlib import Path
-from zipfile import ZipInfo
 
-from ewa.cli.print_table import print_table, print_table_from_dicts
+from ewa.cli.print_table import print_table_from_dicts
 from library.epub.epub import EPUB
-from library.epub.media_type import type_and_role_from_filename
 from library.epub.resources import EpubImageResource
 from library.image.utils import calculate_image_file_bpp
 
@@ -43,7 +41,7 @@ def test_image_optimization():
         new_path = image_resource.optimize(max_width=1080, max_height=0, convert_rgb_to_jpg=True)
         output_path = images_dir / "output" / (new_path or file).name
         assert output_path.read_bytes() == image_resource.content
-        #image_resource.write_to_filesystem(output_path)
+        # image_resource.write_to_filesystem(output_path)
 
 
 def test_bpp():
@@ -64,4 +62,3 @@ def test_analytics():
                 info_dict = image.get_info()
                 results.append(info_dict)
     print_table_from_dicts("Image Info", results)
-

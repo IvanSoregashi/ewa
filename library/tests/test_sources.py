@@ -2,7 +2,7 @@ import shutil
 import logging
 from collections.abc import Generator
 from pathlib import Path
-from zipfile import Path as ZipFilePath
+from zipfile import Path as ZipFilePath, ZipInfo
 
 import pytest
 
@@ -122,7 +122,9 @@ def test_source_extract_all(source, destination):
     source.extract_all(destination=destination)
     source2 = DirectorySource(destination, skip_dirs=True)
 
-    key = lambda x: x.filename
+    def key(x: ZipInfo) -> str:
+        return x.filename
+
     for info1, info2 in zip(sorted(source.infolist(), key=key), sorted(source2.infolist(), key=key)):
         assert info1.filename == info2.filename
         assert info1.file_size == info2.file_size

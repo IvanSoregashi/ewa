@@ -14,6 +14,7 @@ from epub.constants import duplicates_directory, epub_dir, serene_panda_fonts_di
 from library.epub.epub_core import EpubSpecification
 from library.epub.utils_css import parse_css_urls, replace_css_url
 from library.epub.utils_href import posix_relative_href
+from library.image.optimization import useless_transparency_mode
 from library.utils import sanitize_filename
 from library.epub.epub import EPUB
 
@@ -121,14 +122,33 @@ def check_epub_resources(epub: Path = typer.Argument(None, exists=True)):
 
 @app.command()
 def getimg():
+    from PIL import Image
+
+    original_load = Image.Image.load
+    load_flag = False
+
+    def traced_load(self):
+        nonlocal load_flag
+        load_flag = True
+        return original_load(self)
+
+    Image.Image.load = traced_load
+
     results = []
     for file in settings.current_dir.glob("*.epub"):
         epub = EPUB(file)
         with epub.source.open():
-            for image in epub.resources.images:
-                info_dict = image.get_info()
+            for image_resource in epub.resources.images:
+                no_transparency = False
+                with image_resource.stream_image() as image:
+                    info_dict = image_resource.get_info()
+                    if load_flag:
+                        no_transparency = useless_transparency_mode(image=image)
+                if no_transparency:
+                    info_dict["has_transparency_data"] = "useless"
                 results.append(info_dict)
     print_table_from_dicts("Image Info", results)
+
 
 @app.command("rub")
 def return_untranslated_back():

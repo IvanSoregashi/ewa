@@ -6,7 +6,6 @@ from itertools import repeat, combinations
 from pathlib import Path
 from zipfile import ZipFile
 
-import pandas as pd
 
 from epub.epub_classes import EPUB, ScanEpubsInDirectory
 from epub.file_parsing import parse_container_xml, parse_content_opf
@@ -559,15 +558,15 @@ all_contents = []
 #    all_contents.append(contents)
 
 
-def parse_opf_metadata():
-    source = settings.profile_dir / "epub" / "opf"
-    opf_paths = list(source.glob("*.opf"))
-    with DisplayProgress(), ThreadPoolExecutor(max_workers=12) as executor:
-        list(track_unknown(executor.map(analize_opf_metadata, opf_paths), total=len(opf_paths)))
-    lengths_df = pd.DataFrame(all_length)
-    contents_df = pd.DataFrame(all_contents)
-    lengths_df.to_csv(settings.profile_dir / "opf_metadata_l.csv")
-    contents_df.to_csv(settings.profile_dir / "opf_metadata_c.csv")
+# def parse_opf_metadata():
+#     source = settings.profile_dir / "epub" / "opf"
+#     opf_paths = list(source.glob("*.opf"))
+#     with DisplayProgress(), ThreadPoolExecutor(max_workers=12) as executor:
+#         list(track_unknown(executor.map(analize_opf_metadata, opf_paths), total=len(opf_paths)))
+#     lengths_df = pd.DataFrame(all_length)
+#     contents_df = pd.DataFrame(all_contents)
+#     lengths_df.to_csv(settings.profile_dir / "opf_metadata_l.csv")
+#     contents_df.to_csv(settings.profile_dir / "opf_metadata_c.csv")
 
 
 def extract_container_to_destination(epub_path: Path) -> bool:

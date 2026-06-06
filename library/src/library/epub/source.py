@@ -1,7 +1,7 @@
 import logging
 import shutil
 
-from collections.abc import Generator, Iterable
+from collections.abc import Iterable
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Protocol, Self, Iterator, BinaryIO

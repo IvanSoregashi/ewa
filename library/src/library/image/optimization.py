@@ -8,12 +8,15 @@ MEDIUM_WIDTH_SIZE = (1080, 0)
 EXTRA_WIDTH_SIZE = (2560, 0)
 EFFICIENT_BPP = 0.5
 EXTRA_EFFICIENT_BPP = 0.2
+
+
 class ImageFormat(StrEnum):
     PNG = "PNG"
     JPEG = "JPEG"
     GIF = "GIF"
     BMP = "BMP"
     WEBP = "WEBP"
+
 
 class ImageMode(StrEnum):
     RGB = "RGB"
@@ -24,6 +27,7 @@ class ImageMode(StrEnum):
     I = "I"
     P = "P"
     ONE = "1"
+
 
 @dataclass
 class ConversionSettings:
@@ -89,8 +93,13 @@ def get_image_info(image: Image.Image, filesize: int) -> dict:
     return result
 
 
+def useless_transparency_mode(image: Image.Image) -> bool:
+    extrema = image.getextrema()
+    return len(extrema) == 4 and extrema[3][0] == 255
+
+
 def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> dict:
-    min_filesize = 50*1024
+    min_filesize = 50 * 1024
     result = {"success": True}
     if filesize < min_filesize:
         return result | {"error": f"Image is smaller then min threshold {filesize / 1024:.2fKB}"}
@@ -109,7 +118,6 @@ def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> 
     efficient = bpp < EFFICIENT_BPP
     super_efficient = bpp < EXTRA_EFFICIENT_BPP
 
-
     if original_format == ImageFormat.PNG:
         is_animated = getattr(image, "is_animated", None)
         if is_animated:
@@ -123,9 +131,7 @@ def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> 
             result |= {"new_size": resized_size}
 
         if original_mode == ImageMode.RGBA:
-            extrema = image.getextrema()  # LOADS PIXEL DATA
-            no_transparency = len(extrema) == 4 and extrema[3][0] == 255
-            if no_transparency:
+            if useless_transparency_mode(image):
                 new_mode = ImageMode.RGB
                 image = image.convert(new_mode)
                 result |= {"new_mode": new_mode}
@@ -159,13 +165,3 @@ def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> 
         return result
 
     return result | {"error": "Image was not optimized"}
-
-
-
-
-
-
-
-
-
-

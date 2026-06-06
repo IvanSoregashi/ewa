@@ -1,6 +1,6 @@
 import logging
 import re
-from collections.abc import Generator, Iterator
+from collections.abc import Iterator
 from enum import StrEnum
 
 
