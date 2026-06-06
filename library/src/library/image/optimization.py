@@ -73,18 +73,16 @@ def discard_empty_alpha_channels_mode(image: Image.Image) -> tuple[Image.Image, 
 
 def get_image_info(image: Image.Image, filesize: int) -> dict:
     bpp = filesize / (image.width * image.height)
-    bands = image.getbands()
     is_animated = getattr(image, "is_animated", None)
     n_frames = getattr(image, "n_frames", None)
     has_transparency_data = image.has_transparency_data
 
     result = {
-        "original_filesize": filesize,
+        "original_filesize": f"{filesize / 1024} Kb",
         "original_size": image.size,
-        "bpp": bpp,
+        "bpp": f"{bpp:.2f}",
         "original_format": image.format,
         "original_mode": image.mode,
-        "bands": bands,
         "is_animated": n_frames if is_animated else False,
         "has_transparency_data": has_transparency_data,
     }
