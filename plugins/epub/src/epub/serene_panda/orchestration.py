@@ -608,7 +608,9 @@ def get_image_header_report(path: str):
         for image_resource in epub.resources.images:
             try:
                 if image_resource.media_type not in (MediaType.IMAGE_JPEG, MediaType.IMAGE_PNG, MediaType.IMAGE_GIF):
-                    logger.warning(f"skipping '{image_resource.info.filename}' due to media type '{image_resource.media_type!s}'")
+                    logger.warning(
+                        f"skipping '{image_resource.info.filename}' due to media type '{image_resource.media_type!s}'"
+                    )
                     continue
                 start_time = time.perf_counter()
                 info_dict = image_resource.get_header_info()
@@ -629,16 +631,11 @@ def get_image_transparency_report(path: str):
     with epub.source.open():
         for image_resource in epub.resources.images:
             start_time = time.perf_counter()
-            no_transparency = False
             with image_resource.stream_image() as image:
-                info_dict = image_resource.get_info()
-                info_dict["load"] = load_flag
-                if load_flag:
-                    no_transparency = useless_transparency_mode(image=image)
-                    logger.info(f"load was called on {image_resource.info.filename}, {no_transparency=}")
-                    load_flag = False
-            if no_transparency:
-                info_dict["has_transparency_data"] = "useless"
+                info_dict = image_resource.get_transparency_info()
+                no_transparency = useless_transparency_mode(image=image)
+                if no_transparency:
+                    info_dict["has_transparency_data"] = "useless"
             end_time = time.perf_counter()
             info_dict["processing_time"] = f"{end_time - start_time:.3f}"
             results.append(info_dict)

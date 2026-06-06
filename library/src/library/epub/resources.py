@@ -24,8 +24,7 @@ from library.epub.xml_models.ncx_model import NavPoint, NCXDocument
 from library.epub.xml_models.package_document import PackageDocument
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
 from library.epub.utils_zip import apply_zipinfo_timestamp_to_file
-from library.image.optimization import optimization_machine, get_image_header_info, \
-    get_image_transparency_info
+from library.image.optimization import optimization_machine, get_image_header_info, get_image_transparency_info
 from library.xml.document_pydantic import XMLDocumentModel
 from library.xml.utils import etree_from_bytes
 
@@ -261,6 +260,7 @@ class EpubImageResource(RoleBasedResource, PackagedResource, LazyLoadImageFile):
     def get_transparency_info(self):
         with self.stream_image() as image:
             return get_image_transparency_info(image=image, filesize=self.info.file_size)
+
 
 AnyResource = (
     EpubHtmlResource

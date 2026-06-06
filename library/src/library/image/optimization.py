@@ -91,6 +91,7 @@ def get_image_header_info(image: Image.Image, filesize: int) -> dict:
     }
     return result
 
+
 def get_image_transparency_info(image: Image.Image, filesize: int) -> dict:
     bpp = filesize / (image.width * image.height)
     is_animated = getattr(image, "is_animated", None)

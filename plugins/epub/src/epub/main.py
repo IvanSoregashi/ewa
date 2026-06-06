@@ -1,15 +1,13 @@
 import logging
 import time
 from concurrent.futures import ProcessPoolExecutor
-from concurrent.futures.thread import ThreadPoolExecutor
 
-import pandas as pd
 import typer
 from pathlib import Path
 
 from epub.serene_panda import orchestration
 from ewa.ui import print_success, print_error
-from ewa.cli.print_table import print_table_from_models, print_table_from_dicts, print_df
+from ewa.cli.print_table import print_table_from_models, print_table_from_dicts
 from ewa.cli.progress import DisplayProgress
 from ewa.main import settings
 from epub.tables import EpubBookTable, EpubContentsTable
@@ -133,6 +131,7 @@ def getimg():
     end_time = time.time()
     logger.warning(f"Finished processing '{settings.current_dir!s}' in {end_time - start_time:.3f} s")
 
+
 @app.command("parse")
 def parse_data():
     # dfs = [pd.read_csv(str(file)) for file in (settings.profile_dir / "image_stats").glob("*.csv")]
@@ -140,6 +139,7 @@ def parse_data():
     # print_df(data_frame, title="images")
     # data_frame.to_csv(settings.profile_dir / "image_stats" / "all.csv")
     pass
+
 
 @app.command("rub")
 def return_untranslated_back():

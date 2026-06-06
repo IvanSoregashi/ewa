@@ -1,5 +1,8 @@
 # Create a zip file from a generator in Python?
-import zipfile, zlib, binascii, struct
+import zipfile
+import zlib
+import binascii
+import struct
 from zipfile import ZipFile, ZipInfo
 
 # The only solution is to rewrite the method it uses for zipping files
@@ -69,7 +72,6 @@ class BufferedZipFile(ZipFile):
 import os
 import threading
 from zipfile import *
-import zlib, binascii, struct
 
 
 class ZipEntryWriter(threading.Thread):
