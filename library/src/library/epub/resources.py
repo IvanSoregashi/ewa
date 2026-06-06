@@ -24,7 +24,7 @@ from library.epub.xml_models.ncx_model import NavPoint, NCXDocument
 from library.epub.xml_models.package_document import PackageDocument
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
 from library.epub.utils_zip import apply_zipinfo_timestamp_to_file
-from library.image.optimization import optimize_epub_image
+from library.image.optimization import optimization_machine, get_image_info
 from library.xml.document_pydantic import XMLDocumentModel
 from library.xml.utils import etree_from_bytes
 
@@ -69,7 +69,7 @@ class LazyLoadFile:
     @content.setter
     def content(self, value: bytes) -> None:
         logger.info(f"{self} reassigning the byte contents")
-        # TODO should this even exist?
+        # TODO should this even exist? set the modified flag?
         self._content = value
 
     @property
@@ -210,29 +210,44 @@ class EpubNavResource(EpubHtmlResource, LazyLoadXmlDocumentFile[NavDocument]):
 
 @dataclass(kw_only=True)
 class EpubImageResource(RoleBasedResource, PackagedResource, LazyLoadImageFile):
-    def optimize(self) -> None | str:
+    # png cases:
+    # - rgb
+    # - rgba + transparency
+    # - rgba + no transparency
+    # - compression?
+    # jpg cases:
+    # - jpg (quality? loading?)
+    # -
+    # gif cases:
+    # - P mode
+    # - version b'GIF89a' |
+    # - background + transparency + duration headers
+
+    def optimize(self, max_width: int = 1080, max_height: int = 0, convert_rgb_to_jpg: bool = True) -> None | Path:
         if self.info.file_size < 50 * 1024:  # 50kb
             return None
         with self.stream_image() as image:
             original_format = image.format
             if original_format is None:
                 logger.warning(f"{self} unknown original format of the image.")
-            image, modified = optimize_epub_image(image)
-            if not modified:
-                logger.warning(f"{self} of size ({self.info.file_size / 1024**2:.2f} MB) was not modified.")
-                return None
+            buffer = BytesIO()
+            result = optimization_machine(image, buffer=buffer, filesize=self.info.file_size)
+
             self.is_modified = True
             buffer = BytesIO()
             new_path = None
-            if image.mode == "RGB":
+            if image.mode == "RGB" and (original_format == "JPEG" or convert_rgb_to_jpg):
                 image.save(buffer, optimize=True, format="JPEG", quality=85)
-                new_path = str(Path(self.info.filename).with_suffix(".jpg"))
+                new_path = Path(self.info.filename).with_suffix(".jpg")
             else:
                 logger.warning(f"{self} Image of unusual format {image.mode, original_format} was modified.")
                 image.save(buffer, optimize=True, format=original_format)
             self.content = buffer.getvalue()
             return new_path
 
+    def get_info(self):
+        with self.stream_image() as image:
+            return get_image_info(image=image, filesize=self.info.file_size)
 
 AnyResource = (
     EpubHtmlResource

@@ -9,7 +9,7 @@ from pathlib import Path
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-    profile_dir: DirectoryPath = Path("~/.ewa").expanduser().absolute()
+    profile_dir: Path = Path("~/.ewa").expanduser().absolute()
     current_dir: DirectoryPath = Path(".").absolute()
     database_file: FilePath | None = None
     database_url: str | None = None
@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     is_windows: bool = os.name == "nt"
 
     def model_post_init(self, context: Any, /) -> None:
+        self.profile_dir.mkdir(parents=True, exist_ok=True)
         if self.database_file is None:
             self.database_file = self.profile_dir / "database.db"
         if self.database_url is None:
