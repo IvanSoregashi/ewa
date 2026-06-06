@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
+
 def load_data(csv_path: str) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
     df["bpp"] = df["bpp"].astype(float)
@@ -12,7 +13,10 @@ def load_data(csv_path: str) -> pd.DataFrame:
     return df
 
 
-def plot_format_mode_percentage(df: pd.DataFrame, save_path: str = None):
+def plot_format_mode_percentage(df: pd.DataFrame, save_path: str = None, max_filesize_kb: int = None):
+    if max_filesize_kb:
+        df = df[df["filesize_kb"] <= max_filesize_kb]
+
     df["format_mode"] = df["format"].astype(str) + " / " + df["mode"].astype(str)
     counts = df["format_mode"].value_counts()
     percentages = (counts / len(df) * 100).round(1)
@@ -29,18 +33,22 @@ def plot_format_mode_percentage(df: pd.DataFrame, save_path: str = None):
     return percentages
 
 
-def plot_filesize_distribution(df: pd.DataFrame, save_path: str = None):
+def plot_filesize_distribution(df: pd.DataFrame, save_path: str = None, max_filesize_kb: int = None):
+    data = df["filesize_kb"]
+
+    if max_filesize_kb:
+        data = data[data <= max_filesize_kb]
+
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
-    axes[0].hist(df["filesize_kb"], bins=50, edgecolor="black", alpha=0.7)
+    axes[0].hist(data, bins=50, edgecolor="black", alpha=0.7)
     axes[0].set_xlabel("Filesize (KB)")
     axes[0].set_ylabel("Count")
     axes[0].set_title("Filesize Distribution (Histogram)")
-    axes[0].axvline(df["filesize_kb"].mean(), color="red", linestyle="--",
-                    label=f"Mean: {df['filesize_kb'].mean():.1f} KB")
+    axes[0].axvline(data.mean(), color="red", linestyle="--", label=f"Mean: {data.mean():.1f} KB")
     axes[0].legend()
 
-    axes[1].boxplot(df["filesize_kb"], vert=True)
+    axes[1].boxplot(data, vert=True)
     axes[1].set_ylabel("Filesize (KB)")
     axes[1].set_title("Filesize Distribution (Boxplot)")
 
@@ -133,8 +141,9 @@ def plot_filesize_vs_bpp(df: pd.DataFrame, save_path: str = None):
     plt.colorbar(scatter, label="Pixels")
 
     corr = df["bpp"].corr(df["filesize_kb"])
-    ax.text(0.05, 0.95, f"Pearson correlation: {corr:.3f}", transform=ax.transAxes, fontsize=10,
-            verticalalignment="top")
+    ax.text(
+        0.05, 0.95, f"Pearson correlation: {corr:.3f}", transform=ax.transAxes, fontsize=10, verticalalignment="top"
+    )
 
     if save_path:
         plt.savefig(save_path, bbox_inches="tight")
@@ -148,8 +157,9 @@ def plot_processing_time_distribution(df: pd.DataFrame, save_path: str = None):
     axes[0].set_xlabel("Processing Time (seconds)")
     axes[0].set_ylabel("Count")
     axes[0].set_title("Processing Time Distribution")
-    axes[0].axvline(df["processing_time"].mean(), color="red", linestyle="--",
-                    label=f"Mean: {df['processing_time'].mean():.3f}s")
+    axes[0].axvline(
+        df["processing_time"].mean(), color="red", linestyle="--", label=f"Mean: {df['processing_time'].mean():.3f}s"
+    )
     axes[0].legend()
 
     axes[1].scatter(df["filesize_kb"], df["processing_time"], alpha=0.5)
@@ -211,18 +221,36 @@ def plot_pixels_distribution(df: pd.DataFrame, save_path: str = None):
 
 
 def generate_summary_stats(df: pd.DataFrame) -> pd.DataFrame:
-    summary = pd.DataFrame({
-        "Metric": ["Total Images", "Mean Filesize (KB)", "Median Filesize (KB)",
-                   "Mean BPP", "Median BPP", "Mean Processing Time (s)",
-                   "Mean Width", "Mean Height", "Mean Pixels"],
-        "Value": [len(df), df["filesize_kb"].mean(), df["filesize_kb"].median(),
-                  df["bpp"].mean(), df["bpp"].median(), df["processing_time"].mean(),
-                  df["width"].mean(), df["height"].mean(), df["pixels"].mean()]
-    })
+    summary = pd.DataFrame(
+        {
+            "Metric": [
+                "Total Images",
+                "Mean Filesize (KB)",
+                "Median Filesize (KB)",
+                "Mean BPP",
+                "Median BPP",
+                "Mean Processing Time (s)",
+                "Mean Width",
+                "Mean Height",
+                "Mean Pixels",
+            ],
+            "Value": [
+                len(df),
+                df["filesize_kb"].mean(),
+                df["filesize_kb"].median(),
+                df["bpp"].mean(),
+                df["bpp"].median(),
+                df["processing_time"].mean(),
+                df["width"].mean(),
+                df["height"].mean(),
+                df["pixels"].mean(),
+            ],
+        }
+    )
     return summary
 
 
-def run_all_analysis(csv_path: str, output_dir: str = "analysis_results"):
+def run_all_analysis(csv_path: str, output_dir: str = "analysis_results", max_filesize_kb: int = 10000):
     output_path = Path(output_dir)
     output_path.mkdir(exist_ok=True)
 
@@ -231,10 +259,14 @@ def run_all_analysis(csv_path: str, output_dir: str = "analysis_results"):
     print("=== Generating Analysis ===\n")
 
     print("1. Format + Mode Distribution")
-    plot_format_mode_percentage(df, save_path=str(output_path / "format_mode_percentage.png"))
+    plot_format_mode_percentage(
+        df, save_path=str(output_path / "format_mode_percentage.png"), max_filesize_kb=max_filesize_kb
+    )
 
     print("2. Filesize Distribution")
-    plot_filesize_distribution(df, save_path=str(output_path / "filesize_distribution.png"))
+    plot_filesize_distribution(
+        df, save_path=str(output_path / "filesize_distribution.png"), max_filesize_kb=max_filesize_kb
+    )
 
     print("3. BPP Distribution")
     plot_bpp_distribution(df, save_path=str(output_path / "bpp_distribution.png"))
