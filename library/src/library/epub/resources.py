@@ -25,6 +25,7 @@ from library.epub.xml_models.package_document import PackageDocument
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
 from library.epub.utils_zip import apply_zipinfo_timestamp_to_file
 from library.image.optimization import optimization_machine, get_image_header_info, get_image_transparency_info
+from library.utils_xhtml import pretty_print
 from library.xml.document_pydantic import XMLDocumentModel
 from library.xml.utils import etree_from_bytes
 
@@ -193,7 +194,17 @@ class EpubXmlResource(RoleBasedResource, PackagedResource, LazyLoadXmlFile): ...
 
 
 @dataclass(kw_only=True)
-class EpubHtmlResource(RoleBasedResource, LazyLoadHtmlFile, DocumentWithLinks): ...
+class EpubHtmlResource(RoleBasedResource, LazyLoadHtmlFile, DocumentWithLinks):
+
+    def translate(self, table: dict) -> None:
+        self.content = self.content.decode("utf-8", errors="replace").translate(table).encode("utf-8")
+        self.is_modified = True
+
+    def fast_replace_links(self, table: dict) -> None:
+        for element, attribute, link, pos in self.html.iterlinks():
+            if link in table:
+                element.set(attribute, table[link])
+        self.content = pretty_print(self.html)
 
 
 @dataclass(kw_only=True)
