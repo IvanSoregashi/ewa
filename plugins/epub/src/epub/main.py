@@ -1,12 +1,15 @@
 import logging
 import time
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.thread import ThreadPoolExecutor
 
+import pandas as pd
 import typer
 from pathlib import Path
 
 from epub.serene_panda import orchestration
 from ewa.ui import print_success, print_error
-from ewa.cli.print_table import print_table_from_models, print_table_from_dicts
+from ewa.cli.print_table import print_table_from_models, print_table_from_dicts, print_df
 from ewa.cli.progress import DisplayProgress
 from ewa.main import settings
 from epub.tables import EpubBookTable, EpubContentsTable
@@ -14,7 +17,6 @@ from epub.constants import duplicates_directory, epub_dir, serene_panda_fonts_di
 from library.epub.epub_core import EpubSpecification
 from library.epub.utils_css import parse_css_urls, replace_css_url
 from library.epub.utils_href import posix_relative_href
-from library.image.optimization import useless_transparency_mode
 from library.utils import sanitize_filename
 from library.epub.epub import EPUB
 
@@ -122,33 +124,22 @@ def check_epub_resources(epub: Path = typer.Argument(None, exists=True)):
 
 @app.command()
 def getimg():
-    from PIL import Image
+    start_time = time.time()
+    # with ThreadPoolExecutor(max_workers=16) as executor:
+    #     executor.map(orchestration.get_image_header_report, map(str, settings.current_dir.rglob("*.epub")))
+    with ProcessPoolExecutor(max_workers=16) as executor:
+        executor.map(orchestration.get_image_header_report, map(str, settings.current_dir.rglob("*.epub")))
+    # list(map(orchestration.get_image_header_report, map(str, settings.current_dir.rglob("*.epub"))))
+    end_time = time.time()
+    logger.warning(f"Finished processing '{settings.current_dir!s}' in {end_time - start_time:.3f} s")
 
-    original_load = Image.Image.load
-    load_flag = False
-
-    def traced_load(self):
-        nonlocal load_flag
-        load_flag = True
-        return original_load(self)
-
-    Image.Image.load = traced_load
-
-    results = []
-    for file in settings.current_dir.glob("*.epub"):
-        epub = EPUB(file)
-        with epub.source.open():
-            for image_resource in epub.resources.images:
-                no_transparency = False
-                with image_resource.stream_image() as image:
-                    info_dict = image_resource.get_info()
-                    if load_flag:
-                        no_transparency = useless_transparency_mode(image=image)
-                if no_transparency:
-                    info_dict["has_transparency_data"] = "useless"
-                results.append(info_dict)
-    print_table_from_dicts("Image Info", results)
-
+@app.command("parse")
+def parse_data():
+    # dfs = [pd.read_csv(str(file)) for file in (settings.profile_dir / "image_stats").glob("*.csv")]
+    # data_frame = pd.concat(dfs)
+    # print_df(data_frame, title="images")
+    # data_frame.to_csv(settings.profile_dir / "image_stats" / "all.csv")
+    pass
 
 @app.command("rub")
 def return_untranslated_back():

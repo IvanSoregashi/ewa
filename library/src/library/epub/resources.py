@@ -24,7 +24,8 @@ from library.epub.xml_models.ncx_model import NavPoint, NCXDocument
 from library.epub.xml_models.package_document import PackageDocument
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
 from library.epub.utils_zip import apply_zipinfo_timestamp_to_file
-from library.image.optimization import optimization_machine, get_image_info
+from library.image.optimization import optimization_machine, get_image_header_info, \
+    get_image_transparency_info
 from library.xml.document_pydantic import XMLDocumentModel
 from library.xml.utils import etree_from_bytes
 
@@ -140,11 +141,10 @@ class LazyLoadImageFile(LazyLoadFile):
     @contextmanager
     def stream_image(self) -> Generator[Image.Image, None, None]:
         if self._image is not None:
-            logger.info("stream_image - returning cached image")
             yield self._image
-            logger.info("stream_image - finished working with cached image")
             return
         with self.stream() as stream:
+            logger.debug("stream_image - starting stream")
             with Image.open(stream) as img:
                 self._image = img
                 yield self._image
@@ -254,10 +254,13 @@ class EpubImageResource(RoleBasedResource, PackagedResource, LazyLoadImageFile):
             self.content = buffer.getvalue()
             return new_path
 
-    def get_info(self):
+    def get_header_info(self):
         with self.stream_image() as image:
-            return get_image_info(image=image, filesize=self.info.file_size)
+            return get_image_header_info(image=image, filesize=self.info.file_size)
 
+    def get_transparency_info(self):
+        with self.stream_image() as image:
+            return get_image_transparency_info(image=image, filesize=self.info.file_size)
 
 AnyResource = (
     EpubHtmlResource

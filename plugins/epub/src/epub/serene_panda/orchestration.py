@@ -1,13 +1,13 @@
 import datetime
 import json
 import logging
+import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from itertools import repeat, combinations
 from pathlib import Path
 from zipfile import ZipFile
 
-
-from epub.epub_classes import EPUB, ScanEpubsInDirectory
+import pandas as pd
 from epub.file_parsing import parse_container_xml, parse_content_opf
 from epub.serene_panda.font import process_font
 from epub.tables import EpubFileModel, EpubBookTable, EpubContentsTable
@@ -23,9 +23,12 @@ from ewa.cli.progress import DisplayProgress, track_unknown, track_sized, track_
 from ewa.main import settings
 from ewa.ui import print_success, print_error
 from library.database.sqlite_model_table import TERMINATOR
+from library.epub.epub_core import EpubSpecification
+from library.epub.media_type import MediaType
 
-# from library.epub.xml_models.opf_model import Metadata, PackageDocument
 from library.image.ocr import recognize_letter
+from library.image.optimization import useless_transparency_mode
+from library.epub.epub import EPUB
 
 logger = logging.getLogger(__name__)
 
@@ -592,3 +595,54 @@ def extract_container_files():
         errs = list(track_unknown(executor.map(extract_container_to_destination, epub_paths), total=len(epub_paths)))
         print_error(str(sum(errs)))
         print_success(str(len(errs)))
+
+
+def get_image_header_report(path: str):
+    report_path: Path = settings.profile_dir / "image_stats" / Path(path).with_suffix(".csv").name
+    results = []
+    epub = EPUB(path)
+    if not epub.is_specification(EpubSpecification.SERENE_PANDA_ENCRYPTED):
+        logger.warning(f"skipping '{epub.path!s}' due to specification")
+        return
+    with epub.source.open():
+        for image_resource in epub.resources.images:
+            try:
+                if image_resource.media_type not in (MediaType.IMAGE_JPEG, MediaType.IMAGE_PNG, MediaType.IMAGE_GIF):
+                    logger.warning(f"skipping '{image_resource.info.filename}' due to media type '{image_resource.media_type!s}'")
+                    continue
+                start_time = time.perf_counter()
+                info_dict = image_resource.get_header_info()
+                info_dict["processing_time"] = f"{time.perf_counter() - start_time:.3f}"
+                results.append(info_dict)
+            except Exception as e:
+                logger.error(f"get_image_header_report: {e}")
+    if results:
+        while report_path.exists():
+            report_path = report_path.with_stem(report_path.stem + "[+]")
+        pd.DataFrame(results).to_csv(report_path)
+
+
+def get_image_transparency_report(path: str):
+    report_path: Path = settings.profile_dir / "image_stats" / Path(path).stem + ".csv"
+    results = []
+    epub = EPUB(path)
+    with epub.source.open():
+        for image_resource in epub.resources.images:
+            start_time = time.perf_counter()
+            no_transparency = False
+            with image_resource.stream_image() as image:
+                info_dict = image_resource.get_info()
+                info_dict["load"] = load_flag
+                if load_flag:
+                    no_transparency = useless_transparency_mode(image=image)
+                    logger.info(f"load was called on {image_resource.info.filename}, {no_transparency=}")
+                    load_flag = False
+            if no_transparency:
+                info_dict["has_transparency_data"] = "useless"
+            end_time = time.perf_counter()
+            info_dict["processing_time"] = f"{end_time - start_time:.3f}"
+            results.append(info_dict)
+    if results:
+        while report_path.exists():
+            report_path.with_stem(report_path.stem + "[+]")
+        pd.DataFrame(results).to_csv(report_path)
