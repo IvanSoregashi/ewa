@@ -3,7 +3,7 @@ from collections.abc import Callable
 from typing import Literal, overload, BinaryIO
 from zipfile import ZipInfo
 
-from library.epub.resources import RoleBasedResource
+from library.epub.resources import RoleBasedResource, EpubImageResource
 from library.epub.media_type import EpubRole, MediaType
 from library.epub.resources import (
     EpubHtmlResource,
@@ -64,7 +64,7 @@ class ResourceIndex:
         self._items.append(resource)
         self._by_path[resource.info.filename] = resource
         # TODO: add records of the resource to the documents
-        if resource.id is not None:
+        if getattr(resource, "id", None):
             self._by_id[resource.id] = resource
 
     def remove(self, resource: EpubDefaultResource) -> None:
@@ -98,9 +98,11 @@ class ResourceIndex:
     @overload
     def all_by_role(self, role: Literal[EpubRole.XML]) -> list[EpubXmlResource]: ...
     @overload
+    def all_by_role(self, role: Literal[EpubRole.IMAGE]) -> list[EpubImageResource]: ...
+    @overload
     def all_by_role(self, role: EpubRole) -> list[EpubDefaultResource]: ...
 
-    def all_by_role(self, role: EpubRole) -> list[AnyResource]:
+    def all_by_role(self, role: EpubRole) -> list:
         return [r for r in self._items if r.role == role]
 
     def rebuild_id_index(self) -> None:
@@ -118,7 +120,7 @@ class ResourceIndex:
         return self.all_by_role(EpubRole.FONT)
 
     @property
-    def images(self) -> list[EpubDefaultResource]:
+    def images(self) -> list[EpubImageResource]:
         """All image files in the EPUB."""
         return self.all_by_role(EpubRole.IMAGE)
 

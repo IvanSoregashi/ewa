@@ -119,6 +119,17 @@ def check_epub_resources(epub: Path = typer.Argument(None, exists=True)):
     print_success(f"success in {end_time - start_time:.5f} seconds")
 
 
+@app.command()
+def getimg():
+    results = []
+    for file in settings.current_dir.glob("*.epub"):
+        epub = EPUB(file)
+        with epub.source.open():
+            for image in epub.resources.images:
+                info_dict = image.get_info()
+                results.append(info_dict)
+    print_table_from_dicts("Image Info", results)
+
 @app.command("rub")
 def return_untranslated_back():
     with DisplayProgress(), EpubBookTable() as table:

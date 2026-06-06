@@ -286,6 +286,8 @@ def get_epub_class_by_role(role: EpubRole):
             resource_class = EpubContainerResource
         case EpubRole.XML:
             resource_class = EpubXmlResource
+        case EpubRole.IMAGE:
+            resource_class = EpubImageResource
         case _:
             resource_class = EpubDefaultResource
 

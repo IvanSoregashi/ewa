@@ -1,6 +1,8 @@
 from pathlib import Path
 from zipfile import ZipInfo
 
+from ewa.cli.print_table import print_table, print_table_from_dicts
+from library.epub.epub import EPUB
 from library.epub.media_type import type_and_role_from_filename
 from library.epub.resources import EpubImageResource
 from library.image.utils import calculate_image_file_bpp
@@ -50,3 +52,16 @@ def test_bpp():
         if file.is_dir() or file.suffix == ".HEIC":
             continue
         print(f"{file.name:<50}{calculate_image_file_bpp(file)}")
+
+
+def test_analytics():
+    images_dir = Path("samples")
+    results = []
+    for file in images_dir.glob("*.epub"):
+        epub = EPUB(file)
+        with epub.source.open():
+            for image in epub.resources.images:
+                info_dict = image.get_info()
+                results.append(info_dict)
+    print_table_from_dicts("Image Info", results)
+
