@@ -33,9 +33,11 @@ def plot_format_mode_percentage(df: pd.DataFrame, save_path: str = None, max_fil
     return percentages
 
 
-def plot_filesize_distribution(df: pd.DataFrame, save_path: str = None, max_filesize_kb: int = None):
+def plot_filesize_distribution(df: pd.DataFrame, save_path: str = None, min_filesize_kb: int = None, max_filesize_kb: int = None):
     data = df["filesize_kb"]
 
+    if min_filesize_kb:
+        data = data[min_filesize_kb <= data]
     if max_filesize_kb:
         data = data[data <= max_filesize_kb]
 
@@ -58,17 +60,24 @@ def plot_filesize_distribution(df: pd.DataFrame, save_path: str = None, max_file
     plt.show()
 
 
-def plot_bpp_distribution(df: pd.DataFrame, save_path: str = None):
+def plot_bpp_distribution(df: pd.DataFrame, save_path: str = None, bpp_from: int | None = None, bpp_to: int | None = None):
+    data = df["bpp"]
+
+    if bpp_to:
+        data = data[data <= bpp_to]
+    if bpp_from:
+        data = data[bpp_from <= data]
+
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
-    axes[0].hist(df["bpp"], bins=50, edgecolor="black", alpha=0.7, color="green")
+    axes[0].hist(data, bins=50, edgecolor="black", alpha=0.7, color="green")
     axes[0].set_xlabel("Bits Per Pixel")
     axes[0].set_ylabel("Count")
     axes[0].set_title("BPP Distribution (Histogram)")
-    axes[0].axvline(df["bpp"].mean(), color="red", linestyle="--", label=f"Mean: {df['bpp'].mean():.2f}")
+    axes[0].axvline(data.mean(), color="red", linestyle="--", label=f"Mean: {data.mean():.2f}")
     axes[0].legend()
 
-    axes[1].boxplot(df["bpp"], vert=True)
+    axes[1].boxplot(data, vert=True)
     axes[1].set_ylabel("Bits Per Pixel")
     axes[1].set_title("BPP Distribution (Boxplot)")
 

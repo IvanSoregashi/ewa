@@ -35,6 +35,11 @@ dev = [
     "pytest-xdist>=3.8.0",
     "library[all]",
     "epub",
+    "ty>=0.0.44",
+    "ipykernel>=7.2.0",
+    "pandas-stubs>=3.0.3.260530",
+    "seaborn>=0.13.2",
+    "matplotlib>=3.10.9",
 ]
 
 [project.scripts]
