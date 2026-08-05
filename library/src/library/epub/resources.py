@@ -13,8 +13,7 @@ from lxml.etree import Element
 from hashlib import md5
 from PIL import Image
 
-
-from epub.utils import SQLITE_MAX_INT
+from library.database.constants import SQLITE_MAX_INT
 from library.epub.epub_link import EPUBLink
 
 from library.epub.media_type import type_and_role_from_filename, EpubRole, MediaType
