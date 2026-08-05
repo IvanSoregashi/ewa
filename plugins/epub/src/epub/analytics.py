@@ -33,7 +33,9 @@ def plot_format_mode_percentage(df: pd.DataFrame, save_path: str = None, max_fil
     return percentages
 
 
-def plot_filesize_distribution(df: pd.DataFrame, save_path: str = None, min_filesize_kb: int = None, max_filesize_kb: int = None):
+def plot_filesize_distribution(
+    df: pd.DataFrame, save_path: str = None, min_filesize_kb: int = None, max_filesize_kb: int = None
+):
     data = df["filesize_kb"]
 
     if min_filesize_kb:
@@ -60,7 +62,9 @@ def plot_filesize_distribution(df: pd.DataFrame, save_path: str = None, min_file
     plt.show()
 
 
-def plot_bpp_distribution(df: pd.DataFrame, save_path: str = None, bpp_from: int | None = None, bpp_to: int | None = None):
+def plot_bpp_distribution(
+    df: pd.DataFrame, save_path: str = None, bpp_from: int | None = None, bpp_to: int | None = None
+):
     data = df["bpp"]
 
     if bpp_to:

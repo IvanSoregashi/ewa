@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 
 from ewa.cli.print_table import print_table_from_dicts
@@ -33,16 +34,26 @@ def test_image_info():
 
 def test_image_optimization():
     images_dir = Path("samples") / "images"
+    output_dir = images_dir / "output"
+    shutil.rmtree(output_dir)
+    results = []
+
     for file in images_dir.iterdir():
+
         if file.is_dir() or file.suffix == ".HEIC":
             continue
 
         image_resource = EpubImageResource.from_filesystem_path(file)
-        new_path = image_resource.optimize(max_width=1080, max_height=0, convert_rgb_to_jpg=True)
-        output_path = images_dir / "output" / (new_path or file).name
+        result = image_resource.optimize(max_width=1080, max_height=0, convert_rgb_to_jpg=True)
+        results.append(result | {"file": file.name})
+        output_path = output_dir / file.name
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        image_resource.write_to_filesystem(output_path)
         assert output_path.read_bytes() == image_resource.content
-        # image_resource.write_to_filesystem(output_path)
+        output_path.unlink()
 
+    print()
+    print_table_from_dicts("Optimization results", results)
 
 def test_bpp():
     images_dir = Path("samples") / "images"
@@ -59,6 +70,6 @@ def test_analytics():
         epub = EPUB(file)
         with epub.source.open():
             for image in epub.resources.images:
-                info_dict = image.get_info()
+                info_dict = image.get_header_info()
                 results.append(info_dict)
     print_table_from_dicts("Image Info", results)

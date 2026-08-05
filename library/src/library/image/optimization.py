@@ -1,41 +1,17 @@
-from dataclasses import dataclass
-from enum import StrEnum
+from copy import copy, deepcopy
 from io import BytesIO
 
 from PIL import Image
 
-MEDIUM_WIDTH_SIZE = (1080, 0)
-EXTRA_WIDTH_SIZE = (2560, 0)
-EFFICIENT_BPP = 0.5
-EXTRA_EFFICIENT_BPP = 0.2
-
-
-class ImageFormat(StrEnum):
-    PNG = "PNG"
-    JPEG = "JPEG"
-    GIF = "GIF"
-    BMP = "BMP"
-    WEBP = "WEBP"
-
-
-class ImageMode(StrEnum):
-    RGB = "RGB"
-    RGBA = "RGBA"
-    CMYK = "CMYK"
-    L = "L"
-    LA = "LA"
-    I = "I"
-    P = "P"
-    ONE = "1"
-
-
-@dataclass
-class ConversionSettings:
-    max_width: int
-    max_height: int
-    convert_rgb_to_jpg: bool
-    quality: int | None
-
+from library.image.constants import (
+    MEDIUM_WIDTH_SIZE,
+    EXTRA_WIDTH_SIZE,
+    EFFICIENT_BPP,
+    EXTRA_EFFICIENT_BPP,
+    ImageFormat,
+    ImageMode,
+)
+from library.image.models import ConversionSettings, ImageInfo, OperationResult
 
 epub_image_settings = ConversionSettings(max_width=1080, max_height=0, convert_rgb_to_jpg=True, quality=80)
 
@@ -118,70 +94,82 @@ def useless_transparency_mode(image: Image.Image) -> bool:
     return len(extrema) == 4 and extrema[3][0] == 255
 
 
-def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> dict:
+def optimize_png_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> tuple[OperationResult, ImageInfo | None]:
+    image_info = deepcopy(original_image_info)
+
+    if getattr(image, "is_animated", None):
+        return OperationResult(skip=f"Animated PNG"), None
+
+    #  Reduce the image dimensions
+    if image_info.is_extra_efficient:
+        image, resized_size = crop_image_dimensions(image, EXTRA_WIDTH_SIZE)
+    else:
+        image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
+    image_info.size = resized_size
+
+    #  Remove transparency if it is useless
+    if image_info.mode == ImageMode.RGBA and useless_transparency_mode(image):
+        image = image.convert(ImageMode.RGB)
+        image_info.mode = ImageMode.RGB
+
+    #  Convert to JPG if meaningful
+    if not image_info.is_efficient and image_info.mode == ImageMode.RGB:
+        image_info.format = ImageFormat.JPEG
+        image.save(buffer, format=ImageFormat.JPEG, optimize=True, quality=85)
+        image_info.filesize = len(buffer.getvalue())
+        return OperationResult(success=True), image_info
+
+    #  Not processed 1, L, LA, I, P modes, need additional investigation
+    if original_image_info == image_info:
+        return OperationResult(skip="Image was not optimized"), None
+
+    image.save(buffer, format=image_info.format, optimize=True)
+    return OperationResult(success=True), image_info
+
+
+def optimize_jpg_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> tuple[OperationResult, ImageInfo | None]:
+    image_info = deepcopy(original_image_info)
+    image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
+
+    #  Image was resized
+    if resized_size != image_info.size:
+        image_info.size = resized_size
+        image.save(buffer, format=ImageFormat.JPEG, optimize=True, quality=85)
+        return OperationResult(success=True), image_info
+
+    return OperationResult(skip="Image was not optimized"), None
+
+
+def optimize_gif_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> tuple[OperationResult, ImageInfo | None]:
+    image_info = deepcopy(original_image_info)
+
+    if getattr(image, "is_animated", None):
+        return OperationResult(skip="Animated GIF"), None
+
+    image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
+
+    if resized_size != image_info.size:
+        image_info.size = resized_size
+        image.save(buffer, format=ImageFormat.GIF, optimize=True, quality=85)
+        return OperationResult(success=True), image_info
+
+    return OperationResult(skip="Image was not optimized"), None
+
+
+def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> tuple[OperationResult, ImageInfo | None]:
     min_filesize = 50 * 1024
-    result = {"success": True}
     if filesize < min_filesize:
-        return result | {"error": f"Image is smaller then min threshold {filesize / 1024:.2fKB}"}
+        return OperationResult(skip=f"Image is smaller then min threshold {filesize / 1024:.2fKB}"), None
 
-    bpp = filesize / (image.width * image.height)
+    image_info = ImageInfo.from_image(image=image, filesize=filesize)
 
-    original_format = new_format = image.format
-    result |= {"original_format": original_format}
-    original_mode = new_mode = image.mode
-    result |= {"original_mode": original_mode}
-    original_size = image.size
-    result |= {"original_size": original_size}
-    result |= {"original_filesize": filesize}
-    result |= {"bpp": bpp}
+    if image_info.format == ImageFormat.PNG:
+        return optimize_png_image(image, buffer, image_info)
 
-    efficient = bpp < EFFICIENT_BPP
-    super_efficient = bpp < EXTRA_EFFICIENT_BPP
+    if image_info.format == ImageFormat.JPEG:
+        return optimize_jpg_image(image, buffer, image_info)
 
-    if original_format == ImageFormat.PNG:
-        is_animated = getattr(image, "is_animated", None)
-        if is_animated:
-            return result | {"error": f"Animated PNG (filesize={filesize}, bpp={bpp})"}
+    if image_info.format == ImageFormat.GIF:
+        return optimize_gif_image(image, buffer, image_info)
 
-        if super_efficient:
-            image, resized_size = crop_image_dimensions(image, EXTRA_WIDTH_SIZE)
-        else:
-            image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
-        if resized_size != original_size:
-            result |= {"new_size": resized_size}
-
-        if original_mode == ImageMode.RGBA:
-            if useless_transparency_mode(image):
-                new_mode = ImageMode.RGB
-                image = image.convert(new_mode)
-                result |= {"new_mode": new_mode}
-
-        if not efficient and new_mode == ImageMode.RGB:
-            new_format = ImageFormat.JPEG
-            image.save(buffer, format=new_format, optimize=True, quality=85)
-            return result | {"new_mode": new_mode, "new_filesize": len(buffer.getvalue())}
-        if "new_size" not in result and "new_mode" not in result:
-            return result | {"error": "Image was not optimized"}
-        # Not processed 1, L, LA, I, P modes, need additional investigation
-        image.save(buffer, format=new_format, optimize=True)
-        return result
-
-    if original_format == ImageFormat.JPEG:
-        image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
-        if resized_size != original_size:
-            result |= {"new_size": resized_size}
-            image.save(buffer, format=ImageFormat.JPEG, optimize=True, quality=85)
-
-        return result
-
-    if original_format == ImageFormat.GIF:
-        is_animated = getattr(image, "is_animated", None)
-        if is_animated:
-            return result | {"error": f"Animated GIF (filesize={filesize}, bpp={bpp})"}
-
-        image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
-        if resized_size != original_size:
-            image.save(buffer, format=ImageFormat.GIF, optimize=True, quality=85)
-        return result
-
-    return result | {"error": "Image was not optimized"}
+    return OperationResult(skip="Image was not optimized"), None

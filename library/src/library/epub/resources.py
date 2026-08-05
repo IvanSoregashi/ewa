@@ -23,6 +23,7 @@ from library.epub.xml_models.ncx_model import NavPoint, NCXDocument
 from library.epub.xml_models.package_document import PackageDocument
 from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
 from library.epub.utils_zip import apply_zipinfo_timestamp_to_file
+from library.image.models import ImageInfo
 from library.image.optimization import optimization_machine, get_image_header_info, get_image_transparency_info
 from library.utils_xhtml import pretty_print
 from library.xml.document_pydantic import XMLDocumentModel
@@ -194,7 +195,6 @@ class EpubXmlResource(RoleBasedResource, PackagedResource, LazyLoadXmlFile): ...
 
 @dataclass(kw_only=True)
 class EpubHtmlResource(RoleBasedResource, LazyLoadHtmlFile, DocumentWithLinks):
-
     def translate(self, table: dict) -> None:
         self.content = self.content.decode("utf-8", errors="replace").translate(table).encode("utf-8")
         self.is_modified = True
@@ -228,40 +228,41 @@ class EpubNavResource(EpubHtmlResource, LazyLoadXmlDocumentFile[NavDocument]):
 
 @dataclass(kw_only=True)
 class EpubImageResource(RoleBasedResource, PackagedResource, LazyLoadImageFile):
-    # png cases:
-    # - rgb
-    # - rgba + transparency
-    # - rgba + no transparency
-    # - compression?
-    # jpg cases:
-    # - jpg (quality? loading?)
-    # -
-    # gif cases:
-    # - P mode
-    # - version b'GIF89a' |
-    # - background + transparency + duration headers
+    _updated_path = None
 
-    def optimize(self, max_width: int = 1080, max_height: int = 0, convert_rgb_to_jpg: bool = True) -> None | Path:
+    def optimize(self, max_width: int = 1080, max_height: int = 0, convert_rgb_to_jpg: bool = True) -> dict:
         if self.info.file_size < 50 * 1024:  # 50kb
-            return None
+            return {"skip": "Image filesize < 50kb.", "success": False, "error": None}
         with self.stream_image() as image:
-            original_format = image.format
-            if original_format is None:
+            original_image_info = ImageInfo.from_image(image=image, filesize=self.info.file_size)
+            if original_image_info.format is None:
                 logger.warning(f"{self} unknown original format of the image.")
-            buffer = BytesIO()
-            result = optimization_machine(image, buffer=buffer, filesize=self.info.file_size)
 
-            self.is_modified = True
             buffer = BytesIO()
-            new_path = None
-            if image.mode == "RGB" and (original_format == "JPEG" or convert_rgb_to_jpg):
-                image.save(buffer, optimize=True, format="JPEG", quality=85)
-                new_path = Path(self.info.filename).with_suffix(".jpg")
+            result, new_image_info = optimization_machine(image, buffer=buffer, filesize=original_image_info.filesize)
+
+            if image.mode == "RGB" and (original_image_info.format == "JPEG" or convert_rgb_to_jpg):
+                self._updated_path = Path(self.info.filename).with_suffix(".jpg")
             else:
-                logger.warning(f"{self} Image of unusual format {image.mode, original_format} was modified.")
-                image.save(buffer, optimize=True, format=original_format)
-            self.content = buffer.getvalue()
-            return new_path
+                logger.warning(f"{self} Image of unusual format {original_image_info.mode, original_image_info.format} was modified.")
+                self._updated_path = Path(self.info.filename)
+
+            if result.success: # TODO REDO
+                self.is_modified = True
+                self._image = None
+                self.content = buffer.getvalue()
+            return result.as_dict()
+
+    def write_to_filesystem(self, path: Path | None = None) -> LazyLoadFile:
+        if path is None:
+            path: Path = self._updated_path
+        if path.exists():
+            logger.warning(f"{self}, file {path} exists, nothing to write.")
+        else:
+            byte_count = path.write_bytes(self.content)
+            apply_zipinfo_timestamp_to_file(self.info, path)
+            logger.debug(f"{self}, written {byte_count} bytes to {path}.")
+        return self.__class__.from_filesystem_path(path)
 
     def get_header_info(self):
         with self.stream_image() as image:

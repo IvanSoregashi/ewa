@@ -62,6 +62,7 @@ def destination(request: pytest.FixtureRequest) -> Generator[Path, None, None]:
     if request.param:
         path.mkdir(parents=True, exist_ok=True)
     logger.debug(f"Destination path: {path}, {path.exists()=}")
+
     yield path
 
     shutil.rmtree(path)
@@ -70,9 +71,11 @@ def destination(request: pytest.FixtureRequest) -> Generator[Path, None, None]:
 
 @pytest.fixture
 def existing_destination() -> Generator[Path, None, None]:
-    path = SAMPLE_DIR / "destination"
+    path = SAMPLE_DIR / "existing_destination"
     path.mkdir(parents=True, exist_ok=True)
+
     yield path
+
     shutil.rmtree(path)
 
 

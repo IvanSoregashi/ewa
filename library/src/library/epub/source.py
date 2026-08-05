@@ -283,6 +283,8 @@ class ZipFileSource(SourceProtocol):
         """
         logger.info(f"{self} extract_all({destination!r}, {exclude_members=})")
         destination: Path = Path(destination)
+        if not destination.exists():
+            destination.mkdir(parents=True)
         assert destination.is_dir(), "destination must be a directory"
 
         with self.open():

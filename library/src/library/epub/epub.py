@@ -216,7 +216,7 @@ class EPUB:
                     continue
                 if self.__skip_dirs and resource.info.is_dir():
                     continue
-                if resource.filename == FileName.MIMETYPE:
+                if resource.info.filename == FileName.MIMETYPE:
                     continue
                 if resource.is_deleted:
                     continue
