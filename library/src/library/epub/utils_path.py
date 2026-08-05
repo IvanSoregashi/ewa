@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from epub.utils import string_to_int_hash64
+from library.epub.utils import string_to_int_hash64
 
 
 def prefix_name_with_hash(path: str | Path, content: bytes | None = None) -> Path:

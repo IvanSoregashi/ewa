@@ -1,4 +1,5 @@
 import logging
+import shutil
 import time
 from concurrent.futures import ProcessPoolExecutor
 
@@ -11,59 +12,27 @@ from ewa.cli.print_table import print_table_from_models, print_table_from_dicts
 from ewa.cli.progress import DisplayProgress
 from ewa.main import settings
 from epub.tables import EpubBookTable, EpubContentsTable
-from epub.constants import duplicates_directory, epub_dir, serene_panda_fonts_dir
 from library.epub.epub_core import EpubSpecification
 from library.epub.utils_css import parse_css_urls, replace_css_url
 from library.epub.utils_href import posix_relative_href
 from library.utils import sanitize_filename
 from library.epub.epub import EPUB
+from epub.config import settings
+
 
 app = typer.Typer(help="Epub Plugin")
-
 logger = logging.getLogger("EPUB")
+
+
+# Entry point for the plugin loader
+def plugin():
+    return app
 
 
 @app.callback()
 def setup():
     """Initialize the database on first run."""
-    print_success(f"setup callback called, settings:{settings.model_dump_json()}")
-
-
-@app.command("scanf")
-def scan_epubs_in_current_directory(path: Path = typer.Argument(None)):
-    """Scans a directory for .epub files."""
-    orchestration.scan_folder(path)
-
-
-@app.command()
-def dups(move: bool = typer.Option(False, "-m", "--move"), cleanup: bool = typer.Option(False, "-c", "--cleanup")):
-    if cleanup:
-        for i in duplicates_directory.iterdir():
-            if i.is_dir():
-                files = list(i.glob("*.epub"))
-                if len(files) == 1:
-                    print_success(str(i))
-                    EPUB(files[0]).move_original_to(epub_dir, overwrite=False)
-                    files = list(i.glob("*.epub"))
-                if len(files) == 0:
-                    print_success(str(i))
-                    i.rmdir()
-        return
-    with EpubBookTable() as table:
-        title_list = table.get_most_common([table.model.title], table.model.serene_panda == 1, more_then=1)
-        for title in title_list:
-            new_dir = duplicates_directory / sanitize_filename(title)
-            new_dir.mkdir(parents=True, exist_ok=True)
-            items = table.get_many(table.model.title == title)
-            print_table_from_models(title, items)
-            if move:
-                for item in items:
-                    item.to_epub().move_original_to(new_dir, overwrite=False)
-
-
-@app.command()
-def test():
-    orchestration.extract_container_files()
+    print_success(f"setup callback called, settings: {settings.model_dump_json(indent=4)}")
 
 
 @app.command()
@@ -77,14 +46,14 @@ def decrypt(epub_path: Path = typer.Argument(None, exists=True)):
     with EPUB(epub_path).stream_to(destination) as epub:
         epub.require_specification(EpubSpecification.SERENE_PANDA_ENCRYPTED)
 
-        assert len(epub.core.fonts) == 1, "SEVERAL FONTS FOUND"
-        font_resource = epub.core.fonts[0]
-        font_resource.write_to_filesystem(serene_panda_fonts_dir / font_resource.hash_prefixed_name)
+        assert len(epub.resources.fonts) == 1, "SEVERAL FONTS FOUND"
+        font_resource = epub.resources.fonts[0]
+        font_resource.write_to_filesystem(settings.serene_panda_fonts_dir / font_resource.hash_prefixed_name)
 
         epub.core.remove_resource(font_resource)
 
-        for style_resource in epub.core.styles:
-            relative_path = posix_relative_href(anchor=style_resource.filename, absolute_href=font_resource.filename)
+        for style_resource in epub.resources.styles:
+            relative_path = posix_relative_href(anchor=style_resource.info.filename, absolute_href=font_resource.info.filename)
             if relative_path in parse_css_urls(style_resource.content):
                 style_resource.content = replace_css_url(
                     style_resource.content, relative_path, font_resource.hash_prefixed_name
@@ -92,9 +61,9 @@ def decrypt(epub_path: Path = typer.Argument(None, exists=True)):
                 style_resource.is_modified = True
 
         dictionary = orchestration.translation_dictionary()
-        for content_resource in epub.core.markup_content:
-            if not content_resource.is_spine_item():
-                logger.warning(f"content_resource {content_resource.filename} is not in the spine")
+        for content_resource in epub.resources.markup_content:
+            if content_resource.spine_item_ref is None:
+                logger.warning(f"content_resource {content_resource.info.filename} is not in the spine")
             content_resource.content = content_resource.content.decode("utf-8").translate(dictionary).encode("utf-8")
             # content_resource.content = pretty_print_bs4_bytes(content_resource.content)
             content_resource.is_modified = True
@@ -118,69 +87,6 @@ def check_epub_resources(epub: Path = typer.Argument(None, exists=True)):
             print_table_from_dicts(title="UNKNOWN", dicts=unknown)
     end_time = time.time()
     print_success(f"success in {end_time - start_time:.5f} seconds")
-
-
-@app.command()
-def getimg():
-    start_time = time.time()
-    # with ThreadPoolExecutor(max_workers=16) as executor:
-    #     executor.map(orchestration.get_image_header_report, map(str, settings.current_dir.rglob("*.epub")))
-    with ProcessPoolExecutor(max_workers=16) as executor:
-        executor.map(orchestration.get_image_header_report, map(str, settings.current_dir.rglob("*.epub")))
-    # list(map(orchestration.get_image_header_report, map(str, settings.current_dir.rglob("*.epub"))))
-    end_time = time.time()
-    logger.warning(f"Finished processing '{settings.current_dir!s}' in {end_time - start_time:.3f} s")
-
-
-@app.command("parse")
-def parse_data():
-    # dfs = [pd.read_csv(str(file)) for file in (settings.profile_dir / "image_stats").glob("*.csv")]
-    # data_frame = pd.concat(dfs)
-    # print_df(data_frame, title="images")
-    # data_frame.to_csv(settings.profile_dir / "image_stats" / "all.csv")
-    pass
-
-
-@app.command("rub")
-def return_untranslated_back():
-    with DisplayProgress(), EpubBookTable() as table:
-        orchestration.return_untranslated_back(table)
-
-
-@app.command("trall")
-def translate_everything():
-    with EpubBookTable() as table:
-        orchestration.translate_all_encrypted(table)
-
-
-@app.command("trthis")
-def translate_this_directory():
-    tr = settings.current_dir / "trans"
-    tr.mkdir(parents=True, exist_ok=True)
-    untr = settings.current_dir / "untrans"
-    untr.mkdir(parents=True, exist_ok=True)
-
-    orchestration.translate_epubs_in_directory(settings.current_dir, tr, untr)
-
-
-@app.command()
-def path(epub: Path = typer.Argument(None, exists=True)):
-    orchestration.translate_one_epub(epub)
-
-
-@app.command("formt")
-def form_translation():
-    orchestration.form_translation()
-
-
-@app.command()
-def ocr():
-    orchestration.recognize_letters(settings.current_dir)
-
-
-@app.command("rfonts")
-def render_fonts():
-    orchestration.process_all_fonts_mproc(settings.current_dir)
 
 
 @app.command()
@@ -238,6 +144,31 @@ def list_scanned_files(
             print_table_from_models("My Library", raw_rows)
 
 
-# Entry point for the plugin loader
-def plugin():
-    return app
+@app.command("move-sp")
+def move_serene_panda_encrypted_separately():
+    epub_dir = settings.epub_dir
+    encrypted_dir = settings.encrypted_epub_dir
+    start_time = time.time()
+    processed = 0
+    moved = 0
+
+    for file in epub_dir.rglob("*.epub"):
+
+        try:
+            if not EPUB(file).is_specification(EpubSpecification.SERENE_PANDA_ENCRYPTED):
+                logger.info(f"SKIPPING [NON-SPE]: {str(file)!r}")
+                processed += 1
+                continue
+        except ValueError:
+            logger.error(f"ERROR [NON-SPE]: {str(file)!r}")
+            continue
+        processed += 1
+
+        relative_path = file.relative_to(epub_dir)
+        new_path = encrypted_dir / relative_path
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"MOVING [SPE]: {str(file)!r} -> {str(new_path)!r}")
+        shutil.move(str(file), str(new_path))
+        moved += 1
+        logger.info(f"PROCESSED: {processed}, MOVED: {moved}, ELAPSED: {time.time() - start_time}")

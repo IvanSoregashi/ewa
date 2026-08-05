@@ -55,6 +55,7 @@ class ImageInfo:
     def is_extra_efficient(self) -> bool:
         return self.bpp < EXTRA_EFFICIENT_BPP
 
+
 @dataclass
 class OperationResult:
     success: bool = False

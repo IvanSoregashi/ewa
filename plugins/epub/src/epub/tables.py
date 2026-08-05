@@ -4,7 +4,9 @@ from pathlib import Path
 from zipfile import ZipInfo
 from sqlmodel import SQLModel, Field, Relationship
 
-from epub.utils import timestamp_from_zip_info, string_to_int_hash, bt_to_mb
+from library.epub.epub import EPUB
+from library.epub.utils import string_to_int_hash, bt_to_mb
+from library.epub.utils_zip import timestamp_from_zip_info
 from library.database.sqlite_model_table import SQLiteModelTable
 
 
@@ -76,9 +78,7 @@ class EpubFileModel(SQLModel, table=True):
         return tuples
 
     def to_epub(self):
-        from epub.epub_classes import EPUB
-
-        return EPUB.from_epub_model(self)
+        return EPUB(self.filepath)
 
     def as_dict(self) -> dict[str, Any]:
         return {"filepath": self.filepath, "filesize": bt_to_mb(self.filesize), "creator": self.creator}

@@ -62,13 +62,13 @@ class EpubCore:
 
         self.cover_resource: EpubDefaultResource | None = None
 
-        logger.debug(f"{self} initializing")
+        logger.info(f"{self} initializing")
 
         self._enrich_from_opf()
         self._enrich_from_ncx()
         self._iterlinks_navs()
 
-        logger.debug(f"{self} initialized")
+        logger.info(f"{self} initialized")
 
     def __repr__(self):
         return f"EpubCore({len(self.resources)})"

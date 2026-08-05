@@ -39,7 +39,6 @@ def test_image_optimization():
     results = []
 
     for file in images_dir.iterdir():
-
         if file.is_dir() or file.suffix == ".HEIC":
             continue
 
@@ -54,6 +53,7 @@ def test_image_optimization():
 
     print()
     print_table_from_dicts("Optimization results", results)
+
 
 def test_bpp():
     images_dir = Path("samples") / "images"

@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     current_dir: DirectoryPath = Path(".").absolute()
     database_file: FilePath | None = None
     database_url: str | None = None
-    log_level_name: str = "WARNING"
+    log_level_name: str = "INFO"
     log_level: int = 10
     is_windows: bool = os.name == "nt"
 
@@ -24,3 +24,6 @@ class Settings(BaseSettings):
         if self.database_url is None:
             self.database_url = f"sqlite:///{self.database_file}"
         self.log_level = logging.getLevelName(self.log_level_name)
+
+
+settings = Settings()

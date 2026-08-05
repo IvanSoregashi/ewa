@@ -94,7 +94,9 @@ def useless_transparency_mode(image: Image.Image) -> bool:
     return len(extrema) == 4 and extrema[3][0] == 255
 
 
-def optimize_png_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> tuple[OperationResult, ImageInfo | None]:
+def optimize_png_image(
+    image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo
+) -> tuple[OperationResult, ImageInfo | None]:
     image_info = deepcopy(original_image_info)
 
     if getattr(image, "is_animated", None):
@@ -127,7 +129,9 @@ def optimize_png_image(image: Image.Image, buffer: BytesIO, original_image_info:
     return OperationResult(success=True), image_info
 
 
-def optimize_jpg_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> tuple[OperationResult, ImageInfo | None]:
+def optimize_jpg_image(
+    image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo
+) -> tuple[OperationResult, ImageInfo | None]:
     image_info = deepcopy(original_image_info)
     image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
 
@@ -140,7 +144,9 @@ def optimize_jpg_image(image: Image.Image, buffer: BytesIO, original_image_info:
     return OperationResult(skip="Image was not optimized"), None
 
 
-def optimize_gif_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> tuple[OperationResult, ImageInfo | None]:
+def optimize_gif_image(
+    image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo
+) -> tuple[OperationResult, ImageInfo | None]:
     image_info = deepcopy(original_image_info)
 
     if getattr(image, "is_animated", None):
@@ -156,7 +162,9 @@ def optimize_gif_image(image: Image.Image, buffer: BytesIO, original_image_info:
     return OperationResult(skip="Image was not optimized"), None
 
 
-def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> tuple[OperationResult, ImageInfo | None]:
+def optimization_machine(
+    image: Image.Image, buffer: BytesIO, filesize: int
+) -> tuple[OperationResult, ImageInfo | None]:
     min_filesize = 50 * 1024
     if filesize < min_filesize:
         return OperationResult(skip=f"Image is smaller then min threshold {filesize / 1024:.2fKB}"), None

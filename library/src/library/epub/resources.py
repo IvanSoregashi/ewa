@@ -244,10 +244,12 @@ class EpubImageResource(RoleBasedResource, PackagedResource, LazyLoadImageFile):
             if image.mode == "RGB" and (original_image_info.format == "JPEG" or convert_rgb_to_jpg):
                 self._updated_path = Path(self.info.filename).with_suffix(".jpg")
             else:
-                logger.warning(f"{self} Image of unusual format {original_image_info.mode, original_image_info.format} was modified.")
+                logger.warning(
+                    f"{self} Image of unusual format {original_image_info.mode, original_image_info.format} was modified."
+                )
                 self._updated_path = Path(self.info.filename)
 
-            if result.success: # TODO REDO
+            if result.success:  # TODO REDO
                 self.is_modified = True
                 self._image = None
                 self.content = buffer.getvalue()
