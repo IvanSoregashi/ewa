@@ -71,7 +71,7 @@ class ResourceIndex:
         """Remove a resource from the index."""
         self._items.remove(resource)
         self._by_path.pop(resource.info.filename, None)
-        if resource.id is not None:
+        if getattr(resource, "id", None):
             self._by_id.pop(resource.id)
 
     def by_path(self, path: str) -> AnyResource | None:
@@ -107,7 +107,7 @@ class ResourceIndex:
 
     def rebuild_id_index(self) -> None:
         """Rebuild the ID index (call after OPF enrichment populates IDs)."""
-        self._by_id = {r.id: r for r in self._items if r.id is not None}
+        self._by_id = {r.id: r for r in self._items if getattr(r, "id", None) is not None}
 
     @property
     def styles(self) -> list[EpubDefaultResource]:

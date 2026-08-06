@@ -62,13 +62,13 @@ class EpubCore:
 
         self.cover_resource: EpubDefaultResource | None = None
 
-        logger.info(f"{self} initializing")
+        logger.debug(f"{self} initializing")
 
         self._enrich_from_opf()
         self._enrich_from_ncx()
         self._iterlinks_navs()
 
-        logger.info(f"{self} initialized")
+        logger.debug(f"{self} initialized")
 
     def __repr__(self):
         return f"EpubCore({len(self.resources)})"
@@ -119,7 +119,7 @@ class EpubCore:
             resource.manifest_item = item
 
             if item.properties and "cover-image" in item.properties:
-                logger.info(f"{self} EPUB 3 style cover image found {item.href}")
+                logger.debug(f"{self} EPUB 3 style cover image found {item.href}")
                 self.cover_resource = resource
 
             if item.properties and "nav" in item.properties:
@@ -157,7 +157,7 @@ class EpubCore:
             chapter_match = re.fullmatch(r"^chapter_(\d+)$", itemref.idref)
             chapter_number = int(chapter_match.group(1)) if chapter_match else None
             if chapter_number is None:
-                logger.warning(f"{self} chapter_number not found for {itemref.idref}")
+                logger.debug(f"{self} chapter_number not found for {itemref.idref}")
             # number_match = re.search(r"(\d+)", itemref.idref)
             # number_number = int(number_match.group(1)) if number_match else None
 
@@ -246,7 +246,7 @@ class EpubCore:
         """Enrich resources from the NAV document."""
         logger.debug(f"{self} enriching resources from NAV document")
         if self.nav_resource is None:
-            logger.warning(f"{self} NAV document not found, skipping NAV enrichment")
+            logger.debug(f"{self} NAV document not found, skipping NAV enrichment")
             return
 
         # TODO REDO considering 6bfb89338d0e7deef8bfddc973dc531c_toc.xhtml
@@ -277,7 +277,7 @@ class EpubCore:
         logger.debug(f"{self} _iterlinks_navs")
         nav_res = self.nav_resource
         if nav_res is None:
-            logger.warning(f"{self} NAV document not found, skipping NAV enrichment")
+            logger.debug(f"{self} NAV document not found, skipping")
             return
 
         for link_data in nav_res.html.iterlinks():

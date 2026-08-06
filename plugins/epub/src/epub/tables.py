@@ -174,3 +174,19 @@ class EpubBookTable(SQLiteModelTable[EpubFileModel]):
 
 
 class EpubContentsTable(SQLiteModelTable[EpubContentsModel]): ...
+
+
+class EpubOpfHash(SQLModel, table=True):
+    __tablename__ = "epub_hashes"
+
+    filepath: str = Field(primary_key=True)
+    title: str | None
+    author: str | None
+    identifier: str | None
+    opf_path: str
+    opf_hash: str = Field(index=True)
+    ncx_path: str | None
+    ncx_hash: str | None
+
+
+class EpubHashTable(SQLiteModelTable[EpubOpfHash]): ...

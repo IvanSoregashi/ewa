@@ -9,6 +9,7 @@ from ewa.config import Settings
 class EpubSettings(Settings):
     epub_dir: Path = Path(r"D:\EPUB")
     encrypted_epub_dir: Path = Path(r"D:\ENCRYPTED_EPUBS")
+    epub_uwumtl_dir: Path = Path(r"D:\EPUB_UWUMTL")
 
     epub_settings_dir: Path = Field(init=False, default=Path())
     container_dir: Path = Field(init=False, default=Path())
@@ -20,6 +21,7 @@ class EpubSettings(Settings):
     serene_panda_alpha_dir: Path = Field(init=False, default=Path())
 
     def model_post_init(self, context: Any, /) -> None:
+        super().model_post_init(context)
         self.epub_dir.mkdir(parents=True, exist_ok=True)
         self.encrypted_epub_dir.mkdir(parents=True, exist_ok=True)
 

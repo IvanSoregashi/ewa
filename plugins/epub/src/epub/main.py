@@ -2,19 +2,24 @@ import logging
 import shutil
 import time
 from concurrent.futures import ProcessPoolExecutor
+from itertools import chain
 
 import typer
 from pathlib import Path
+
+from sqlalchemy.exc import PendingRollbackError
+from sqlmodel import col
 
 from epub.serene_panda import orchestration
 from ewa.ui import print_success, print_error
 from ewa.cli.print_table import print_table_from_models, print_table_from_dicts
 from ewa.cli.progress import DisplayProgress
 from ewa.main import settings
-from epub.tables import EpubBookTable, EpubContentsTable
+from epub.tables import EpubBookTable, EpubContentsTable, EpubOpfHash, EpubHashTable
 from library.epub.epub_core import EpubSpecification
 from library.epub.utils_css import parse_css_urls, replace_css_url
 from library.epub.utils_href import posix_relative_href
+from library.epub.xml_models.package_document import PackageDocument
 from library.utils import sanitize_filename
 from library.epub.epub import EPUB
 from epub.config import settings
@@ -53,7 +58,9 @@ def decrypt(epub_path: Path = typer.Argument(None, exists=True)):
         epub.core.remove_resource(font_resource)
 
         for style_resource in epub.resources.styles:
-            relative_path = posix_relative_href(anchor=style_resource.info.filename, absolute_href=font_resource.info.filename)
+            relative_path = posix_relative_href(
+                anchor=style_resource.info.filename, absolute_href=font_resource.info.filename
+            )
             if relative_path in parse_css_urls(style_resource.content):
                 style_resource.content = replace_css_url(
                     style_resource.content, relative_path, font_resource.hash_prefixed_name
@@ -98,10 +105,10 @@ def count(
         print_success(f"Counting epub files in {settings.current_dir}...")
         print_success(f"{len(tuple(Path(settings.current_dir).rglob('*.epub')))} epub files found")
     if rows:
-        with EpubContentsTable() as table:
+        with EpubContentsTable(settings.database_url) as table:
             print_success(f"Counting epub file records in {table.model.__tablename__} SQL table...")
             print_success(f"{table.count_rows()} total rows of files found")
-        with EpubBookTable() as table:
+        with EpubBookTable(settings.database_url) as table:
             print_success(f"Counting epub file records in {table.model.__tablename__} SQL table...")
             print_success(f"{table.count_rows()} total rows of epubs found")
 
@@ -112,11 +119,11 @@ def drop(
     contents: bool = typer.Option(False, "-c", "--contents"),
 ):
     if files:
-        with EpubBookTable() as table:
+        with EpubBookTable(settings.database_url) as table:
             table.drop()
             print_success(f"dropped table {table.model.__tablename__}")
     if contents:
-        with EpubContentsTable() as table:
+        with EpubContentsTable(settings.database_url) as table:
             table.drop()
             print_success(f"dropped table {table.model.__tablename__}")
 
@@ -129,14 +136,14 @@ def list_scanned_files(
 ):
     """Lists all scanned books."""
     if files:
-        with EpubBookTable() as table:
+        with EpubBookTable(settings.database_url) as table:
             raw_rows = table.get_many(limit=10)
             if not raw_rows:
                 print_error(f"Table {table.model.__tablename__} is empty")
                 return
             print_table_from_models("My Library", raw_rows)
     if contents:
-        with EpubContentsTable() as table:
+        with EpubContentsTable(settings.database_url) as table:
             raw_rows = table.get_many(limit=10)
             if not raw_rows:
                 print_error(f"Table {table.model.__tablename__} is empty")
@@ -147,28 +154,121 @@ def list_scanned_files(
 @app.command("move-sp")
 def move_serene_panda_encrypted_separately():
     epub_dir = settings.epub_dir
-    encrypted_dir = settings.encrypted_epub_dir
+    destination_dir = settings.epub_uwumtl_dir
     start_time = time.time()
     processed = 0
     moved = 0
 
     for file in epub_dir.rglob("*.epub"):
-
         try:
-            if not EPUB(file).is_specification(EpubSpecification.SERENE_PANDA_ENCRYPTED):
-                logger.info(f"SKIPPING [NON-SPE]: {str(file)!r}")
+            epub = EPUB(file)
+            opf = epub.resources.by_path("content.opf")
+            package_document = PackageDocument.from_xml_bytes(opf.content)
+            # package_document = epub.core.package_document
+            author = package_document.metadata.creators[0].text
+            if author != "Uwumtl":
+                logger.info(f"SKIPPING [{author}]: {str(file)!r}")
                 processed += 1
                 continue
-        except ValueError:
-            logger.error(f"ERROR [NON-SPE]: {str(file)!r}")
+        except ValueError as e:
+            logger.error(f"ValueError [NON-Uwumtl]: {str(file)!r}\n{e!r}")
+            continue
+        except Exception as e:
+            logger.error(f"Exception [NON-Uwumtl]: {str(file)!r}\n{e!r}")
             continue
         processed += 1
 
         relative_path = file.relative_to(epub_dir)
-        new_path = encrypted_dir / relative_path
+        new_path = destination_dir / relative_path
         new_path.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"MOVING [SPE]: {str(file)!r} -> {str(new_path)!r}")
+        logger.info(f"MOVING [Uwumtl]: {str(file)!r} -> {str(new_path)!r}")
         shutil.move(str(file), str(new_path))
         moved += 1
         logger.info(f"PROCESSED: {processed}, MOVED: {moved}, ELAPSED: {time.time() - start_time}")
+
+
+@app.command("scan-hash")
+def scan_for_hashes():
+    epub_dir = settings.epub_dir
+    uwu_dir = settings.epub_uwumtl_dir
+    encrypted_dir = settings.encrypted_epub_dir
+    start_time = time.time()
+
+    with EpubHashTable(settings.database_url) as table:
+        table.drop()
+        table.create()
+        for file in chain(epub_dir.rglob("*.epub"), uwu_dir.rglob("*.epub"), encrypted_dir.rglob("*.epub")):
+            try:
+                epub = EPUB(file)
+                package_document = epub.core.package_document
+
+                ncx_path = None
+                ncx_hash = None
+                ncx_resource = epub.core.ncx_resource
+                if ncx_resource is not None:
+                    ncx_path = ncx_resource.info.filename
+                    ncx_hash = ncx_resource.hex_hash
+
+                epub_hash_item = EpubOpfHash(
+                    filepath=str(file),
+                    title=package_document.metadata.title,
+                    author=package_document.metadata.aut_or_all_creators,
+                    identifier=package_document.metadata.uuid_id_or_all_identifiers,
+                    opf_path=epub.core.package_resource.info.filename,
+                    opf_hash=epub.core.package_resource.hex_hash,
+                    ncx_path=ncx_path,
+                    ncx_hash=ncx_hash,
+                )
+                table.insert_one(epub_hash_item)
+
+            except ValueError as e:
+                logger.error(f"ValueError: {str(file)!r}\n{e!r}")
+                continue
+            except PendingRollbackError as e:
+                logger.error(f"PendingRollbackError: {str(file)!r}\n{e!r}")
+                break
+            except Exception as e:
+                logger.error(f"Exception [NON-Uwumtl]: {str(file)!r}\n{e!r}")
+                continue
+        print_success(str(table.count_rows()))
+
+
+@app.command("remove-tr")
+def remove_stale_translations():
+    epub_dir = settings.epub_dir
+    uwu_dir = settings.epub_uwumtl_dir
+    encrypted_dir = settings.encrypted_epub_dir
+    start_time = time.time()
+    deleted = 0
+
+    for path_start in (r"D:\EPUB\_translated\for removal", r"D:\EPUB_UWUMTL\_translated\for removal"):
+        with EpubHashTable(settings.database_url) as table:
+            translated = table.get_many(col(table.model.filepath).startswith(path_start), limit=10000)
+            logger.info(f"{path_start=} {len(translated)=}")
+            for item in translated:
+                duplicates = table.get_many(table.model.opf_hash == item.opf_hash)
+
+                if len(duplicates) == 1:
+                    continue
+
+                if len(duplicates) > 2:
+                    lines = "\n".join([d.filepath for d in duplicates])
+                    logger.warning(f"MULTI - DUPLICATES:\n{lines}")
+                    break
+
+                for d in duplicates:
+                    if d.filepath.startswith(path_start):
+                        path = Path(d.filepath)
+                        if path.exists():
+                            path.unlink()
+                            logger.info(f"DELETE: {d.filepath}")
+                            deleted += 1
+                            table.delete_one(d)
+                        else:
+                            logger.error(f"DOES NOT EXIST {path}")
+
+                    else:
+                        logger.info(f"REMAIN: {d.filepath}")
+
+    print_success(f"ELAPSED: {time.time() - start_time:.2f} s, DELETED: {deleted}")

@@ -8,7 +8,6 @@ import pandas as pd
 from sqlmodel import SQLModel, create_engine, Session
 from sqlalchemy import text
 
-from ewa.main import settings
 from library.database.sqlite_utils import initialize_db
 from library.database.sqlmodel_statements import (
     bulk_insert_statement,
@@ -25,8 +24,7 @@ TableType = TypeVar("TableType", bound=SQLModel)
 class SQLiteModelTable[TableType]:
     """Class is Parent class only, not meant for initialization of Objects, needs to be inherited from."""
 
-    def __init__(self, url: str | None = None, **kwargs):
-        url = url or settings.database_url
+    def __init__(self, url: str, **kwargs):
         self.engine = create_engine(url, **kwargs)
 
         initialize_db(self.engine)

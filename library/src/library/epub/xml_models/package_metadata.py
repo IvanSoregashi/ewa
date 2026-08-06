@@ -75,6 +75,24 @@ class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_N
     def language(self) -> str | None:
         return self.languages[0].text if self.languages else None
 
+    @property
+    def uuid_id_or_all_identifiers(self) -> str:
+        for ident in self.identifiers:
+            if ident.id == "uuid_id":
+                return ident.text or "empty_text_uuid_id"
+        return " | ".join([item.text or "empty_text" for item in self.identifiers])
+
+    @property
+    def aut_or_all_creators(self) -> str:
+        for creator in self.creators:
+            if creator.role_ns == "aut":
+                return creator.text or "empty_text_opf:role"
+        for creator in self.creators:
+            if creator.role == "aut":
+                return creator.text or "empty_text_role"
+        return " | ".join([item.text or "empty_text" for item in self.creators])
+
+
     def add_metadata(self, tag: DCMetadataType | MetadataType, text: str, dc: bool = True, **kwargs):
         """Uniform helper to add metadata items."""
         new_item = None
