@@ -114,6 +114,7 @@ class EpubCore:
 
             if resource is None:
                 logger.error(f"{self} manifest item {item.id!r} references missing file: {abs_path!r}")
+                raise AssertionError(f"{self} manifest item {item.id!r} references missing file: {abs_path!r}")
                 continue
 
             resource.manifest_item = item
@@ -151,7 +152,8 @@ class EpubCore:
         for index, itemref in enumerate(self.package_document.spine.itemrefs):
             resource = self.resources.by_id(itemref.idref)
             if resource is None:
-                logger.warning(f"{self} spine itemref {itemref.idref!r} references unknown manifest ID.")
+                logger.error(f"{self} spine itemref {itemref.idref!r} references unknown manifest ID.")
+                raise AssertionError(f"{self} spine itemref {itemref.idref!r} references unknown manifest ID.")
                 continue
 
             chapter_match = re.fullmatch(r"^chapter_(\d+)$", itemref.idref)
@@ -226,14 +228,16 @@ class EpubCore:
                     if resource.ncx_nav_point is None:
                         resource.ncx_nav_point = nav_point
                     else:
-                        logger.warning(
+                        logger.error(
                             f"{self} NCX path {nav_point.content.src!r} found several times"
                             f" ({resource.ncx_nav_point.nav_label.text!r}, {nav_point.nav_label.text!r})."
                             " rewriting with the latest catch."
                         )
+                        raise AssertionError(f"{self} NCX path {nav_point.content.src!r} found several times")
                         resource.ncx_nav_point = nav_point
                 else:
-                    logger.warning(f"{self} path {nav_point.content.src!r} not found in NCX")
+                    logger.error(f"{self} path {nav_point.content.src!r} not found in NCX")
+                    raise AssertionError(f"{self} path {nav_point.content.src!r} not found in NCX")
 
             if nav_point.nav_points:
                 self._walk_ncx_nav_points(nav_point.nav_points)

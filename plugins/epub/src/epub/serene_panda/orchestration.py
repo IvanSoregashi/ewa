@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import shutil
 import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from itertools import repeat, combinations
@@ -67,3 +68,55 @@ def new_decoded_name(path: Path):
     )
     new_name = path.with_stem(new_stem).name
     return new_name
+
+
+def translate_serene_panda(epub_path: Path, destination: Path):
+    with EPUB(epub_path).stream_to(destination) as epub:
+
+        if not epub.is_specification(EpubSpecification.SERENE_PANDA_ENCRYPTED):
+            logger.error(f"{epub_path} is not a SERENE_PANDA_ENCRYPTED EPUB")
+            return
+
+        # 1. translate htmls
+        epub.save_changes_to_a_dir()
+        # 2. remove font file
+        epub.core.package_document.manifest
+        # 3. remove font from opf
+        # 4. remove font from css
+
+
+def unpack_epub_by_chapters(epub_path: Path):
+    pass
+
+    #  epub core
+    #  cover, titlepage, content.opf, toc.ncx
+    #  common resources
+    #  (styles, fonts) mimetype?, META-INF?,
+    #
+
+
+def move_file_preserving_hierarchy(path: Path, destination_dir: Path):
+    for dirpath in list(Path("D:/").glob("*EPUB*")) + [Path(r"C:\Users\Ivan\Sync\Books")]:
+        if path.is_relative_to(dirpath):
+            if dirpath == destination_dir:
+                logger.warning(f"SKIPPING MOVING: {str(dirpath)!r} == {str(path)!r}")
+                return
+            relative_path = path.relative_to(dirpath)
+            break
+    else:
+        raise AssertionError(f"Relative root path not found {str(path)!r}")
+    new_path = destination_dir / relative_path
+    new_path.parent.mkdir(parents=True, exist_ok=True)
+    while new_path.exists():
+        if path.read_bytes() == new_path.read_bytes():
+            path.unlink()
+            logger.warning(f"DELETING: {str(new_path)!r} exists already. content is equal! DELETING the original file {str(path)!r}")
+            return
+        else:
+            new_path = new_path.with_stem(new_path.stem + "_copy")
+            logger.warning(f"MOVING: {str(new_path)!r} exists already. content is not equal! saving copy as {str(new_path)!r}")
+    try:
+        logger.info(f"MOVING: {str(path)!r} -> {str(new_path)!r}")
+        shutil.move(str(path), str(new_path))
+    except Exception as e:
+        logger.error(f"MOVING: {str(path)!r} -> {str(new_path)!r}: {e}")

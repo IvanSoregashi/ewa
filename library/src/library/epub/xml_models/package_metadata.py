@@ -92,7 +92,6 @@ class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_N
                 return creator.text or "empty_text_role"
         return " | ".join([item.text or "empty_text" for item in self.creators])
 
-
     def add_metadata(self, tag: DCMetadataType | MetadataType, text: str, dc: bool = True, **kwargs):
         """Uniform helper to add metadata items."""
         new_item = None
@@ -111,6 +110,8 @@ class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_N
             new_item = DCCreator(text=text, **kwargs)
         if tag == DCMetadataType.DATE:
             new_item = DCDate(text=text, **kwargs)
+        if tag == DCMetadataType.SUBJECT:
+            new_item = DCElement(text=text, **kwargs)
         if new_item is None:
             new_item = DCElement(text=text, **kwargs)
         attr_name = f"{tag}s"  # Find matching list: titles, creators, etc.
@@ -119,6 +120,12 @@ class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_N
             attr_name = "dc_metas"
         if hasattr(self, attr_name):
             getattr(self, attr_name).append(new_item)
+
+    def add_tag(self, value: str, **kwargs):
+        for subj in self.subjects:
+            if subj.text == tag:
+                return
+        self.add_metadata(tag=DCMetadataType.SUBJECT, text=value, **kwargs)
 
     def remove_metadata(
         self, tag: DCMetadataType | MetadataType, text: str | None = None, id: str | None = None, dc: bool = True

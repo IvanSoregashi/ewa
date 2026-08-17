@@ -7,16 +7,19 @@ from itertools import chain
 import typer
 from pathlib import Path
 
+from pydantic import DirectoryPath
 from sqlalchemy.exc import PendingRollbackError
 from sqlmodel import col
 
 from epub.serene_panda import orchestration
+from epub.serene_panda.orchestration import move_file_preserving_hierarchy
 from ewa.ui import print_success, print_error
 from ewa.cli.print_table import print_table_from_models, print_table_from_dicts
 from ewa.cli.progress import DisplayProgress
 from ewa.main import settings
 from epub.tables import EpubBookTable, EpubContentsTable, EpubOpfHash, EpubHashTable
 from library.epub.epub_core import EpubSpecification
+from library.epub.media_type import FileName
 from library.epub.utils_css import parse_css_urls, replace_css_url
 from library.epub.utils_href import posix_relative_href
 from library.epub.xml_models.package_document import PackageDocument
@@ -154,121 +157,190 @@ def list_scanned_files(
 @app.command("move-sp")
 def move_serene_panda_encrypted_separately():
     epub_dir = settings.epub_dir
-    destination_dir = settings.epub_uwumtl_dir
     start_time = time.time()
-    processed = 0
+    skipped = 0
     moved = 0
-
-    for file in epub_dir.rglob("*.epub"):
+    sync_dir = Path(r"C:\Users\Ivan\Sync\Books")
+    dirs = chain(epub_dir.rglob("*.epub"), sync_dir.rglob("*.epub"), settings.epub_uwumtl_dir.rglob("*.epub"))
+    #dirs = list(sync_dir.rglob("*.epub"))
+    logger.info(f"DIRS: {str(dirs)!r}")
+    for file in dirs:
+        logger.info(f"WORKING: {str(file)!r}")
+        if file.is_dir():
+            logger.info(f"SKIPPED DIR: {str(file)!r}")
+            continue
         try:
             epub = EPUB(file)
-            opf = epub.resources.by_path("content.opf")
-            package_document = PackageDocument.from_xml_bytes(opf.content)
-            # package_document = epub.core.package_document
-            author = package_document.metadata.creators[0].text
-            if author != "Uwumtl":
-                logger.info(f"SKIPPING [{author}]: {str(file)!r}")
-                processed += 1
+            with epub.source.open():
+                font = epub.source.getinfo(FileName.SP_FONT)
+                if font is not None:
+                    move_file_preserving_hierarchy(file, settings.encrypted_epub_dir)
+                    moved += 1
+                    continue
+                opf = epub.resources.by_path("content.opf")
+                if opf is not None:
+                    package_document = PackageDocument.from_xml_bytes(opf.content)
+                else:
+                    package_document = epub.core.package_document
+                author = package_document.metadata.creators[0].text
+            if author == "Uwumtl":
+                move_file_preserving_hierarchy(file, settings.epub_uwumtl_dir)
+                moved += 1
+                continue
+            if author == "EpubPress":
+                move_file_preserving_hierarchy(file, (settings.D_DISK / "EPUB_EpubPress").absolute())
+                moved += 1
+                continue
+            if author == "SenescentSoul":
+                move_file_preserving_hierarchy(file, (settings.D_DISK / "EPUB_SenescentSoul").absolute())
+                moved += 1
+                continue
+            if str(file).startswith("C"):
+                move_file_preserving_hierarchy(file, settings.epub_dir)
+                moved += 1
                 continue
         except ValueError as e:
-            logger.error(f"ValueError [NON-Uwumtl]: {str(file)!r}\n{e!r}")
+            logger.error(f"ValueError: {str(file)!r} (SKIPPING)\n{e!r}")
+            continue
+        except (IndexError, AssertionError) as e:
+            logger.error(f"RecoverableError: {str(file)!r} (MOVING TO QUARANTINE)\n{e!r}")
+            move_file_preserving_hierarchy(file, settings.epub_dir / "_quarantine")
+            continue
+        except PermissionError as e:
+            logger.error(f"PermissionError: {str(file)!r} (SKIPPING)\n{e!r}")
             continue
         except Exception as e:
-            logger.error(f"Exception [NON-Uwumtl]: {str(file)!r}\n{e!r}")
-            continue
-        processed += 1
+            logger.error(f"Exception: {str(file)!r}\n{e!r}")
+            break
+        skipped += 1
+        logger.info(f"SKIPPED: {str(file)!r}")
 
-        relative_path = file.relative_to(epub_dir)
-        new_path = destination_dir / relative_path
-        new_path.parent.mkdir(parents=True, exist_ok=True)
+    logger.info(f"SKIPPED: {skipped}, MOVED: {moved}, ELAPSED: {time.time() - start_time}")
 
-        logger.info(f"MOVING [Uwumtl]: {str(file)!r} -> {str(new_path)!r}")
-        shutil.move(str(file), str(new_path))
-        moved += 1
-        logger.info(f"PROCESSED: {processed}, MOVED: {moved}, ELAPSED: {time.time() - start_time}")
+
+@app.command("mostc")
+def most_common():
+    with EpubHashTable(settings.database_url) as table:
+        common = table.get_most_common(group_fields=["author"], more_then=10)
+        print(common)
 
 
 @app.command("scan-hash")
-def scan_for_hashes():
-    epub_dir = settings.epub_dir
-    uwu_dir = settings.epub_uwumtl_dir
-    encrypted_dir = settings.encrypted_epub_dir
+def scan_for_hashes(path: DirectoryPath = typer.Option(None, "-p")):
     start_time = time.time()
 
     with EpubHashTable(settings.database_url) as table:
         table.drop()
         table.create()
-        for file in chain(epub_dir.rglob("*.epub"), uwu_dir.rglob("*.epub"), encrypted_dir.rglob("*.epub")):
-            try:
-                epub = EPUB(file)
-                package_document = epub.core.package_document
+        for directory in Path("D:/").glob("*EPUB*"):
+            for file in directory.rglob("*.epub"):
+                try:
+                    file = file.absolute()
+                    epub = EPUB(file)
+                    package_document = epub.core.package_document
 
-                ncx_path = None
-                ncx_hash = None
-                ncx_resource = epub.core.ncx_resource
-                if ncx_resource is not None:
-                    ncx_path = ncx_resource.info.filename
-                    ncx_hash = ncx_resource.hex_hash
+                    ncx_path = None
+                    ncx_hash = None
+                    ncx_resource = epub.core.ncx_resource
+                    if ncx_resource is not None:
+                        ncx_path = ncx_resource.info.filename
+                        ncx_hash = ncx_resource.hex_hash
 
-                epub_hash_item = EpubOpfHash(
-                    filepath=str(file),
-                    title=package_document.metadata.title,
-                    author=package_document.metadata.aut_or_all_creators,
-                    identifier=package_document.metadata.uuid_id_or_all_identifiers,
-                    opf_path=epub.core.package_resource.info.filename,
-                    opf_hash=epub.core.package_resource.hex_hash,
-                    ncx_path=ncx_path,
-                    ncx_hash=ncx_hash,
-                )
-                table.insert_one(epub_hash_item)
+                    epub_hash_item = EpubOpfHash(
+                        filepath=str(file),
+                        title=package_document.metadata.title,
+                        author=package_document.metadata.aut_or_all_creators,
+                        identifier=package_document.metadata.uuid_id_or_all_identifiers,
+                        opf_path=epub.core.package_resource.info.filename,
+                        opf_hash=epub.core.package_resource.hex_hash,
+                        ncx_path=ncx_path,
+                        ncx_hash=ncx_hash,
+                    )
+                    table.insert_one(epub_hash_item)
 
-            except ValueError as e:
-                logger.error(f"ValueError: {str(file)!r}\n{e!r}")
-                continue
-            except PendingRollbackError as e:
-                logger.error(f"PendingRollbackError: {str(file)!r}\n{e!r}")
-                break
-            except Exception as e:
-                logger.error(f"Exception [NON-Uwumtl]: {str(file)!r}\n{e!r}")
-                continue
-        print_success(str(table.count_rows()))
-
-
-@app.command("remove-tr")
-def remove_stale_translations():
-    epub_dir = settings.epub_dir
-    uwu_dir = settings.epub_uwumtl_dir
-    encrypted_dir = settings.encrypted_epub_dir
-    start_time = time.time()
-    deleted = 0
-
-    for path_start in (r"D:\EPUB\_translated\for removal", r"D:\EPUB_UWUMTL\_translated\for removal"):
-        with EpubHashTable(settings.database_url) as table:
-            translated = table.get_many(col(table.model.filepath).startswith(path_start), limit=10000)
-            logger.info(f"{path_start=} {len(translated)=}")
-            for item in translated:
-                duplicates = table.get_many(table.model.opf_hash == item.opf_hash)
-
-                if len(duplicates) == 1:
+                except ValueError as e:
+                    logger.error(f"ValueError: {str(file)!r}\n{e!r}")
+                    continue
+                except AssertionError as e:
+                    logger.error(f"AssertionError: {str(file)!r}\n{e!r}")
+                    move_file_preserving_hierarchy(file, directory / "_class_fails")
+                    continue
+                except PendingRollbackError as e:
+                    logger.error(f"PendingRollbackError: {str(file)!r}\n{e!r}")
+                    break
+                except Exception as e:
+                    logger.error(f"Exception: {str(file)!r}\n{e!r}")
                     continue
 
-                if len(duplicates) > 2:
-                    lines = "\n".join([d.filepath for d in duplicates])
-                    logger.warning(f"MULTI - DUPLICATES:\n{lines}")
-                    break
+            logger.info(f"ELAPSED: {time.time() - start_time:.2f} {str(table.count_rows())=}")
 
-                for d in duplicates:
-                    if d.filepath.startswith(path_start):
-                        path = Path(d.filepath)
-                        if path.exists():
-                            path.unlink()
-                            logger.info(f"DELETE: {d.filepath}")
-                            deleted += 1
-                            table.delete_one(d)
-                        else:
-                            logger.error(f"DOES NOT EXIST {path}")
 
-                    else:
-                        logger.info(f"REMAIN: {d.filepath}")
+@app.command("list-some")
+def list_some_hashes(
+    a: str = typer.Option(None, "-a"), i: str = typer.Option(None, "-i"), p: str = typer.Option(None, "-p")
+):
+    clause = []
+    with EpubHashTable(settings.database_url) as table:
+        if a is not None:
+            clause.append(table.model.author == a)
+        if p is not None:
+            clause.append(col(table.model.filepath).contains(p))
+        if i is not None:
+            clause.append(col(table.model.identifier).contains(i))
+        all_items = table.get_many(*clause, limit=10000)
+        logger.info(f"{len(all_items)=}")
+        print_table_from_models(f"filters = {a}", all_items)
 
-    print_success(f"ELAPSED: {time.time() - start_time:.2f} s, DELETED: {deleted}")
+
+@app.command("move-some")
+def move_some_files(
+    d: str = typer.Option(None, "-d"),
+    a: str = typer.Option(None, "-a"),
+    i: str = typer.Option(None, "-i"),
+    p: str = typer.Option(None, "-p"),
+):
+    epub_dir = settings.epub_dir
+    destination_dir = settings.D_DISK / f"EPUB_{d}"
+    # destination_dir = settings.epub_uwumtl_dir
+    start_time = time.time()
+    moved = 0
+
+    dir_list = list(settings.D_DISK.glob("*EPUB*"))
+
+    clause = []
+    with EpubHashTable(settings.database_url) as table:
+        if a is not None:
+            clause.append(table.model.author == a)
+        if p is not None:
+            clause.append(col(table.model.filepath).contains(p))
+        if i is not None:
+            clause.append(col(table.model.identifier).contains(i))
+        all_items = table.get_many(*clause, limit=10000)
+        logger.info(f"{len(all_items)=}")
+
+        for item in all_items:
+            file = Path(item.filepath)
+            directories = [dr for dr in file.parents if dr in dir_list]
+            assert len(directories) == 1
+            directory = directories[0]
+            if not file.is_relative_to(directory):
+                logger.info(f"NOT RELATIVE [{d}]: {str(file)!r}")
+                continue
+            relative_path = file.relative_to(directory)
+            new_path = destination_dir / relative_path
+            if new_path.exists():
+                logger.info(f"SKIPPING [{d}]: {str(file)!r}")
+                continue
+            new_path.parent.mkdir(parents=True, exist_ok=True)
+
+            try:
+                logger.info(f"MOVING [{d}]: {str(file)!r} -> {str(new_path)!r}")
+                shutil.move(str(file), str(new_path))
+                new_item = item.model_copy(deep=True, update={"filepath":str(new_path)})
+                table.insert_one(new_item)
+                table.delete_one(item)
+                moved += 1
+            except Exception as e:
+                logger.error(f"{str(file)!r}\n{e!r}")
+
+    print_success(f"MOVED: {moved}, ELAPSED: {time.time() - start_time:.2f} s")

@@ -58,7 +58,7 @@ class ChapterMetadata(BaseModel):
 
     # Source related info
     source_title: str = Field(description="Title of the Book / Source.")
-    source_id: str = Field(default_factory=lambda: str(uuid4()), repr=False, description="Id of the Book / Source.")
+    source_id: str = Field(default_factory=lambda: str(uuid4()), repr=False, description="Id (uuid_id) of the Source.")
     source_sequence: str | None = Field(default=None, repr=False, description="Number of chapter in the source.")
 
     # Content related info
