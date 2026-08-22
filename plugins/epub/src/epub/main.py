@@ -19,7 +19,8 @@ from ewa.cli.progress import DisplayProgress
 from ewa.main import settings
 from epub.tables import EpubBookTable, EpubContentsTable, EpubOpfHash, EpubHashTable
 from library.epub.epub_core import EpubSpecification
-from library.epub.media_type import FileName
+from library.epub.media_type import FileName, EpubRole
+from library.epub.utils import to_hex_hash
 from library.epub.utils_css import parse_css_urls, replace_css_url
 from library.epub.utils_href import posix_relative_href
 from library.epub.xml_models.package_document import PackageDocument
@@ -161,11 +162,9 @@ def move_serene_panda_encrypted_separately():
     skipped = 0
     moved = 0
     sync_dir = Path(r"C:\Users\Ivan\Sync\Books")
-    dirs = chain(epub_dir.rglob("*.epub"), sync_dir.rglob("*.epub"), settings.epub_uwumtl_dir.rglob("*.epub"))
-    #dirs = list(sync_dir.rglob("*.epub"))
-    logger.info(f"DIRS: {str(dirs)!r}")
-    for file in dirs:
-        logger.info(f"WORKING: {str(file)!r}")
+    move = False
+    for file in sync_dir.rglob("*.epub"):
+        latest_time = time.time()
         if file.is_dir():
             logger.info(f"SKIPPED DIR: {str(file)!r}")
             continue
@@ -173,49 +172,45 @@ def move_serene_panda_encrypted_separately():
             epub = EPUB(file)
             with epub.source.open():
                 font = epub.source.getinfo(FileName.SP_FONT)
-                if font is not None:
-                    move_file_preserving_hierarchy(file, settings.encrypted_epub_dir)
-                    moved += 1
-                    continue
-                opf = epub.resources.by_path("content.opf")
-                if opf is not None:
-                    package_document = PackageDocument.from_xml_bytes(opf.content)
-                else:
-                    package_document = epub.core.package_document
-                author = package_document.metadata.creators[0].text
-            if author == "Uwumtl":
-                move_file_preserving_hierarchy(file, settings.epub_uwumtl_dir)
-                moved += 1
-                continue
-            if author == "EpubPress":
-                move_file_preserving_hierarchy(file, (settings.D_DISK / "EPUB_EpubPress").absolute())
-                moved += 1
-                continue
-            if author == "SenescentSoul":
-                move_file_preserving_hierarchy(file, (settings.D_DISK / "EPUB_SenescentSoul").absolute())
-                moved += 1
-                continue
-            if str(file).startswith("C"):
-                move_file_preserving_hierarchy(file, settings.epub_dir)
-                moved += 1
-                continue
+                font2 = epub.source.getinfo("SerenePanda.ttf")
+                font3 = epub.source.getinfo("serenepanda.ttf")
+
+                if font is not None or font2 is not None or font3 is not None:
+                    move = True
+                if not move:
+                    fonts = epub.resources.by_role(EpubRole.FONT)
+                    if len(fonts):
+                        for font in fonts:
+                            if "serenepanda" in font.info.filename.lower():
+                                logger.warning(
+                                    f"FOUND FONT {time.time() - latest_time:.3f}s {time.time() - start_time:.3f}s: {font.info.filename}"
+                                )
+                                move = True
+
         except ValueError as e:
             logger.error(f"ValueError: {str(file)!r} (SKIPPING)\n{e!r}")
             continue
         except (IndexError, AssertionError) as e:
-            logger.error(f"RecoverableError: {str(file)!r} (MOVING TO QUARANTINE)\n{e!r}")
-            move_file_preserving_hierarchy(file, settings.epub_dir / "_quarantine")
-            continue
+            logger.error(f"RecoverableError: {str(file)!r} (SKIPPING)\n{e!r}")
+            break
         except PermissionError as e:
             logger.error(f"PermissionError: {str(file)!r} (SKIPPING)\n{e!r}")
-            continue
+            break
         except Exception as e:
             logger.error(f"Exception: {str(file)!r}\n{e!r}")
             break
-        skipped += 1
-        logger.info(f"SKIPPED: {str(file)!r}")
 
-    logger.info(f"SKIPPED: {skipped}, MOVED: {moved}, ELAPSED: {time.time() - start_time}")
+        if move:
+            move_file_preserving_hierarchy(file, settings.encrypted_epub_dir)
+            moved += 1
+            move = False
+        else:
+            skipped += 1
+            logger.info(
+                f"SKIPPED({skipped:>03}) {time.time() - latest_time:.3f}s {time.time() - start_time:.3f}s: {str(file)!r}"
+            )
+
+    logger.warning(f"SKIPPED: {skipped}, MOVED: {moved}, ELAPSED: {time.time() - start_time}")
 
 
 @app.command("mostc")
@@ -241,7 +236,7 @@ def scan_for_hashes(path: DirectoryPath = typer.Option(None, "-p")):
 
                     ncx_path = None
                     ncx_hash = None
-                    ncx_resource = epub.core.ncx_resource
+                    ncx_resource = epub.core._ncx_resource
                     if ncx_resource is not None:
                         ncx_path = ncx_resource.info.filename
                         ncx_hash = ncx_resource.hex_hash
@@ -336,7 +331,7 @@ def move_some_files(
             try:
                 logger.info(f"MOVING [{d}]: {str(file)!r} -> {str(new_path)!r}")
                 shutil.move(str(file), str(new_path))
-                new_item = item.model_copy(deep=True, update={"filepath":str(new_path)})
+                new_item = item.model_copy(deep=True, update={"filepath": str(new_path)})
                 table.insert_one(new_item)
                 table.delete_one(item)
                 moved += 1
@@ -344,3 +339,87 @@ def move_some_files(
                 logger.error(f"{str(file)!r}\n{e!r}")
 
     print_success(f"MOVED: {moved}, ELAPSED: {time.time() - start_time:.2f} s")
+
+
+@app.command("move-ne")
+def move_not_epubs():
+    epub_dir = settings.epub_dir
+    destination = (settings.D_DISK / "OTHER_BOOKS").absolute()
+    destination.mkdir(parents=True, exist_ok=True)
+    start_time = time.time()
+    moved = 0
+    sync_dir = Path(r"C:\Users\Ivan\Sync\Books")
+    dirs = list(epub_dir.rglob("*"))
+    # dirs = list(sync_dir.rglob("*.epub"))
+
+    for file in dirs:
+        if file.is_dir():
+            logger.info(f"SKIPPED DIR: {str(file)!r}")
+            continue
+        if file.suffix.lower() == ".epub":
+            logger.info(f"SKIPPED EPUB: {str(file)!r}")
+            continue
+        move_file_preserving_hierarchy(file, destination)
+        moved += 1
+
+    logger.info(f"MOVED: {moved}, ELAPSED: {time.time() - start_time}")
+
+
+@app.command("hash-dups")
+def count_hash_duplicates():
+    start_time = time.time()
+    filehash = {}
+    read_files = 0
+    errors = 0
+    dirpath = Path("D:/OTHER_BOOKS")
+    for file in dirpath.rglob("*"):
+        if file.is_dir():
+            continue
+
+        try:
+            fhash = to_hex_hash(file.read_bytes())
+            filehash.setdefault(fhash, []).append(str(file))
+            read_files += 1
+
+        except Exception as e:
+            logger.error(f"Exception: {str(file)!r}\n{e!r}")
+            errors += 1
+            continue
+
+    logger.warning(
+        f"READ/HASHES: {read_files}/{len(filehash)}, DIFF: {read_files - len(filehash)}, ERRORS: {errors}, ELAPSED: {time.time() - start_time:.2f}s"
+    )
+
+    deleted_files = 0
+    deleted_bytes = 0
+    for fhash, files in filehash.items():
+        if len(files) == 1:
+            continue
+
+        logger.info(f"DUPLICATES {len(files)} - {fhash}")
+        for i, f in enumerate(files):
+            logger.info(f"\t {i}) {f!r}")
+        remain = input("Choose index of remaining file (NAN to SKIP): ")
+
+        try:
+            remain = int(remain)
+        except ValueError:
+            logger.warning(f"Skipping {fhash}")
+            continue
+
+        for i, f in enumerate(files):
+            if i != remain:
+                p = Path(f)
+                file_size = p.stat().st_size
+                try:
+                    p.unlink()
+                    deleted_files += 1
+                    deleted_bytes += file_size
+                    logger.warning(f"REMOVED: {f!r} ({file_size / (1024 * 1024):.2f} MB)")
+                except Exception as e:
+                    logger.error(f"Exception: {str(f)!r}\n{e!r}")
+                    pass
+
+    logger.warning(
+        f"REMOVED TOTAL OF: {deleted_files} files, {deleted_bytes / (1024 * 1024):.2f} MB, ELAPSED: {time.time() - start_time:.2f}s"
+    )

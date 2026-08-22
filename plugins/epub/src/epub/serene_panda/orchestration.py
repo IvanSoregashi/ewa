@@ -72,7 +72,6 @@ def new_decoded_name(path: Path):
 
 def translate_serene_panda(epub_path: Path, destination: Path):
     with EPUB(epub_path).stream_to(destination) as epub:
-
         if not epub.is_specification(EpubSpecification.SERENE_PANDA_ENCRYPTED):
             logger.error(f"{epub_path} is not a SERENE_PANDA_ENCRYPTED EPUB")
             return
@@ -110,13 +109,21 @@ def move_file_preserving_hierarchy(path: Path, destination_dir: Path):
     while new_path.exists():
         if path.read_bytes() == new_path.read_bytes():
             path.unlink()
-            logger.warning(f"DELETING: {str(new_path)!r} exists already. content is equal! DELETING the original file {str(path)!r}")
+            logger.warning(f"EXISTS: {str(new_path)!r}\nDELETING: {str(path)!r}\nSUCCESS: {not path.exists()}")
             return
         else:
             new_path = new_path.with_stem(new_path.stem + "_copy")
-            logger.warning(f"MOVING: {str(new_path)!r} exists already. content is not equal! saving copy as {str(new_path)!r}")
     try:
         logger.info(f"MOVING: {str(path)!r} -> {str(new_path)!r}")
         shutil.move(str(path), str(new_path))
+    except PermissionError as e:
+        zone_stream = Path(f"{str(path)}:Zone.Identifier")
+        if zone_stream.exists():
+            logger.warning(f"PermissionError. Zone.Identifier exists in {str(zone_stream)!r}. removing.")
+            try:
+                zone_stream.unlink()
+                shutil.move(str(path), str(new_path))
+            except Exception as e:
+                logger.warning(f"PermissionError. PermissionError. {e}.")
     except Exception as e:
         logger.error(f"MOVING: {str(path)!r} -> {str(new_path)!r}: {e}")
