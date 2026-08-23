@@ -17,6 +17,7 @@ class EpubSettings(Settings):
     nav_dir: Path = Field(init=False, default=Path())
     ncx_dir: Path = Field(init=False, default=Path())
     opf_dir: Path = Field(init=False, default=Path())
+    style_dir: Path = Field(init=False, default=Path())
     serene_panda_dir: Path = Field(init=False, default=Path())
     serene_panda_fonts_dir: Path = Field(init=False, default=Path())
     serene_panda_alpha_dir: Path = Field(init=False, default=Path())
@@ -32,10 +33,12 @@ class EpubSettings(Settings):
         self.nav_dir = self.epub_settings_dir / "nav"
         self.ncx_dir = self.epub_settings_dir / "ncx"
         self.opf_dir = self.epub_settings_dir / "opf"
+        self.style_dir = self.epub_settings_dir / "style"
         self.container_dir.mkdir(parents=True, exist_ok=True)
         self.nav_dir.mkdir(parents=True, exist_ok=True)
         self.ncx_dir.mkdir(parents=True, exist_ok=True)
         self.opf_dir.mkdir(parents=True, exist_ok=True)
+        self.style_dir.mkdir(parents=True, exist_ok=True)
 
         self.serene_panda_dir = self.epub_settings_dir / "serene_panda"
         self.serene_panda_fonts_dir = self.serene_panda_dir / "fonts"

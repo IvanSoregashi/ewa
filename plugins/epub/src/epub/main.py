@@ -16,7 +16,6 @@ from epub.serene_panda.orchestration import move_file_preserving_hierarchy
 from ewa.ui import print_success, print_error
 from ewa.cli.print_table import print_table_from_models, print_table_from_dicts
 from ewa.cli.progress import DisplayProgress
-from ewa.main import settings
 from epub.tables import EpubBookTable, EpubContentsTable, EpubOpfHash, EpubHashTable
 from library.epub.epub_core import EpubSpecification
 from library.epub.media_type import FileName, EpubRole
