@@ -1,95 +1,170 @@
-from library.epub.utils_css import parse_css_urls, replace_css_url, _delete_css_block
+from library.utils_css import cleanup_font_block, cleanup_panda_line
 
-css_bytes = b"""@page {
-    margin-bottom: 5pt;
-    margin-top: 5pt
+css_stylesheet_bytes = b""".calibre {
+    display: block;
+    font-family: "SerenePanda", serif;
+    font-size: 1em;
+    padding-left: 0;
+    padding-right: 0;
+    text-align: left;
+    word-break: keep-all;
+    margin: 0 5pt
     }
-@font-face {
-    font-family: "OriginalFont";
-    panose-1: 2 2 6 3 5 4 5 2 3 4;
-    src: url(fonts/OriginalFont.ttf)
+.calibre1 {
+    display: block;
+    font-size: 2em;
+    font-weight: bold;
+    line-height: 1.2;
+    text-align: center;
+    word-break: keep-all;
+    margin: 0.67em 0
     }
+.calibre2 {
+    display: block;
+    height: 1em;
+    margin: 0;
+    border: currentColor none 0
+    }
+.calibre3 {
+    display: block;
+    height: 0;
+    margin: 0;
+    border: currentColor none 0
+    }
+.calibre4 {
+    font-style: italic
+    }
+.calibre5 {
+    font-weight: bold
+    }
+.calibre6 {
+    text-decoration: underline
+    }
+.calibre7 {
+    display: block;
+    height: auto;
+    max-height: 100%;
+    max-width: 100%;
+    width: auto;
+    margin: 0 auto;
+    padding: 0
+    }
+.calibre8 {
+    display: block;
+    font-family: "SerenePanda";
+    font-size: 1em;
+    text-align: center;
+    margin: 0 5pt;
+    padding: 0
+    }
+.calibre9 {
+    display: block
+    }
+.calibre10 {
+  display: block;
+  font-family: "SerenePanda" !important;
+  font-size: 1em;
+  text-align: center;
+  margin: 0 5pt;
+  padding: 0
+  }
 """
 
-css_bytes_quotes = b"""@page {
-    margin-bottom: 5pt;
-    margin-top: 5pt
+expected_css_stylesheet_bytes = b""".calibre {
+    display: block;
+    font-family: serif;
+    font-size: 1em;
+    padding-left: 0;
+    padding-right: 0;
+    text-align: left;
+    word-break: keep-all;
+    margin: 0 5pt
     }
-@font-face {
-    font-family: "OriginalFont";
-    panose-1: 2 2 6 3 5 4 5 2 3 4;
-    src: url("fonts/OriginalFont.ttf")
+.calibre1 {
+    display: block;
+    font-size: 2em;
+    font-weight: bold;
+    line-height: 1.2;
+    text-align: center;
+    word-break: keep-all;
+    margin: 0.67em 0
     }
+.calibre2 {
+    display: block;
+    height: 1em;
+    margin: 0;
+    border: currentColor none 0
+    }
+.calibre3 {
+    display: block;
+    height: 0;
+    margin: 0;
+    border: currentColor none 0
+    }
+.calibre4 {
+    font-style: italic
+    }
+.calibre5 {
+    font-weight: bold
+    }
+.calibre6 {
+    text-decoration: underline
+    }
+.calibre7 {
+    display: block;
+    height: auto;
+    max-height: 100%;
+    max-width: 100%;
+    width: auto;
+    margin: 0 auto;
+    padding: 0
+    }
+.calibre8 {
+    display: block;
+    font-family: serif;
+    font-size: 1em;
+    text-align: center;
+    margin: 0 5pt;
+    padding: 0
+    }
+.calibre9 {
+    display: block
+    }
+.calibre10 {
+  display: block;
+  font-family: serif !important;
+  font-size: 1em;
+  text-align: center;
+  margin: 0 5pt;
+  padding: 0
+  }
 """
 
-css2_bytes = b"""@page {
-    margin-bottom: 5pt;
-    margin-top: 5pt
-    }
+css_page_style_bytes = b"""@page {
+  margin-bottom: 5pt;
+  margin-top: 5pt;
+}
 @font-face {
-    font-family: "OriginalFont";
-    panose-1: 2 2 6 3 5 4 5 2 3 4;
-    src: url(fonts/OriginalFont.ttf)
-    }
-@font-face {
-    font-family: "OriginalFont";
-    panose-1: 2 2 6 3 5 4 5 2 3 4;
-    src: url(/home/user/ReplacedFont.ttf)
-    }
+  font-family: "SerenePanda";
+  src: url(serenepanda.ttf);
+  font-style: normal;
+  font-weight: normal;
+  text-rendering: optimizeLegibility;
+}
 """
 
 
-css_bytes_replaced = b"""@page {
-    margin-bottom: 5pt;
-    margin-top: 5pt
-    }
-@font-face {
-    font-family: "OriginalFont";
-    panose-1: 2 2 6 3 5 4 5 2 3 4;
-    src: url(/home/user/ReplacedFont.ttf)
-    }
-"""
+expected_css_page_style_bytes = b"""@page {
+  margin-bottom: 5pt;
+  margin-top: 5pt;
+}
 
-css_bytes_replaced_quotes = b"""@page {
-    margin-bottom: 5pt;
-    margin-top: 5pt
-    }
-@font-face {
-    font-family: "OriginalFont";
-    panose-1: 2 2 6 3 5 4 5 2 3 4;
-    src: url("/home/user/ReplacedFont.ttf")
-    }
-"""
-
-css_bytes_deleted = b"""@page {
-    margin-bottom: 5pt;
-    margin-top: 5pt
-    }
 """
 
 
-def test_get_urls():
-    assert list(parse_css_urls(css_bytes)) == ["fonts/OriginalFont.ttf"]
-    assert list(parse_css_urls(css_bytes_quotes)) == ["fonts/OriginalFont.ttf"]
-    assert list(parse_css_urls(css2_bytes)) == ["fonts/OriginalFont.ttf", "/home/user/ReplacedFont.ttf"]
-    assert list(parse_css_urls(css_bytes_replaced)) == ["/home/user/ReplacedFont.ttf"]
+def test_replace_lines():
+    assert cleanup_panda_line(css_stylesheet_bytes) == expected_css_stylesheet_bytes
 
 
-def test_replace_url():
-    assert replace_css_url(css_bytes, "fonts/OriginalFont.ttf", "/home/user/ReplacedFont.ttf") == css_bytes_replaced
-    assert (
-        replace_css_url(css_bytes_quotes, "fonts/OriginalFont.ttf", "/home/user/ReplacedFont.ttf")
-        == css_bytes_replaced_quotes
-    )
-    assert replace_css_url(css2_bytes, "/user/ReplacedFont", "OriginalFont.ttf") == css2_bytes
-
-
-def test_delete_block_by_url():
-    assert _delete_css_block(css2_bytes, "fonts/OriginalFont.ttf") == css_bytes_replaced
-    assert _delete_css_block(css2_bytes, "/home/user/ReplacedFont.ttf") == css_bytes
-    assert (
-        _delete_css_block(_delete_css_block(css2_bytes, "fonts/OriginalFont.ttf"), "/home/user/ReplacedFont.ttf")
-        == css_bytes_deleted
-    )
-    assert _delete_css_block(css_bytes_quotes, "fonts/OriginalFont.ttf") == css_bytes_deleted
-    assert _delete_css_block(css_bytes_replaced_quotes, "/home/user/ReplacedFont.ttf") == css_bytes_deleted
+def test_cleanup_panda_block():
+    assert cleanup_font_block(css_page_style_bytes) == expected_css_page_style_bytes

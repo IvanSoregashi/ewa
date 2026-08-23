@@ -122,7 +122,7 @@ class TestCleanupCalibreFormattingLxml:
         bs4_text = get_text_normalized(str(bs4_result))
         lxml_text = get_text_normalized(lxml_result.decode("utf-8"))
 
-        assert bs4_text == lxml_text, f"Text mismatch"
+        assert bs4_text == lxml_text, "Text mismatch"
 
     def test_lxml_structure_matches_bs4(self, chapter_html):
         soup = BeautifulSoup(chapter_html, "html.parser")

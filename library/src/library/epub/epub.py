@@ -8,12 +8,10 @@ from zipfile import is_zipfile, ZipFile, ZIP_STORED, ZIP_DEFLATED, ZipInfo
 
 from library.asserts import require
 from library.epub.epub_core import EpubCore, EpubSpecification
-from library.epub.manifest import EpubManifest
 from library.epub.resources import ResourceIndex
 from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
 from library.epub.xml_literals import FileContents
-from library.epub.media_type import FileName, EpubRole
-from library.epub.xml_models.package_document import PackageDocument
+from library.epub.media_type import FileName
 
 logger = logging.getLogger("epub")
 

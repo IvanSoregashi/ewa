@@ -1,16 +1,11 @@
 import logging
-import re
-from collections.abc import Iterator
 from enum import StrEnum
 
-from library.epub.epub_link import EPUBLink
 from library.epub.manifest import EpubManifest
-from library.epub.media_type import MediaType, EpubRole, FileName
+from library.epub.media_type import EpubRole, FileName
 from library.epub.resources import ResourceIndex, Resource
-from library.epub.utils_href import posix_absolute_href
 from library.epub.xml_models.container_model import ContainerDocument
-from library.epub.xml_models.ncx_model import NCXDocument, NavPoint
-from library.epub.xml_models.nav_model import NavDocument, NavListItem
+from library.epub.xml_models.ncx_model import NCXDocument
 from library.epub.xml_models.package_document import PackageDocument
 from library.asserts import require
 

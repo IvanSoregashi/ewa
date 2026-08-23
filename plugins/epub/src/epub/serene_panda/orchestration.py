@@ -1,26 +1,17 @@
-import datetime
 import json
 import logging
 import shutil
-import time
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from itertools import repeat, combinations
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from zipfile import ZipFile
 
-import pandas as pd
-from epub.tables import EpubFileModel, EpubBookTable, EpubContentsTable
-from library.epub.utils import string_to_int_hash64, to_hex_hash
+from epub.tables import EpubFileModel, EpubBookTable
+from library.epub.utils import string_to_int_hash64
 
-from ewa.cli.progress import DisplayProgress, track_unknown, track_sized, track_batch_queue, track_batch_sized
+from ewa.cli.progress import track_unknown, track_sized
 from ewa.main import settings
 from ewa.ui import print_success, print_error
-from library.database.sqlite_model_table import TERMINATOR
 from library.epub.epub_core import EpubSpecification
-from library.epub.media_type import MediaType
 
-from library.image.ocr import recognize_letter
-from library.image.optimization import useless_transparency_mode
 from library.epub.epub import EPUB
 
 logger = logging.getLogger(__name__)
@@ -116,7 +107,7 @@ def move_file_preserving_hierarchy(path: Path, destination_dir: Path):
     try:
         logger.info(f"MOVING: {str(path)!r} -> {str(new_path)!r}")
         shutil.move(str(path), str(new_path))
-    except PermissionError as e:
+    except PermissionError:
         zone_stream = Path(f"{str(path)}:Zone.Identifier")
         if zone_stream.exists():
             logger.warning(f"PermissionError. Zone.Identifier exists in {str(zone_stream)!r}. removing.")

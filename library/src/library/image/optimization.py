@@ -1,4 +1,4 @@
-from copy import copy, deepcopy
+from copy import deepcopy
 from io import BytesIO
 
 from PIL import Image
@@ -6,8 +6,6 @@ from PIL import Image
 from library.image.constants import (
     MEDIUM_WIDTH_SIZE,
     EXTRA_WIDTH_SIZE,
-    EFFICIENT_BPP,
-    EXTRA_EFFICIENT_BPP,
     ImageFormat,
     ImageMode,
 )
@@ -100,7 +98,7 @@ def optimize_png_image(
     image_info = deepcopy(original_image_info)
 
     if getattr(image, "is_animated", None):
-        return OperationResult(skip=f"Animated PNG"), None
+        return OperationResult(skip="Animated PNG"), None
 
     #  Reduce the image dimensions
     if image_info.is_extra_efficient:

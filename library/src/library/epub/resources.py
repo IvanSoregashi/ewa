@@ -1,34 +1,17 @@
 import io
 import logging
 from contextlib import contextmanager
-from dataclasses import dataclass, field
-from io import BytesIO
 from pathlib import Path
 from typing import Callable, BinaryIO, Generator
 from zipfile import ZipInfo
 
-from lxml import html, etree
-from lxml.html import HtmlElement
-from lxml.etree import Element
 from hashlib import md5
-from PIL import Image
 
 from library.asserts import require
 from library.database.constants import SQLITE_MAX_INT
-from library.epub.epub_link import EPUBLink
 
 from library.epub.media_type import type_and_role_from_filename, EpubRole, MediaType
-from library.epub.xml_models.container_model import ContainerDocument
-from library.epub.xml_models.nav_model import NavDocument
-from library.epub.xml_models.ncx_model import NavPoint, NCXDocument
-from library.epub.xml_models.package_document import PackageDocument
-from library.epub.xml_models.package_sequences import ManifestItem, SpineItemRef, GuideReference
 from library.epub.utils_zip import apply_zipinfo_timestamp_to_file
-from library.image.models import ImageInfo
-from library.image.optimization import optimization_machine, get_image_header_info, get_image_transparency_info
-from library.utils_xhtml import pretty_print
-from library.xml.document_pydantic import XMLDocumentModel
-from library.xml.utils import etree_from_bytes
 
 logger = logging.getLogger("resource")
 

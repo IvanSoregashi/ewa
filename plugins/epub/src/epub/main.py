@@ -1,8 +1,6 @@
 import logging
 import shutil
 import time
-from concurrent.futures import ProcessPoolExecutor
-from itertools import chain
 
 import typer
 from pathlib import Path
@@ -15,15 +13,12 @@ from epub.serene_panda import orchestration
 from epub.serene_panda.orchestration import move_file_preserving_hierarchy
 from ewa.ui import print_success, print_error
 from ewa.cli.print_table import print_table_from_models, print_table_from_dicts
-from ewa.cli.progress import DisplayProgress
 from epub.tables import EpubBookTable, EpubContentsTable, EpubOpfHash, EpubHashTable
 from library.epub.epub_core import EpubSpecification
 from library.epub.media_type import FileName, EpubRole
 from library.epub.utils import to_hex_hash
 from library.epub.utils_css import parse_css_urls, replace_css_url
 from library.epub.utils_href import posix_relative_href
-from library.epub.xml_models.package_document import PackageDocument
-from library.utils import sanitize_filename
 from library.epub.epub import EPUB
 from epub.config import settings
 

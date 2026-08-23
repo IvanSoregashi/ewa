@@ -3,7 +3,7 @@ from pathlib import Path
 
 from ewa.cli.print_table import print_table_from_dicts
 from library.epub.epub import EPUB
-from library.epub.resources import EpubImageResource
+from library.epub.resources import Resource
 from library.image.utils import calculate_image_file_bpp
 
 
@@ -14,7 +14,7 @@ def test_image_info():
         if file.is_dir() or file.suffix == ".HEIC":
             continue
 
-        image_resource = EpubImageResource.from_filesystem_path(file)
+        image_resource = Resource.from_filesystem_path(file)
         print()
         print(image_resource.info.file_size, image_resource.info.filename, file.suffix)
 
@@ -42,7 +42,7 @@ def test_image_optimization():
         if file.is_dir() or file.suffix == ".HEIC":
             continue
 
-        image_resource = EpubImageResource.from_filesystem_path(file)
+        image_resource = Resource.from_filesystem_path(file)
         result = image_resource.optimize(max_width=1080, max_height=0, convert_rgb_to_jpg=True)
         results.append(result | {"file": file.name})
         output_path = output_dir / file.name
