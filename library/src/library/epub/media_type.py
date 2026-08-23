@@ -1,7 +1,6 @@
 from enum import StrEnum
 from pathlib import Path
 from typing import Self, override, Any
-
 from library.filetypes import guess_file_type
 
 
@@ -13,13 +12,37 @@ class FileName(StrEnum):
     SP_FONT_LOWER_ENDSWITH = "serenepanda.ttf"
 
 
+class ManifestId(StrEnum):
+    # <item href="nav.xhtml" id="nav" media-type="application/xhtml+xml" properties="nav"/>
+    NAV = "nav"
+    # <item href="toc.ncx" id="ncx" media-type="application/x-dtbncx+xml"/>
+    NCX = "ncx"
+
+    # <meta name="cover" content="cover-img"></meta>
+    # <item href="cover.jpg" id="cover-img" media-type="image/jpeg" properties="cover-image"/>
+    COVER_IMG = "cover-img"
+    # <item href="cover.xhtml" id="cover" media-type="application/xhtml+xml"/>
+    COVER = "cover"
+    # <item id="title_page" href="OEBPS/title_page.xhtml" media-type="application/xhtml+xml"/>
+    TITLE_PAGE = "title_page"
+    TITLEPAGE = "titlepage"
+
+    # <item id="style" href="OEBPS/stylesheet.css" media-type="text/css"/>
+    STYLE = "style"
+    # <item id="page_css" href="page_styles.css" media-type="text/css"/>
+    PAGE_CSS = "page_css"
+    # <item id="css" href="stylesheet.css" media-type="text/css"/>
+    CSS = "css"
+
+
 class EpubRole(StrEnum):
     MIMETYPE = "MIMETYPE"
     CONTAINER = "CONTAINER"
     OPF = "OPF"
     NCX = "NCX"
     NAV = "NAV"
-    COVER = "COVER"
+    COVER_IMAGE = "COVER_IMAGE"
+    COVER_PAGE = "COVER_PAGE"
     XML = "XML"
 
     HTML = "HTML"
@@ -42,7 +65,6 @@ class EpubRole(StrEnum):
             or self is self.NCX
             or self is self.NAV
             or self is self.XML
-            or self is self.COVER
         )
 
     def is_content(self):
@@ -67,6 +89,18 @@ class EpubRole(StrEnum):
                 return cls.GARBAGE
             if path == FileName.MIMETYPE:
                 return cls.MIMETYPE
+
+        return guessed_role
+
+    @classmethod
+    def from_id_media_and_path(cls, _id: str, media_type: MediaType, path: str | Path):
+        guessed_role = cls.from_media_and_path(media_type=media_type, path=path)
+        if _id == ManifestId.NAV:
+            return cls.NAV
+        if "cover" in _id and media_type.is_image():
+            return cls.COVER_IMAGE
+        if ("cover" in _id or "title" in _id) and media_type.is_html():
+            return cls.COVER_PAGE
 
         return guessed_role
 

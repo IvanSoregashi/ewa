@@ -8,10 +8,12 @@ from zipfile import is_zipfile, ZipFile, ZIP_STORED, ZIP_DEFLATED, ZipInfo
 
 from library.asserts import require
 from library.epub.epub_core import EpubCore, EpubSpecification
-from library.epub.resource_index import ResourceIndex
+from library.epub.manifest import EpubManifest
+from library.epub.resources import ResourceIndex
 from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
 from library.epub.xml_literals import FileContents
-from library.epub.media_type import FileName
+from library.epub.media_type import FileName, EpubRole
+from library.epub.xml_models.package_document import PackageDocument
 
 logger = logging.getLogger("epub")
 
@@ -61,15 +63,12 @@ class EPUB:
         Raises:
             ValueError: If any check fails.
         """
-        logger.debug("confirming mimetype")
         mmt = FileName.MIMETYPE
         mmt_contents = FileContents.MIMETYPE
 
         if self.__confirmed_epub:
-            logger.debug("mimetype already confirmed")
             return True
 
-        logger.debug("reading mimetype file")
         with self.source.open():
             mimetype_info = self.source.getinfo(mmt)
             if mimetype_info is None:
@@ -91,7 +90,6 @@ class EPUB:
                 raise ValueError(message)
 
         self.__confirmed_epub = True
-        logger.debug("mimetype confirmed")
         return True
 
     def is_specification(self, specification: EpubSpecification):
@@ -108,18 +106,14 @@ class EPUB:
             logger.error(message)
             raise EpubSpecificationError(message)
 
-    def scan_resources(self) -> ResourceIndex:
-        """Scan the EPUB source and build a ResourceIndex from all files."""
-        logger.debug("scanning EPUB resources")
-        with self.source.open():
-            return ResourceIndex(infolist=self.source.infolist(), stream=self.source.open_stream)
-
     @property
     def resources(self) -> ResourceIndex:
         """Lazily initialize and return the ResourceIndex for this EPUB."""
         if self._resources is None:
-            self.confirm_mimetype()
-            self._resources: ResourceIndex = self.scan_resources()
+            with self.source.open():
+                self._resources = ResourceIndex.from_infolist(
+                    infolist=self.source.infolist(), stream=self.source.open_stream
+                )
         assert self._resources is not None, f"{self} resource_index could not be initialized."
         return self._resources
 
@@ -127,7 +121,7 @@ class EPUB:
     def core(self) -> EpubCore:
         """Lazily initialize and return the EpubCore for this EPUB."""
         if self._core is None:
-            self._core: EpubCore = EpubCore(self.resources)
+            self._core = EpubCore(self.resources)
         assert self._core is not None, f"{self} epub_core could not be initialized."
         return self._core
 
@@ -153,6 +147,7 @@ class EPUB:
             exclude_members: list of files to exclude from packaging.
             validity_check: minimal confirmation of epub's validity before archiving.
         """
+        # TODO REDO counting resources.
         if validity_check:
             self.confirm_mimetype()
 
