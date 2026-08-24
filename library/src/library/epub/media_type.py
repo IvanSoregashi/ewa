@@ -7,6 +7,7 @@ from library.filetypes import guess_file_type
 class FileName(StrEnum):
     MIMETYPE = "mimetype"
     CONTAINER = "META-INF/container.xml"
+    DEFAULT_OPF = "content.opf"
     IBOOKS_OPTIONS = "META-INF/com.apple.ibooks.display-options.xml"
     SP_FONT = "fonts/SerenePanda.ttf"
     SP_FONT_LOWER_ENDSWITH = "serenepanda.ttf"
@@ -265,3 +266,14 @@ def type_and_role_from_filename(filename: str | Path) -> tuple[MediaType, EpubRo
     media_type = MediaType.from_filename(filename)
     role = EpubRole.from_media_and_path(media_type, filename)
     return media_type, role
+
+
+STORE_AS_IS = {
+    MediaType.IMAGE_JPEG,
+    MediaType.IMAGE_PNG,
+    MediaType.IMAGE_GIF,
+    MediaType.IMAGE_WEBP,
+    MediaType.AUDIO_MPEG,
+    MediaType.AUDIO_MP4,
+    MediaType.AUDIO_OGG,
+}

@@ -7,10 +7,11 @@ class FileContents(StrEnum):
 
 
 class FileTemplate(StrEnum):
+    MIMETYPE = "application/epub+zip"
     CONTAINER = r"""<?xml version="1.0" encoding="utf-8"?>
 <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
   <rootfiles>
-    <rootfile media-type="application/oebps-package+xml" full-path="%(folder_name)s/content.opf"/>
+    <rootfile media-type="application/oebps-package+xml" full-path="{opf_path}"/>
   </rootfiles>
 </container>
 """

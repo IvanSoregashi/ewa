@@ -34,3 +34,13 @@ class ContainerDocument(XMLDocumentModel, tag="container", ns=NamespacePrefix.CO
     @property
     def opf_paths(self) -> list[str]:
         return [rootfile.full_path for rootfile in self.rootfiles]
+
+    @classmethod
+    def standard(cls, opf_path: str) -> "ContainerDocument":
+        """A minimal container pointing at a single package document."""
+        return cls(
+            version="1.0",
+            rootfiles_wrapper=RootFiles(
+                root=[RootFile(full_path=opf_path, media_type="application/oebps-package+xml")]
+            ),
+        )

@@ -20,6 +20,12 @@ def _is_a_directory(path: str | ZipInfo | Path | ZipPath) -> bool:
     assert isinstance(path, (ZipPath, Path, ZipInfo)), f"path is not of correct type ({type(path)})"
     return path.is_dir()
 
+def _ensure_not_a_directory(path: str | ZipInfo | Path | ZipPath, message:str=""):
+    if _is_a_directory(path):
+        message = f"Path {path!r} is a directory: {message}"
+        logger.error(message)
+        raise IsADirectoryError(message)
+
 
 class SourceProtocol(Protocol):
     def getinfo(self, path: str | Path | ZipPath) -> ZipInfo | None: ...
@@ -31,9 +37,6 @@ class SourceProtocol(Protocol):
 
     def read_text(self, path: str | ZipInfo | Path | ZipPath) -> str: ...
     def read_bytes(self, path: str | ZipInfo | Path | ZipPath) -> bytes: ...
-    def write_to_zipfile(
-        self, zip_file: ZipFile, path: str | Path | ZipInfo, compress_type: int | None = None
-    ) -> None: ...
 
     @contextmanager
     def open(self) -> Iterator[Self]: ...
@@ -61,6 +64,14 @@ class DirectorySource(SourceProtocol):
         if not (self.root / name).exists():
             return None
         return ZipInfo.from_file(self.root / name, arcname=name, strict_timestamps=False)
+
+    def _require_file_path(self, path: str | ZipInfo | Path):
+        filepath = self._to_absolute_path(path)
+        if not filepath.exists():
+            raise FileNotFoundError(f"{self} Path {path!r} does not exist")
+        if filepath.is_dir():
+            raise IsADirectoryError(f"{self} Path {path!r} is a directory")
+        return filepath
 
     def _to_absolute_path(self, path: str | ZipInfo | Path) -> Path:
         if isinstance(path, ZipInfo):
@@ -94,8 +105,7 @@ class DirectorySource(SourceProtocol):
         return [info.filename for info in self.infolist()]
 
     def read_bytes(self, path: str | ZipInfo | Path) -> bytes:
-        logger.warning(f"{self} reading {path!r} bytes")
-        return self._to_absolute_path(path).read_bytes()
+        return self._require_file_path(path).read_bytes()
 
     def read_text(self, path: str | ZipInfo | Path, encoding: str = "utf-8") -> str:
         return self.read_bytes(path).decode(encoding=encoding)
@@ -108,27 +118,14 @@ class DirectorySource(SourceProtocol):
 
     @contextmanager
     def open_stream(self, path: str | ZipInfo | Path) -> Iterator[BinaryIO]:
-        if _is_a_directory(path):
-            message = f"{self} Path {path!r} is a directory, cannot open stream"
-            logger.error(message)
-            raise IsADirectoryError(message)
-
-        if isinstance(path, (str, ZipInfo)):
-            path = self._to_absolute_path(path)
-        assert isinstance(path, Path), f"path is not of correct type ({type(path)})"
-        logger.debug(f"{self} streaming {path.name!r}")
-
-        with path.open("rb") as stream:
+        filepath = self._require_file_path(path)
+        with filepath.open("rb") as stream:
             yield stream
 
-    def write_to_zipfile(self, zip_file: ZipFile, path: str | Path | ZipInfo, compress_type: int | None = None) -> None:
-        absolute_path = self._to_absolute_path(path)
-        relative_path = self._to_relative_path(path)
-        zip_file.write(filename=absolute_path, arcname=relative_path, compress_type=compress_type)
-
     def extract(self, destination: str | Path, member: str | ZipInfo) -> str:
-        logger.info(f"{self} extract({destination}, {member.filename if isinstance(member, ZipInfo) else member})")
-        return shutil.copy2(src=self._to_absolute_path(member), dst=destination)
+        filepath = self._require_file_path(member)
+        logger.debug(f"{self} extract({destination}, {filepath})")
+        return shutil.copy2(src=filepath, dst=str(destination))
 
     def extract_all(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None) -> None:
         logger.info(f"{self} extract_all({repr(destination)}, {exclude_members=})")
@@ -143,17 +140,24 @@ class ZipFileSource(SourceProtocol):
     def __init__(self, path: str | Path, skip_dirs: bool = False) -> None:
         self.root = Path(path).absolute()
         self.skip_dirs = skip_dirs
-        self.zip_file: ZipFile | None = None
+        self._zip_file: ZipFile | None = None
         if not is_zipfile(path):
             raise ValueError("Path is not a ZipFile")
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.root.name!r})"
 
-    def _should_be_open(self):
-        if self.zip_file is None:
-            logger.error(f"{self} This operation requires source to be open.")
-            raise IOError("This operation requires source to be open.")
+    @property
+    def zip_file(self) -> ZipFile:
+        return require(self._zip_file, f"{self}._zip_file")
+
+    def _require_file_info(self, path: str | ZipPath | ZipInfo) -> ZipInfo:
+        info: ZipInfo = require(self.getinfo(path), f"{self}.getinfo({path!r})")
+        if info.is_dir():
+            message = f"{self} Path {path!r} is a directory"
+            logger.error(message)
+            raise IsADirectoryError(message)
+        return info
 
     def getinfo(self, path: str | ZipPath | ZipInfo) -> ZipInfo | None:
         if isinstance(path, ZipInfo):
@@ -167,9 +171,8 @@ class ZipFileSource(SourceProtocol):
                 return None
 
     def getpath(self, path: str | ZipPath | ZipInfo) -> ZipPath:
-        self._should_be_open()
         info = require(self.getinfo(path))
-        return ZipPath(root=require(self.zip_file), at=info.filename)
+        return ZipPath(root=self.zip_file, at=info.filename)
 
     def infolist(self) -> list[ZipInfo]:
         with self.open():
@@ -178,7 +181,6 @@ class ZipFileSource(SourceProtocol):
             return self.zip_file.infolist()
 
     def pathlist(self) -> list[ZipPath]:
-        self._should_be_open()
         # return list(set(ZipPath(self.zip_file).glob("*")) | set(ZipPath(self.root).rglob("*")))
         return [self.getpath(info) for info in self.infolist()]
 
@@ -189,72 +191,31 @@ class ZipFileSource(SourceProtocol):
             return self.zip_file.namelist()
 
     def read_bytes(self, path: str | ZipInfo | ZipPath) -> bytes:
-        if _is_a_directory(path):
-            message = f"{self} Path {path!r} is a directory, cannot read bytes"
-            logger.error(message)
-            raise IsADirectoryError(message)
-        if isinstance(path, ZipPath):
-            logger.debug(f"{self} reading the {path.at!r} bytes")
-            self._should_be_open()
-            return path.read_bytes()
         with self.open():
-            logger.debug(f"{self} reading the {(path if isinstance(path, str) else path.filename)!r} bytes")
-            return self.zip_file.read(path)
+            info = self._require_file_info(path)
+            return self.zip_file.read(info)
 
     def read_text(self, path: str | ZipInfo | ZipPath, encoding: str = "utf-8") -> str:
         return self.read_bytes(path).decode(encoding=encoding)
 
     @contextmanager
     def open(self) -> Iterator[Self]:
-        if self.zip_file is None:
+        if self._zip_file is None:
             with ZipFile(self.root) as zip_file:
                 logger.debug(f"{self} opening")
-                self.zip_file = zip_file
+                self._zip_file = zip_file
                 yield self
                 logger.debug(f"{self} closing")
-                self.zip_file = None
+                self._zip_file = None
         else:
             yield self
 
     @contextmanager
     def open_stream(self, path: str | ZipInfo | ZipPath) -> Iterator[BinaryIO]:
-        if _is_a_directory(path):
-            message = f"{self} Path {path!r} is a directory, cannot open stream"
-            logger.error(message)
-            raise IsADirectoryError(message)
-
-        if isinstance(path, ZipPath):
-            logger.debug(f"{self} streaming {path.at!r}")
-            self._should_be_open()
-            with path.open("rb") as stream:
+        with self.open():
+            info = self._require_file_info(path)
+            with self.zip_file.open(info, "r") as stream:
                 yield stream
-        else:
-            with self.open():
-                filename = path if isinstance(path, str) else path.filename
-                logger.debug(f"{self} streaming {filename!r}")
-
-                with require(self.zip_file).open(path, "r") as stream:
-                    yield stream
-
-    def write_to_zipfile(self, zip_file: ZipFile, path: str | Path | ZipInfo, compress_type: int | None = None) -> None:
-        zip_info = require(self.getinfo(path))
-        if not zip_file.fp:
-            raise ValueError("Attempt to write to ZIP archive that was already closed")
-        if zip_file._writing:
-            raise ValueError("Can't write to ZIP archive while an open writing handle exists")
-
-        if zip_info.is_dir():
-            logger.warning(f"{self} writing a directory to ZIP archive, this should not happen.")
-            zip_info.compress_size = 0
-            zip_info.CRC = 0
-            zip_file.mkdir(zip_info)
-        else:
-            data_bytes = self.read_bytes(zip_info)
-            zip_info.compress_type = compress_type if compress_type is not None else zip_file.compression
-            zip_info.compress_level = zip_file.compresslevel
-
-            with zip_file.open(zip_info, "w") as dest:
-                dest.write(data_bytes)
 
     def extract(self, destination: str | Path, member: str | ZipInfo) -> str:
         """Extract a single element from source.
@@ -265,7 +226,7 @@ class ZipFileSource(SourceProtocol):
         """
         destination: Path = Path(destination)
         with self.open():
-            info = member if isinstance(member, ZipInfo) else require(self.getinfo(member))
+            info = require(self.getinfo(member), f"{self}.getinfo({member!r})")
             if destination.is_dir():
                 destination = destination / info.filename
             logger.info(f"{self} extract({destination!r}, {info.filename!r})")
@@ -281,7 +242,7 @@ class ZipFileSource(SourceProtocol):
             destination: destination directory (must exist) (Path).
             exclude_members: member to not extract.
         """
-        logger.info(f"{self} extract_all({destination!r}, {exclude_members=})")
+        logger.info(f"{self}.extract_all({destination!r}, {exclude_members=})")
         destination: Path = Path(destination)
         if not destination.exists():
             destination.mkdir(parents=True)
