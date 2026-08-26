@@ -20,7 +20,8 @@ def _is_a_directory(path: str | ZipInfo | Path | ZipPath) -> bool:
     assert isinstance(path, (ZipPath, Path, ZipInfo)), f"path is not of correct type ({type(path)})"
     return path.is_dir()
 
-def _ensure_not_a_directory(path: str | ZipInfo | Path | ZipPath, message:str=""):
+
+def _ensure_not_a_directory(path: str | ZipInfo | Path | ZipPath, message: str = ""):
     if _is_a_directory(path):
         message = f"Path {path!r} is a directory: {message}"
         logger.error(message)
