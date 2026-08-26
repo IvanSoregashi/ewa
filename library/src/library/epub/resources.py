@@ -22,6 +22,7 @@ class Resource:
         self.stream_bytes = stream_bytes
 
         self.media_type, self.role = type_and_role_from_filename(self.info.filename)
+
         logger.debug(f"{self} MediaType({self.media_type}) EpubRole({self.role})")
 
         self.is_modified: bool = False
@@ -85,14 +86,6 @@ class Resource:
     def hash_prefixed_name(self):
         return f"{self.int64_hash}_{Path(self.info.filename).name}"
 
-    @property
-    def null_info(self) -> ZipInfo:
-        info = self.info
-        info.CRC = 0
-        info.file_size = 0
-        info.compress_size = 0
-        return info
-
 
 class ResourceIndex:
     """Auto-indexed collection of EPUBResource objects.
@@ -154,3 +147,10 @@ class ResourceIndex:
 
     def by_role(self, role: EpubRole) -> ResourceIndex:
         return ResourceIndex.from_resource_list([r for r in self._items if r.role is role])
+
+    def iter(self, sort_by_role: bool = True) -> Generator[Resource, None, None]:
+        if sort_by_role:
+            for role in EpubRole:
+                yield from self.by_role(role)
+        else:
+            yield from self._items

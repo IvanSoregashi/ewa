@@ -42,18 +42,18 @@ class EpubRole(StrEnum):
     OPF = "OPF"
     NCX = "NCX"
     NAV = "NAV"
-    COVER_IMAGE = "COVER_IMAGE"
-    COVER_PAGE = "COVER_PAGE"
     XML = "XML"
-
-    HTML = "HTML"
-    IMAGE = "IMAGE"
-    AUDIO = "AUDIO"
-    VIDEO = "VIDEO"
 
     STYLE = "STYLE"
     FONT = "FONT"
     SCRIPT = "SCRIPT"
+
+    COVER_IMAGE = "COVER_IMAGE"
+    COVER_PAGE = "COVER_PAGE"
+    HTML = "HTML"
+    IMAGE = "IMAGE"
+    AUDIO = "AUDIO"
+    VIDEO = "VIDEO"
 
     UNKNOWN = "UNKNOWN"
     GARBAGE = "GARBAGE"

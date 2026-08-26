@@ -1,5 +1,5 @@
-from library.epub.epub_namespaces import NamespacePrefix
 from pydantic_xml import BaseXmlModel, attr, element
+from library.epub.epub_namespaces import NamespacePrefix
 from library.xml.document_pydantic import XMLDocumentModel
 from library.epub.epub_namespaces import NAV_NSMAP
 

@@ -179,3 +179,13 @@ def optimization_machine(
         return optimize_gif_image(image, buffer, image_info)
 
     return OperationResult(skip="Image was not optimized"), None
+
+
+def optimize_bytes(data: bytes, min_filesize: int = 50 * 1024) -> tuple[bytes | None, ImageInfo | None]:
+    """Bytes-in, bytes-out entry point. Returns (None, None) if skipped."""
+    if len(data) < min_filesize:
+        return None, None
+    with Image.open(BytesIO(data)) as image:
+        buffer = BytesIO()
+        result, info = optimization_machine(image, buffer, filesize=len(data))
+        return (buffer.getvalue(), info) if result.success else (None, None)

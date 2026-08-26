@@ -23,7 +23,7 @@ class EpubManifestItem:
 
 class EpubManifest:
     def __init__(self, resources: ResourceIndex) -> None:
-        self.resources = resources
+        self.all_resources = resources
 
         self._items: list[EpubManifestItem] = []
         self._by_path: dict[str, EpubManifestItem] = {}
@@ -46,6 +46,10 @@ class EpubManifest:
             return item in self._by_path
         return item in self._items
 
+    @property
+    def manifest_resources(self):
+        return ResourceIndex.from_resource_list([m.resource for m in self._items])
+
     @classmethod
     def from_package(cls, package: PackageDocument, resources: ResourceIndex) -> EpubManifest:
         manifest = EpubManifest(resources)
@@ -61,7 +65,7 @@ class EpubManifest:
         return manifest
 
     def add_opf_item(self, opf_manifest_item: ManifestItem) -> None:
-        resource = require(self.resources.by_path(opf_manifest_item.href), f"Resource matching {opf_manifest_item}")
+        resource = require(self.all_resources.by_path(opf_manifest_item.href), f"Resource matching {opf_manifest_item}")
         manifest_item = EpubManifestItem(resource=resource, item=opf_manifest_item)
         self.add(manifest_item)
 
@@ -91,11 +95,11 @@ class EpubManifest:
     def by_media_type(self, media_type: MediaType) -> EpubManifest:
         return EpubManifest.from_manifest_list(
             manifests=[m for m in self._items if m.media_type is media_type],
-            resources=self.resources,
+            resources=self.all_resources,
         )
 
     def by_role(self, role: EpubRole) -> EpubManifest:
         return EpubManifest.from_manifest_list(
             manifests=[m for m in self._items if m.role is role],
-            resources=self.resources,
+            resources=self.all_resources,
         )

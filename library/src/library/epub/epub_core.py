@@ -12,18 +12,6 @@ from library.asserts import require
 logger = logging.getLogger("epub_core")
 
 
-class EpubSpecification(StrEnum):
-    UNKNOWN = "UNKNOWN"
-    EPUB_MIMETYPE = "EPUB_MIMETYPE"
-    EPUB_CONTAINER = "EPUB_CONTAINER"
-    SERENE_PANDA_ENCRYPTED = "SERENE_PANDA_ENCRYPTED"
-    SERENE_PANDA_UNENCRYPTED = "SERENE_PANDA_UNENCRYPTED"
-    ASIA_NOVEL = "ASIA_NOVEL"
-    CALIBRE = "CALIBRE"
-    WEB_TO_EPUB = "WEB_TO_EPUB"
-    EPUB_PRESS = "EPUB_PRESS"
-    EWA_ONE = "EWA_ONE"
-
 
 class EpubCore:
     """Manages the structural core of an EPUB archive."""

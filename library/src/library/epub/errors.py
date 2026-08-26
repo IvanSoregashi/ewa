@@ -1,0 +1,7 @@
+
+
+class EpubError(Exception): ...
+
+
+class EpubSpecificationError(EpubError): ...
+
