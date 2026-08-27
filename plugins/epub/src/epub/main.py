@@ -63,7 +63,6 @@ def decrypt(epub_path: Path = typer.Argument(None, exists=True)):
                 style_resource.content = replace_css_url(
                     style_resource.content, relative_path, font_resource.hash_prefixed_name
                 )
-                style_resource.is_modified = True
 
         dictionary = orchestration.translation_dictionary()
         for content_resource in epub.resources.markup_content:
@@ -71,7 +70,6 @@ def decrypt(epub_path: Path = typer.Argument(None, exists=True)):
                 logger.warning(f"content_resource {content_resource.info.filename} is not in the spine")
             content_resource.content = content_resource.content.decode("utf-8").translate(dictionary).encode("utf-8")
             # content_resource.content = pretty_print_bs4_bytes(content_resource.content)
-            content_resource.is_modified = True
 
         epub.core.remove_garbage()
 

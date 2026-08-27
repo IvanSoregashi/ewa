@@ -22,14 +22,12 @@ class Resource:
         self.stream_bytes = stream_bytes
 
         self.media_type, self.role = type_and_role_from_filename(self.info.filename)
-
         logger.debug(f"{self} MediaType({self.media_type}) EpubRole({self.role})")
-
-        self.is_modified: bool = False
-        self.is_deleted: bool = False
 
         self._content: bytes | None = None
         self._hex_hash: str | None = None
+
+        self.is_deleted: bool = False
 
     def __repr__(self) -> str:
         return f"Resource({self.info.filename!r})"
@@ -39,7 +37,7 @@ class Resource:
         if not path.exists():
             raise ValueError(f"{path} does not exist, cannot create LazyLoadFile")
         info = ZipInfo.from_file(path, strict_timestamps=False)
-        return cls(info=info, stream_bytes=lambda i: Path(i.filename).open("rb"))
+        return cls(info=info, stream_bytes=lambda i: path.absolute().open("rb"))
 
     def write_to_filesystem(self, path: Path) -> Resource:
         if path.exists():
@@ -52,12 +50,9 @@ class Resource:
 
     @contextmanager
     def stream(self) -> Generator[BinaryIO, None, None]:
-        if self._content is not None:
-            streamable = io.BytesIO(self._content)
-            yield streamable
-        else:
-            with self.stream_bytes(self.info) as stream:
-                yield stream
+        streamable = io.BytesIO(self._content) if self._content is not None else self.stream_bytes(self.info)
+        with streamable as stream:
+            yield stream
 
     @property
     def content(self) -> bytes:

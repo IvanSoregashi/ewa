@@ -19,7 +19,6 @@ logger = logging.getLogger("epub")
 
 class EPUB:
     def __init__(self, path: str | Path) -> None:
-        """Initialize an EPUB object with path to epub file or a directory."""
         self.path: Path = Path(path)
         self.__skip_dirs: bool = True
 

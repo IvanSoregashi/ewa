@@ -44,7 +44,7 @@ class EpubZipSink:
     def _write_mimetype(self):
         mimetype_bytes = FileTemplate.MIMETYPE.encode("utf-8")
         mimetype_zipinfo = ZipInfo(filename=FileName.MIMETYPE, date_time=zip_info_now())
-        self.zip_file.writestr(mimetype_zipinfo, mimetype_bytes)
+        self.zip_file.writestr(mimetype_zipinfo, mimetype_bytes, compress_type=ZIP_STORED)
 
     def _write_container(self, opf_path: str = FileName.DEFAULT_OPF):
         container_bytes = FileTemplate.CONTAINER.format(opf_path=opf_path).encode("utf-8")

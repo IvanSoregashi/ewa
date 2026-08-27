@@ -1,5 +1,11 @@
 from library.epub.resources import Resource
-from PIL.Image import Image
+from PIL import Image
+
+from library.image.models import ImageInfo
+
 
 def get_image_header(resource: Resource):
-    image = Image()
+    with resource.stream() as stream:
+        with Image.open(stream) as image:
+            return ImageInfo.from_image(image, resource.info.file_size)
+

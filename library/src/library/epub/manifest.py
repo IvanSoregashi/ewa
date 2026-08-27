@@ -78,7 +78,6 @@ class EpubManifest:
         self._items.remove(manifest)
         self._by_id.pop(manifest.item.id)
         self._by_path.pop(manifest.item.href)
-        manifest.resource.is_deleted = True
 
     def remove_by_path(self, path: str) -> None:
         self.remove(require(self.by_path(path), f"manifest path={path}"))

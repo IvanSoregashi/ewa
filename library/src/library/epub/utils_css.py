@@ -8,6 +8,3 @@ def de_panda_css_resource(res: Resource) -> None:
         res.content = cleanup_font_block(old_content)
     else:
         res.content = cleanup_panda_line(old_content)
-
-    if res.content != old_content:
-        res.is_modified = True
