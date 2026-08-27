@@ -6,6 +6,7 @@ stream_bytes callable, which is all we need to count what the reader pulls throu
 
 import io
 from io import BytesIO
+from pathlib import Path
 from zipfile import ZipInfo
 
 import pytest
@@ -15,7 +16,7 @@ from library.epub.image_recipe import get_image_header
 from library.epub.resources import Resource
 
 JUNK = b"\x00" * (5 * 1024 * 1024)
-
+images_dir = Path("samples") / "images"
 
 class CountingBytesIO(io.BytesIO):
     def __init__(self, data: bytes):
@@ -35,6 +36,14 @@ def counted_resource(data: bytes, filename: str) -> tuple[Resource, CountingByte
     resource = Resource(info=info, stream_bytes=lambda i: stream)
     return resource, stream
 
+def real_counted_resource(image_name: str) -> tuple[Resource, CountingBytesIO]:
+    image_path = images_dir / image_name
+    zip_info = ZipInfo.from_file(image_path)
+    assert zip_info.file_size == image_path.stat().st_size
+    stream = CountingBytesIO(image_path.read_bytes())
+    resource = Resource(info=zip_info, stream_bytes=lambda i: stream)
+    return resource, stream
+
 
 def image_with_junk(fmt: str, junk_size: int = len(JUNK)) -> bytes:
     buffer = BytesIO()
@@ -46,6 +55,18 @@ def image_with_junk(fmt: str, junk_size: int = len(JUNK)) -> bytes:
 def payload(request) -> tuple[bytes, str]:
     fmt = request.param
     return image_with_junk(fmt), f"image.{fmt.lower()}"
+
+def test_the_file():
+    resource, stream = real_counted_resource("cursor-2025-models.png")
+    info = get_image_header(resource)
+    print()
+    print(resource.info)
+    print(info)
+    print(stream.served)
+    info = get_image_header(resource)
+    print(stream.served)
+    info = get_image_header(resource)
+    print(stream.served)
 
 
 def test_get_image_header_reads_only_header(payload):
