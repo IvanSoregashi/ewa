@@ -157,7 +157,7 @@ def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> 
     original_image_info = ImageInfo.from_image(image=image, filesize=filesize)
     if filesize < min_filesize:
         return OptimizationResult(
-            skip=f"Image is smaller then min threshold {filesize / 1024:.2fKB}", original_image=original_image_info
+            skip=f"Image is smaller then min threshold {filesize / 1024:.2f}KB", original_image=original_image_info,
         )
 
     if original_image_info.format == ImageFormat.PNG:

@@ -24,8 +24,9 @@ def get_image_info_with_extrema(resource: Resource) -> ImageInfo:
 
 
 def perform_image_optimization(resource: Resource) -> OptimizationResult:
-    with Image.open(io.BytesIO(resource.content)) as image:
-        buffer = io.BytesIO()
+    buffer = io.BytesIO()
+    streamable = io.BytesIO(resource.content)
+    with Image.open(streamable) as image:
         result = optimization_machine(image=image, buffer=buffer, filesize=resource.info.file_size)
 
     if result.success:

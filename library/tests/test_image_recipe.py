@@ -1,7 +1,8 @@
-"""Header-laziness checks for get_image_header - option A: no production code involved.
+"""Coverage for library.epub.image_recipe: get_image_info, get_image_info_with_extrema, perform_image_optimization.
 
-The accounting lives entirely in this file: Resource already accepts an injected
-stream_bytes callable, which is all we need to count what the reader pulls through.
+All images are generated on the fly (no repo fixtures). Read-accounting lives
+entirely in this file: Resource accepts an injected stream_bytes callable, which
+is all we need to count what the reader actually pulls through.
 """
 
 import io
@@ -13,15 +14,20 @@ from pathlib import Path
 from zipfile import ZipInfo
 
 import pytest
-
 from PIL import Image
 
-from library.epub.image_recipe import get_image_info, get_image_info_with_extrema
+from library.epub.image_recipe import get_image_info, get_image_info_with_extrema, perform_image_optimization
 from library.epub.resources import Resource
-from library.image.constants import ImageFormat, ImageMode
+from library.image.constants import ImageFormat, ImageMode, MEDIUM_WIDTH_SIZE
 
-JUNK = b"\x00" * (5 * 1024 * 1024)
-images_dir = Path("samples") / "images"
+images_dir = Path(__file__).parent / "samples" / "images"
+
+COMBOS = [
+    (ImageFormat.PNG, ImageMode.RGB),
+    (ImageFormat.PNG, ImageMode.RGBA),
+    (ImageFormat.JPEG, ImageMode.RGB),
+]
+COMBO_IDS = ["png-rgb", "png-rgba", "jpeg-rgb"]
 
 
 class CountingBytesIO(io.BytesIO):
@@ -36,6 +42,7 @@ class CountingBytesIO(io.BytesIO):
 
 
 def counted_resource(data: bytes, filename: str) -> tuple[Resource, Callable[[], int]]:
+    """Resource whose stream accounting is aggregated across every stream() call."""
     info = ZipInfo(filename)
     info.file_size = len(data)
 
@@ -52,26 +59,8 @@ def counted_resource(data: bytes, filename: str) -> tuple[Resource, Callable[[],
     return Resource(info=info, stream_bytes=stream_bytes), total_served
 
 
-def real_counted_resource(image_name: str) -> tuple[Resource, Callable[[], int]]:
-    """data is read from disk ONCE at setup - not part of the accounting."""
-    image_path = images_dir / image_name
-    data = image_path.read_bytes()
-    info = ZipInfo.from_file(image_path)
-
-    streams: list[CountingBytesIO] = []
-
-    def stream_bytes(info: ZipInfo) -> CountingBytesIO:
-        stream = CountingBytesIO(data)  # fresh instance per stream() call
-        streams.append(stream)
-        return stream
-
-    def total_served() -> int:
-        return sum(s.served for s in streams)
-
-    return Resource(info=info, stream_bytes=stream_bytes), total_served
-
 @lru_cache
-def generate_image(image_format: ImageFormat, mode: ImageMode, size: tuple[int, int], noise: bool = False,) -> tuple[bytes, str]:
+def generate_image(image_format: ImageFormat, mode: ImageMode, size: tuple[int, int], noise: bool = False) -> tuple[bytes, str]:
     """Generate image bytes of the given format/mode/size.
 
     noise=False -> solid single-color image (compresses well).
@@ -99,61 +88,271 @@ def generate_image(image_format: ImageFormat, mode: ImageMode, size: tuple[int, 
     return buffer.getvalue(), f"{size[0]}x{size[1]}x{mode}_{"NOISY" if noise else "RED"}.{image_format}"
 
 
-def test_the_file(resource, total_streamed):
-    resource, total_streamed = real_counted_resource("cursor-2025-models.png")
-    size = resource.info.file_size
+def opaque_rgba_png(size: tuple[int, int]) -> tuple[bytes, str]:
+    """Noisy RGBA image with the alpha channel forced fully opaque (useless transparency)."""
+    data, filename = generate_image(ImageFormat.PNG, ImageMode.RGBA, size, noise=True)
+    with Image.open(BytesIO(data)) as image:
+        r, g, b, _ = image.split()
+        flattened = Image.merge("RGBA", (r, g, b, Image.new("L", image.size, 255)))
+        buffer = BytesIO()
+        flattened.save(buffer, format="PNG")
+    return buffer.getvalue(), filename
 
-    print()
-    print(resource.info)
+
+# ---------------------------------------------------------------------------
+# get_image_info
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(params=COMBOS, ids=COMBO_IDS)
+def combo(request) -> tuple[ImageFormat, ImageMode]:
+    return request.param
+
+
+def test_get_image_info_reports_correct_metadata(combo):
+    image_format, mode = combo
+    size = (64, 32)
+    image_bytes, filename = generate_image(image_format, mode, size, noise=True)
+    resource, _ = counted_resource(image_bytes, filename)
+
     info = get_image_info(resource)
-    print(info)
-    print(total_streamed())
-    get_image_info(resource)
-    print(total_streamed())
-    print(f"{get_image_info_with_extrema(resource)=}")
-    print(total_streamed())
-    resource.content
-    print(total_streamed())
-    get_image_info(resource)
-    print(total_streamed())
-    get_image_info_with_extrema(resource)
-    print(total_streamed())
+
+    assert info.size == size
+    assert info.format is image_format
+    assert info.mode is mode
+    assert info.filesize == len(image_bytes)
+    assert info.extrema is None
 
 
-def test_get_image_header_reads_only_header():
-    image_size = (1000, 1000)
-    image_bytes, filename = generate_image(ImageFormat.PNG, ImageMode.RGB, image_size)
-    resource, total_streamed = counted_resource(image_bytes, filename)
+def test_get_image_info_is_lazy(combo):
+    """Opening must only ever pull the header, never pixel data."""
+    image_format, mode = combo
+    size = (1000, 1000)
+    image_bytes, filename = generate_image(image_format, mode, size, noise=True)
+    resource, total_served = counted_resource(image_bytes, filename)
 
-    info = get_image_info(resource)
+    for _ in range(3):  # repeated opens must stay cheap too
+        info = get_image_info(resource)
+        assert info.size == size
 
-    assert info.size == image_size
-    print(total_streamed())
-    print(total_streamed())
-    info = get_image_info(resource)
-    print(total_streamed())
-    info = get_image_info_with_extrema(resource)
-    print(total_streamed())
-    assert total_streamed() < 4096, f"read {total_streamed()} bytes of {len(image_bytes)}-byte member"
+    assert total_served() < len(image_bytes) * 0.1, f"read {total_served()} of {len(image_bytes)} bytes"
 
 
-def test_full_read_registers_exactly_payload_size():
-    """Control: if anything goes eager, the counter catches it."""
-    data = image_with_junk("PNG")
-    resource, stream = counted_resource(data, "image.png")
+def test_get_image_info_full_read_is_counted_exactly():
+    """Control for the accounting: eager consumption registers byte-exactly."""
+    image_bytes, filename = generate_image(ImageFormat.PNG, ImageMode.RGB, (1000, 1000), noise=True)
+    resource, total_served = counted_resource(image_bytes, filename)
 
-    assert len(resource.content) == len(data)
-    assert stream.served == len(data)
+    assert len(resource.content) == len(image_bytes)
+    assert total_served() == len(image_bytes)
 
 
-def test_bigger_dimensions_stay_cheap():
-    """A large-declared JPEG still opens from its header alone."""
+def test_get_image_info_stays_lazy_for_huge_jpeg():
     buffer = BytesIO()
     Image.new("RGB", (4000, 4000), "blue").save(buffer, format="JPEG", quality=95)
-    data = buffer.getvalue()
+    resource, total_served = counted_resource(buffer.getvalue(), "big.jpg")
 
-    resource, stream = counted_resource(data, "image.jpg")
     info = get_image_info(resource)
 
     assert info.size == (4000, 4000)
-    assert stream.served < (len(data) * 0.1), f"read {stream.served} bytes of {len(data)}-byte member"
+    assert total_served() < 8192, f"read {total_served()} bytes of a 4000x4000 JPEG header"
+
+
+# ---------------------------------------------------------------------------
+# get_image_info_with_extrema
+# ---------------------------------------------------------------------------
+
+
+def test_extrema_computed_for_rgba():
+    image_bytes, filename = generate_image(ImageFormat.PNG, ImageMode.RGBA, (100, 100), noise=True)
+    resource, _ = counted_resource(image_bytes, filename)
+
+    info = get_image_info_with_extrema(resource)
+
+    assert info.mode is ImageMode.RGBA
+    assert info.extrema is not None
+    assert len(info.extrema) == 4
+    # noisy pixels: every channel spans the full range
+    for low, high in info.extrema:
+        assert low == 0
+        assert high == 255
+
+
+def test_extrema_solid_rgba_is_deterministic():
+    image_bytes, filename = generate_image(ImageFormat.PNG, ImageMode.RGBA, (10, 10), noise=False)
+    resource, _ = counted_resource(image_bytes, filename)
+
+    info = get_image_info_with_extrema(resource)
+
+    red, green, blue, alpha = info.extrema
+    assert red == (255, 255)  # solid red fill
+    assert green == (0, 0)
+    assert blue == (0, 0)
+    assert alpha == (255, 255)
+
+
+def test_extrema_skipped_for_rgb():
+    for image_format in (ImageFormat.PNG, ImageFormat.JPEG):
+        image_bytes, filename = generate_image(image_format, ImageMode.RGB, (100, 100), noise=True)
+        resource, total_served = counted_resource(image_bytes, filename)
+
+        info = get_image_info_with_extrema(resource)
+
+        assert info.extrema is None
+        assert total_served() < len(image_bytes) * 0.1, "RGB path must not load pixel data"
+
+
+def test_extrema_rgba_loads_full_content():
+    image_bytes, filename = generate_image(ImageFormat.PNG, ImageMode.RGBA, (100, 100), noise=True)
+    resource, total_served = counted_resource(image_bytes, filename)
+
+    get_image_info_with_extrema(resource)
+
+    # full content read, plus the small header read from get_image_info
+    assert total_served() >= len(image_bytes), "RGBA extrema path is expected to be eager"
+
+
+# ---------------------------------------------------------------------------
+# perform_image_optimization
+# ---------------------------------------------------------------------------
+
+
+def test_optimization_skips_small_images():
+    image_bytes, filename = generate_image(ImageFormat.PNG, ImageMode.RGB, (64, 32), noise=True)
+    resource, _ = counted_resource(image_bytes, filename)
+    original_content = resource.content
+
+    result = perform_image_optimization(resource)
+
+    assert result.success is False
+    assert result.skip is not None
+    assert result.error is None
+    assert result.new_image is None
+    assert result.original_image.size == (64, 32)
+    assert resource.content == original_content  # untouched
+    assert resource.filename == filename
+
+
+def test_optimization_resizes_large_jpeg():
+    image_bytes, filename = generate_image(ImageFormat.JPEG, ImageMode.RGB, (1500, 1500), noise=True)
+    resource, _ = counted_resource(image_bytes, filename)
+    original_content = resource.content
+
+    result = perform_image_optimization(resource)
+
+    assert result.success is True
+    assert result.skip is None
+    assert result.original_image.format is ImageFormat.JPEG
+    assert result.new_image.size == (MEDIUM_WIDTH_SIZE[0], 1080)  # 1500 -> 1080 wide, height scaled
+    assert resource.content != original_content
+
+    with Image.open(BytesIO(resource.content)) as optimized:
+        assert optimized.format == "JPEG"
+        assert optimized.size == result.new_image.size
+    assert resource.filename == filename  # no rename for jpeg
+
+
+def test_optimization_converts_png_to_jpeg():
+    """Noisy RGB PNG above the size threshold: inefficient bpp -> converted to JPEG."""
+    image_bytes, filename = generate_image(ImageFormat.PNG, ImageMode.RGB, (1500, 1500), noise=True)
+    resource, _ = counted_resource(image_bytes, filename)
+    assert resource.content and len(resource.content) >= 50 * 1024  # guard: actually above threshold
+
+    result = perform_image_optimization(resource)
+
+    assert result.success is True
+    assert result.original_image.format is ImageFormat.PNG
+    assert result.new_image.format is ImageFormat.JPEG
+    assert result.new_image.mode is ImageMode.RGB
+    assert result.new_image.size == (MEDIUM_WIDTH_SIZE[0], 1080)
+
+    # png -> jpg rename happened on the resource, media_type re-derived
+    assert resource.filename.endswith(".jpg")
+    assert resource.media_type == "image/jpeg"
+
+    with Image.open(BytesIO(resource.content)) as optimized:
+        assert optimized.format == "JPEG"
+
+
+def test_optimization_resized_rgba_png_stays_png():
+    """Real (random) alpha channel: no useless-transparency drop, no conversion - only resize."""
+    image_bytes, filename = generate_image(ImageFormat.PNG, ImageMode.RGBA, (1500, 1500), noise=True)
+    resource, _ = counted_resource(image_bytes, filename)
+    assert len(resource.content) >= 50 * 1024
+
+    result = perform_image_optimization(resource)
+
+    assert result.success is True
+    assert result.new_image.format is ImageFormat.PNG  # stays png
+    assert result.new_image.mode is ImageMode.RGBA
+    assert result.new_image.size == (MEDIUM_WIDTH_SIZE[0], 1080)
+    assert resource.filename == filename  # no rename
+
+    with Image.open(BytesIO(resource.content)) as optimized:
+        assert optimized.format == "PNG"
+        assert optimized.mode == "RGBA"
+
+
+def test_optimization_drops_useless_transparency_and_stays_png():
+    """Solid RGBA (fully opaque) above the size threshold: extra-efficient -> EXTRA resize,
+    useless alpha dropped (RGBA -> RGB), format stays PNG, no rename."""
+    image_bytes, filename = generate_image(ImageFormat.PNG, ImageMode.RGBA, (4000, 4000), noise=False)
+    resource, _ = counted_resource(image_bytes, filename)
+    assert len(resource.content) >= 50 * 1024  # 70KB in practice: above the skip threshold
+
+    result = perform_image_optimization(resource)
+
+    assert result.success is True
+    assert result.original_image.mode is ImageMode.RGBA
+    assert result.new_image.mode is ImageMode.RGB  # useless transparency dropped
+    assert result.new_image.format is ImageFormat.PNG  # efficient bpp -> no conversion
+    assert result.new_image.size == (2560, 2560)  # extra-efficient -> EXTRA_WIDTH_SIZE
+
+    with Image.open(BytesIO(resource.content)) as optimized:
+        assert optimized.mode == "RGB"
+        assert optimized.size == result.new_image.size
+    assert resource.filename == filename  # no rename: png stayed png
+
+
+def test_optimization_result_is_reportable():
+    """The result must be plain data (picklable across processes) with full before/after info."""
+    image_bytes, filename = generate_image(ImageFormat.JPEG, ImageMode.RGB, (1500, 1500), noise=True)
+    resource, _ = counted_resource(image_bytes, filename)
+
+    result = perform_image_optimization(resource)
+
+    as_dict = result.as_dict()
+    assert as_dict["original_image"]["size"] == (1500, 1500)
+    assert as_dict["new_image"]["size"][0] == MEDIUM_WIDTH_SIZE[0]
+    assert as_dict["success"] is True
+
+
+# ---------------------------------------------------------------------------
+# real-file sanity (skipped unless samples are present)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not images_dir.exists(), reason="samples/images not available")
+def test_real_file_reads_stay_lazy():
+    """Sanity against a real sample: header ops stay cheap, full read is exact."""
+    sample = next(p for p in images_dir.iterdir() if p.suffix.lower() == ".png")
+
+    image_path = images_dir / sample.name
+    data = image_path.read_bytes()
+    info = ZipInfo.from_file(image_path)
+
+    streams: list[CountingBytesIO] = []
+
+    def stream_bytes(zip_info: ZipInfo) -> CountingBytesIO:
+        stream = CountingBytesIO(data)
+        streams.append(stream)
+        return stream
+
+    resource = Resource(info=info, stream_bytes=stream_bytes)
+
+    first = get_image_info(resource)
+    lazy_served = sum(s.served for s in streams)
+    second = get_image_info(resource)
+
+    assert first.size == second.size
+    assert lazy_served < max(4096, len(data) * 0.1), f"header ops pulled {lazy_served} of {len(data)} bytes"
