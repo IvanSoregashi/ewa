@@ -12,7 +12,6 @@ from library.asserts import require
 logger = logging.getLogger("epub_core")
 
 
-
 class EpubCore:
     """Manages the structural core of an EPUB archive."""
 

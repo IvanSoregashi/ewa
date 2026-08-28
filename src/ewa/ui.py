@@ -5,7 +5,7 @@ from rich.prompt import Prompt, Confirm
 console = Console()
 
 
-def ask_user(question: str, default: str = None) -> str:
+def ask_user(question: str, default: str) -> str:
     """Asks the user for input."""
     return Prompt.ask(question, default=default)
 

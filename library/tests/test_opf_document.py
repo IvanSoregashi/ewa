@@ -308,14 +308,14 @@ def test_opf_create_from_scratch(package_class):
         doc = PydanticPackageDocument(
             version="2.0", unique_identifier="id", metadata=meta, manifest=PydanticManifest(), spine=PydanticSpine()
         )
-        doc.metadata.add_metadata("identifier", "978...", id="id")
+        doc.metadata.add_metadata(DCMetadataType.IDENTIFIER, "978...", id="id")
     else:
         # Custom can be created empty and filled
         doc = CustomPackageDocument.create(version="2.0")
         doc.metadata = CustomMetadata.create()
         doc.manifest = CustomManifest.create()
         doc.spine = CustomSpine.create()
-        doc.metadata.add_metadata("identifier", "978...", id="id")
+        doc.metadata.add_metadata(DCMetadataType.IDENTIFIER, "978...", id="id")
 
     doc.manifest.add_item(id="item1", href="1.xhtml", media_type="text/html")
     doc.spine.add_itemref(idref="item1")
@@ -331,8 +331,8 @@ def test_opf_metadata_remove(package_class):
     metadata = doc.metadata
 
     # Remove all subjects and creators
-    metadata.remove_metadata("subject")
-    metadata.remove_metadata("creator")
+    metadata.remove_metadata(DCMetadataType.SUBJECT)
+    metadata.remove_metadata(DCMetadataType.CREATOR)
 
     # Verify after re-parsing
     new_doc = package_class.from_xml_bytes(doc.to_xml_bytes())

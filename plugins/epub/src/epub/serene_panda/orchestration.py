@@ -10,34 +10,10 @@ from library.epub.utils import string_to_int_hash64
 from ewa.cli.progress import track_unknown, track_sized
 from ewa.main import settings
 from ewa.ui import print_success, print_error
-from library.epub.epub_core import EpubSpecification
 
 from library.epub.epub import EPUB
 
 logger = logging.getLogger(__name__)
-
-
-def extract_to_destination(book: EpubFileModel) -> bool:
-    try:
-        font_bytes = book.to_epub().get_file_bytes(book.serene_panda_ttf)
-        hash_num = string_to_int_hash64(font_bytes)
-        new_filename = f"{hash_num}_{Path(book.serene_panda_ttf).name}"
-        new_filepath = settings.profile_dir / "epub" / "serene_panda" / "fonts" / new_filename
-        if not new_filepath.exists():
-            new_filepath.write_bytes(font_bytes)
-    except Exception as e:
-        logger.error(f"extract_to_destination: {e}")
-        return True
-    return False
-
-
-def extract_font_files(table: EpubBookTable):
-    path = settings.profile_dir / "epub" / "serene_panda" / "fonts"
-    path.mkdir(parents=True, exist_ok=True)
-    with ThreadPoolExecutor(max_workers=12) as executor:
-        errs = list(track_unknown(executor.map(extract_to_destination, track_sized(table.get_encrypted_epubs()))))
-        print_error(str(sum(errs)))
-        print_success(str(len(errs)))
 
 
 def translation_dictionary(
@@ -68,9 +44,7 @@ def translate_serene_panda(epub_path: Path, destination: Path):
             return
 
         # 1. translate htmls
-        epub.save_changes_to_a_dir()
         # 2. remove font file
-        epub.core.package_document.manifest
         # 3. remove font from opf
         # 4. remove font from css
 

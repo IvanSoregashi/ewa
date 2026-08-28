@@ -13,7 +13,7 @@ def load_data(csv_path: str) -> pd.DataFrame:
     return df
 
 
-def plot_format_mode_percentage(df: pd.DataFrame, save_path: str = None, max_filesize_kb: int = None):
+def plot_format_mode_percentage(df: pd.DataFrame, save_path: str | None = None, max_filesize_kb: int | None = None):
     if max_filesize_kb:
         df = df[df["filesize_kb"] <= max_filesize_kb]
 
@@ -34,7 +34,7 @@ def plot_format_mode_percentage(df: pd.DataFrame, save_path: str = None, max_fil
 
 
 def plot_filesize_distribution(
-    df: pd.DataFrame, save_path: str = None, min_filesize_kb: int = None, max_filesize_kb: int = None
+    df: pd.DataFrame, save_path: str | None = None, min_filesize_kb: int | None = None, max_filesize_kb: int | None = None
 ):
     data = df["filesize_kb"]
 
@@ -63,7 +63,7 @@ def plot_filesize_distribution(
 
 
 def plot_bpp_distribution(
-    df: pd.DataFrame, save_path: str = None, bpp_from: int | None = None, bpp_to: int | None = None
+    df: pd.DataFrame, save_path: str | None = None, bpp_from: int | None = None, bpp_to: int | None = None
 ):
     data = df["bpp"]
 
@@ -91,7 +91,7 @@ def plot_bpp_distribution(
     plt.show()
 
 
-def plot_format_distribution(df: pd.DataFrame, save_path: str = None):
+def plot_format_distribution(df: pd.DataFrame, save_path: str | None = None):
     counts = df["format"].value_counts()
 
     fig, ax = plt.subplots(figsize=(8, 8))
@@ -105,7 +105,7 @@ def plot_format_distribution(df: pd.DataFrame, save_path: str = None):
     return counts
 
 
-def plot_mode_distribution(df: pd.DataFrame, save_path: str = None):
+def plot_mode_distribution(df: pd.DataFrame, save_path: str | None = None):
     counts = df["mode"].value_counts()
 
     fig, ax = plt.subplots(figsize=(8, 8))
@@ -119,7 +119,7 @@ def plot_mode_distribution(df: pd.DataFrame, save_path: str = None):
     return counts
 
 
-def plot_filesize_by_format(df: pd.DataFrame, save_path: str = None):
+def plot_filesize_by_format(df: pd.DataFrame, save_path: str | None = None):
     fig, ax = plt.subplots(figsize=(12, 6))
     df.boxplot(column="filesize_kb", by="format", ax=ax)
     ax.set_xlabel("Format")
@@ -132,7 +132,7 @@ def plot_filesize_by_format(df: pd.DataFrame, save_path: str = None):
     plt.show()
 
 
-def plot_bpp_by_format(df: pd.DataFrame, save_path: str = None):
+def plot_bpp_by_format(df: pd.DataFrame, save_path: str | None = None):
     fig, ax = plt.subplots(figsize=(12, 6))
     df.boxplot(column="bpp", by="format", ax=ax)
     ax.set_xlabel("Format")
@@ -145,7 +145,7 @@ def plot_bpp_by_format(df: pd.DataFrame, save_path: str = None):
     plt.show()
 
 
-def plot_filesize_vs_bpp(df: pd.DataFrame, save_path: str = None):
+def plot_filesize_vs_bpp(df: pd.DataFrame, save_path: str | None = None):
     fig, ax = plt.subplots(figsize=(10, 8))
     scatter = ax.scatter(df["bpp"], df["filesize_kb"], alpha=0.5, c=df["pixels"], cmap="viridis", s=20)
     ax.set_xlabel("Bits Per Pixel")
@@ -163,7 +163,7 @@ def plot_filesize_vs_bpp(df: pd.DataFrame, save_path: str = None):
     plt.show()
 
 
-def plot_processing_time_distribution(df: pd.DataFrame, save_path: str = None):
+def plot_processing_time_distribution(df: pd.DataFrame, save_path: str | None = None):
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
     axes[0].hist(df["processing_time"], bins=50, edgecolor="black", alpha=0.7, color="orange")
@@ -186,7 +186,7 @@ def plot_processing_time_distribution(df: pd.DataFrame, save_path: str = None):
     plt.show()
 
 
-def plot_animated_vs_static(df: pd.DataFrame, save_path: str = None):
+def plot_animated_vs_static(df: pd.DataFrame, save_path: str | None = None):
     df["animated"] = df["is_animated"].apply(lambda x: "Animated" if x and x != "False" else "Static")
     counts = df["animated"].value_counts()
 
@@ -201,7 +201,7 @@ def plot_animated_vs_static(df: pd.DataFrame, save_path: str = None):
     return counts
 
 
-def plot_image_dimensions(df: pd.DataFrame, save_path: str = None):
+def plot_image_dimensions(df: pd.DataFrame, save_path: str | None = None):
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
     axes[0].hist(df["width"], bins=50, edgecolor="black", alpha=0.7, color="purple")
@@ -220,7 +220,7 @@ def plot_image_dimensions(df: pd.DataFrame, save_path: str = None):
     plt.show()
 
 
-def plot_pixels_distribution(df: pd.DataFrame, save_path: str = None):
+def plot_pixels_distribution(df: pd.DataFrame, save_path: str | None = None):
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.hist(df["pixels"], bins=50, edgecolor="black", alpha=0.7, color="coral")
     ax.set_xlabel("Total Pixels (width × height)")

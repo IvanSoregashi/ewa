@@ -7,19 +7,12 @@ from library.image.constants import ImageFormat, ImageMode, EFFICIENT_BPP, EXTRA
 
 
 @dataclass
-class ConversionSettings:
-    max_width: int
-    max_height: int
-    convert_rgb_to_jpg: bool
-    quality: int | None
-
-
-@dataclass
 class ImageInfo:
     size: tuple[int, int]
     filesize: int
     format: ImageFormat
     mode: ImageMode
+    extrema: tuple[float, float] | tuple[tuple[int, int], ...] | None = None
 
     @classmethod
     def from_image(cls, image: Image.Image, filesize: int) -> ImageInfo:
@@ -55,8 +48,17 @@ class ImageInfo:
     def is_extra_efficient(self) -> bool:
         return self.bpp < EXTRA_EFFICIENT_BPP
 
+    @property
+    def useless_transparency(self) -> bool:
+        return (
+            self.extrema is not None
+            and self.mode is ImageMode.RGBA
+            and len(self.extrema) == 4
+            and self.extrema[3][0] == 255
+        )
 
-@dataclass
+
+@dataclass(kw_only=True)
 class OperationResult:
     success: bool = False
     error: str | None = None
@@ -64,3 +66,9 @@ class OperationResult:
 
     def as_dict(self) -> dict:
         return asdict(self)
+
+
+@dataclass(kw_only=True)
+class OptimizationResult(OperationResult):
+    original_image: ImageInfo
+    new_image: ImageInfo | None = None

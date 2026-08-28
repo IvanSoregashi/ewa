@@ -11,18 +11,17 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     profile_dir: Path = Path("~/.ewa").expanduser().absolute()
     current_dir: DirectoryPath = Path(".").absolute()
-    database_file: FilePath | None = None
-    database_url: str | None = None
+    database_filename: str = "database.db"
+    database_path: FilePath = Path("~/.ewa").expanduser().absolute()
+    database_url: str = f"sqlite:///{Path("~/.ewa").expanduser().absolute() / "database.db"}"
     log_level_name: str = "INFO"
     log_level: int = 10
     is_windows: bool = os.name == "nt"
 
     def model_post_init(self, context: Any, /) -> None:
         self.profile_dir.mkdir(parents=True, exist_ok=True)
-        if self.database_file is None:
-            self.database_file = self.profile_dir / "database.db"
-        if self.database_url is None:
-            self.database_url = f"sqlite:///{self.database_file}"
+        self.database_path = self.profile_dir / self.database_filename
+        self.database_url = f"sqlite:///{self.database_path}"
         self.log_level = logging.getLevelName(self.log_level_name)
 
 

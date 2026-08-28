@@ -19,7 +19,6 @@ from library.epub.media_type import FileName
 logger = logging.getLogger("verification")
 
 
-
 class EpubSpecification(StrEnum):
     UNKNOWN = "UNKNOWN"
     EPUB_MIMETYPE = "EPUB_MIMETYPE"
@@ -71,7 +70,6 @@ def verify_mimetype(epub: EPUB) -> bool:
             raise ValueError(message)
 
     return True
-
 
 
 def verify_serene_panda_encryption(epub: EPUB) -> bool:

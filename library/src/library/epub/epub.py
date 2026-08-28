@@ -17,6 +17,7 @@ from library.epub.media_type import FileName
 
 logger = logging.getLogger("epub")
 
+
 class EPUB:
     def __init__(self, path: str | Path) -> None:
         self.path: Path = Path(path)

@@ -81,6 +81,15 @@ class Resource:
     def hash_prefixed_name(self):
         return f"{self.int64_hash}_{Path(self.info.filename).name}"
 
+    @property
+    def filename(self):
+        return self.info.filename
+
+    @filename.setter
+    def filename(self, value: str) -> None:
+        self.info.filename = value
+        self.media_type, self.role = type_and_role_from_filename(self.info.filename)
+
 
 class ResourceIndex:
     """Auto-indexed collection of EPUBResource objects.

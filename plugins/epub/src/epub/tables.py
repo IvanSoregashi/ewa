@@ -87,7 +87,7 @@ class EpubFileModel(SQLModel, table=True):
         return list(map(str, self.as_dict().values()))  # TODO: proper formatting
 
     def comparable_string(self) -> str:
-        string = Path(self.filepath).stem + " " + self.title
+        string = Path(self.filepath).stem + " " + str(self.title)
         string = string.replace("_", " ").replace("+", " ").replace("  ", " ").strip()
         string = re.sub(r"\[.*?\]|\(.*?\)", "", string)
         string = re.sub(r"\d+-\d+", "", string)

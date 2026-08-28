@@ -9,9 +9,7 @@ from library.image.constants import (
     ImageFormat,
     ImageMode,
 )
-from library.image.models import ConversionSettings, ImageInfo, OperationResult
-
-epub_image_settings = ConversionSettings(max_width=1080, max_height=0, convert_rgb_to_jpg=True, quality=80)
+from library.image.models import ImageInfo, OperationResult, OptimizationResult
 
 
 def crop_dimensions(image_dimensions: tuple[int, int], max_dimensions: tuple[int, int]) -> tuple[int, int]:
@@ -92,15 +90,13 @@ def useless_transparency_mode(image: Image.Image) -> bool:
     return len(extrema) == 4 and extrema[3][0] == 255
 
 
-def optimize_png_image(
-    image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo
-) -> tuple[OperationResult, ImageInfo | None]:
+def optimize_png_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> OptimizationResult:
     image_info = deepcopy(original_image_info)
 
     if getattr(image, "is_animated", None):
-        return OperationResult(skip="Animated PNG"), None
+        return OptimizationResult(skip="Animated PNG", original_image=original_image_info)
 
-    #  Reduce the image dimensions
+    # Reduce the image dimensions
     if image_info.is_extra_efficient:
         image, resized_size = crop_image_dimensions(image, EXTRA_WIDTH_SIZE)
     else:
@@ -117,19 +113,17 @@ def optimize_png_image(
         image_info.format = ImageFormat.JPEG
         image.save(buffer, format=ImageFormat.JPEG, optimize=True, quality=85)
         image_info.filesize = len(buffer.getvalue())
-        return OperationResult(success=True), image_info
+        return OptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
 
     #  Not processed 1, L, LA, I, P modes, need additional investigation
     if original_image_info == image_info:
-        return OperationResult(skip="Image was not optimized"), None
+        return OptimizationResult(skip="Image was not optimized", original_image=original_image_info)
 
     image.save(buffer, format=image_info.format, optimize=True)
-    return OperationResult(success=True), image_info
+    return OptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
 
 
-def optimize_jpg_image(
-    image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo
-) -> tuple[OperationResult, ImageInfo | None]:
+def optimize_jpg_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> OptimizationResult:
     image_info = deepcopy(original_image_info)
     image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
 
@@ -137,55 +131,42 @@ def optimize_jpg_image(
     if resized_size != image_info.size:
         image_info.size = resized_size
         image.save(buffer, format=ImageFormat.JPEG, optimize=True, quality=85)
-        return OperationResult(success=True), image_info
+        return OptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
 
-    return OperationResult(skip="Image was not optimized"), None
+    return OptimizationResult(skip="Image was not optimized", original_image=original_image_info)
 
 
-def optimize_gif_image(
-    image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo
-) -> tuple[OperationResult, ImageInfo | None]:
+def optimize_gif_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> OptimizationResult:
     image_info = deepcopy(original_image_info)
 
     if getattr(image, "is_animated", None):
-        return OperationResult(skip="Animated GIF"), None
+        return OptimizationResult(skip="Animated GIF", original_image=original_image_info)
 
     image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
 
     if resized_size != image_info.size:
         image_info.size = resized_size
         image.save(buffer, format=ImageFormat.GIF, optimize=True, quality=85)
-        return OperationResult(success=True), image_info
+        return OptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
 
-    return OperationResult(skip="Image was not optimized"), None
+    return OptimizationResult(skip="Image was not optimized", original_image=original_image_info)
 
 
-def optimization_machine(
-    image: Image.Image, buffer: BytesIO, filesize: int
-) -> tuple[OperationResult, ImageInfo | None]:
+def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> OptimizationResult:
     min_filesize = 50 * 1024
+    original_image_info = ImageInfo.from_image(image=image, filesize=filesize)
     if filesize < min_filesize:
-        return OperationResult(skip=f"Image is smaller then min threshold {filesize / 1024:.2fKB}"), None
+        return OptimizationResult(
+            skip=f"Image is smaller then min threshold {filesize / 1024:.2fKB}", original_image=original_image_info
+        )
 
-    image_info = ImageInfo.from_image(image=image, filesize=filesize)
+    if original_image_info.format == ImageFormat.PNG:
+        return optimize_png_image(image, buffer, original_image_info)
 
-    if image_info.format == ImageFormat.PNG:
-        return optimize_png_image(image, buffer, image_info)
+    if original_image_info.format == ImageFormat.JPEG:
+        return optimize_jpg_image(image, buffer, original_image_info)
 
-    if image_info.format == ImageFormat.JPEG:
-        return optimize_jpg_image(image, buffer, image_info)
+    if original_image_info.format == ImageFormat.GIF:
+        return optimize_gif_image(image, buffer, original_image_info)
 
-    if image_info.format == ImageFormat.GIF:
-        return optimize_gif_image(image, buffer, image_info)
-
-    return OperationResult(skip="Image was not optimized"), None
-
-
-def optimize_bytes(data: bytes, min_filesize: int = 50 * 1024) -> tuple[bytes | None, ImageInfo | None]:
-    """Bytes-in, bytes-out entry point. Returns (None, None) if skipped."""
-    if len(data) < min_filesize:
-        return None, None
-    with Image.open(BytesIO(data)) as image:
-        buffer = BytesIO()
-        result, info = optimization_machine(image, buffer, filesize=len(data))
-        return (buffer.getvalue(), info) if result.success else (None, None)
+    return OptimizationResult(skip="Image was not optimized", original_image=original_image_info)

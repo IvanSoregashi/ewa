@@ -5,6 +5,9 @@ stream_bytes callable, which is all we need to count what the reader pulls throu
 """
 
 import io
+import random
+from collections.abc import Callable
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZipInfo
@@ -12,11 +15,13 @@ from zipfile import ZipInfo
 import pytest
 from PIL import Image
 
-from library.epub.image_recipe import get_image_header
+from library.epub.image_recipe import get_image_info, get_image_info_with_extrema
 from library.epub.resources import Resource
+from library.image.constants import ImageFormat, ImageMode
 
 JUNK = b"\x00" * (5 * 1024 * 1024)
 images_dir = Path("samples") / "images"
+
 
 class CountingBytesIO(io.BytesIO):
     def __init__(self, data: bytes):
@@ -36,13 +41,25 @@ def counted_resource(data: bytes, filename: str) -> tuple[Resource, CountingByte
     resource = Resource(info=info, stream_bytes=lambda i: stream)
     return resource, stream
 
-def real_counted_resource(image_name: str) -> tuple[Resource, CountingBytesIO]:
+
+def real_counted_resource(image_name: str) -> tuple[Resource, Callable[[], int]]:
+    """data is read from disk ONCE at setup - not part of the accounting."""
     image_path = images_dir / image_name
-    zip_info = ZipInfo.from_file(image_path)
-    assert zip_info.file_size == image_path.stat().st_size
-    stream = CountingBytesIO(image_path.read_bytes())
-    resource = Resource(info=zip_info, stream_bytes=lambda i: stream)
-    return resource, stream
+    data = image_path.read_bytes()
+
+    streams: list[CountingBytesIO] = []
+
+    def stream_bytes(info: ZipInfo) -> CountingBytesIO:
+        stream = CountingBytesIO(data)  # fresh instance per stream() call
+        streams.append(stream)
+        return stream
+
+    info = ZipInfo.from_file(image_path)
+
+    def total_served() -> int:
+        return sum(s.served for s in streams)
+
+    return Resource(info=info, stream_bytes=stream_bytes), total_served
 
 
 def image_with_junk(fmt: str, junk_size: int = len(JUNK)) -> bytes:
@@ -50,30 +67,66 @@ def image_with_junk(fmt: str, junk_size: int = len(JUNK)) -> bytes:
     Image.new("RGB", (10, 10), "red").save(buffer, format=fmt)
     return buffer.getvalue() + b"\x00" * junk_size
 
+@lru_cache
+def generate_image(format: ImageFormat, mode: ImageMode, size: tuple[int, int], noise: bool = False) -> bytes:
+    """Generate image bytes of the given format/mode/size.
+
+    noise=False -> solid single-color image (compresses well).
+    noise=True  -> every pixel random (JPEG will be large and incompressible).
+
+    Supported combos: PNG+RGB, PNG+RGBA, JPEG+RGB.
+    """
+    supported = {
+        (ImageFormat.PNG, ImageMode.RGB),
+        (ImageFormat.PNG, ImageMode.RGBA),
+        (ImageFormat.JPEG, ImageMode.RGB),
+    }
+    if (format, mode) not in supported:
+        raise ValueError(f"Unsupported format/mode combination: {format}/{mode}")
+
+    if noise:
+        channels = 3 if mode is ImageMode.RGB else 4
+        raw = random.randbytes(size[0] * size[1] * channels)
+        image = Image.frombytes(str(mode), size, raw)
+    else:
+        image = Image.new(str(mode), size, "red")
+
+    buffer = BytesIO()
+    image.save(buffer, format=str(format))
+    return buffer.getvalue()
 
 @pytest.fixture(params=["PNG", "JPEG"])
 def payload(request) -> tuple[bytes, str]:
     fmt = request.param
     return image_with_junk(fmt), f"image.{fmt.lower()}"
 
+
 def test_the_file():
-    resource, stream = real_counted_resource("cursor-2025-models.png")
-    info = get_image_header(resource)
+    resource, total_streamed = real_counted_resource("cursor-2025-models.png")
+    size = resource.info.file_size
+
     print()
     print(resource.info)
+    info = get_image_info(resource)
     print(info)
-    print(stream.served)
-    info = get_image_header(resource)
-    print(stream.served)
-    info = get_image_header(resource)
-    print(stream.served)
+    print(total_streamed())
+    get_image_info(resource)
+    print(total_streamed())
+    print(f"{get_image_info_with_extrema(resource)=}")
+    print(total_streamed())
+    resource.content
+    print(total_streamed())
+    get_image_info(resource)
+    print(total_streamed())
+    get_image_info_with_extrema(resource)
+    print(total_streamed())
 
 
 def test_get_image_header_reads_only_header(payload):
     data, filename = payload
     resource, stream = counted_resource(data, filename)
 
-    info = get_image_header(resource)
+    info = get_image_info(resource)
 
     assert info.size == (10, 10)
     assert stream.served < 4096, f"read {stream.served} bytes of {len(data)}-byte member"
@@ -95,7 +148,7 @@ def test_bigger_dimensions_stay_cheap():
     data = buffer.getvalue()
 
     resource, stream = counted_resource(data, "image.jpg")
-    info = get_image_header(resource)
+    info = get_image_info(resource)
 
     assert info.size == (4000, 4000)
     assert stream.served < (len(data) * 0.1), f"read {stream.served} bytes of {len(data)}-byte member"
