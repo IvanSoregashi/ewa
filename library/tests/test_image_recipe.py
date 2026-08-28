@@ -13,6 +13,7 @@ from pathlib import Path
 from zipfile import ZipInfo
 
 import pytest
+
 from PIL import Image
 
 from library.epub.image_recipe import get_image_info, get_image_info_with_extrema
@@ -34,18 +35,9 @@ class CountingBytesIO(io.BytesIO):
         return chunk
 
 
-def counted_resource(data: bytes, filename: str) -> tuple[Resource, CountingBytesIO]:
+def counted_resource(data: bytes, filename: str) -> tuple[Resource, Callable[[], int]]:
     info = ZipInfo(filename)
     info.file_size = len(data)
-    stream = CountingBytesIO(data)
-    resource = Resource(info=info, stream_bytes=lambda i: stream)
-    return resource, stream
-
-
-def real_counted_resource(image_name: str) -> tuple[Resource, Callable[[], int]]:
-    """data is read from disk ONCE at setup - not part of the accounting."""
-    image_path = images_dir / image_name
-    data = image_path.read_bytes()
 
     streams: list[CountingBytesIO] = []
 
@@ -54,21 +46,32 @@ def real_counted_resource(image_name: str) -> tuple[Resource, Callable[[], int]]
         streams.append(stream)
         return stream
 
-    info = ZipInfo.from_file(image_path)
-
     def total_served() -> int:
         return sum(s.served for s in streams)
 
     return Resource(info=info, stream_bytes=stream_bytes), total_served
 
 
-def image_with_junk(fmt: str, junk_size: int = len(JUNK)) -> bytes:
-    buffer = BytesIO()
-    Image.new("RGB", (10, 10), "red").save(buffer, format=fmt)
-    return buffer.getvalue() + b"\x00" * junk_size
+def real_counted_resource(image_name: str) -> tuple[Resource, Callable[[], int]]:
+    """data is read from disk ONCE at setup - not part of the accounting."""
+    image_path = images_dir / image_name
+    data = image_path.read_bytes()
+    info = ZipInfo.from_file(image_path)
+
+    streams: list[CountingBytesIO] = []
+
+    def stream_bytes(info: ZipInfo) -> CountingBytesIO:
+        stream = CountingBytesIO(data)  # fresh instance per stream() call
+        streams.append(stream)
+        return stream
+
+    def total_served() -> int:
+        return sum(s.served for s in streams)
+
+    return Resource(info=info, stream_bytes=stream_bytes), total_served
 
 @lru_cache
-def generate_image(format: ImageFormat, mode: ImageMode, size: tuple[int, int], noise: bool = False) -> bytes:
+def generate_image(image_format: ImageFormat, mode: ImageMode, size: tuple[int, int], noise: bool = False,) -> tuple[bytes, str]:
     """Generate image bytes of the given format/mode/size.
 
     noise=False -> solid single-color image (compresses well).
@@ -81,8 +84,8 @@ def generate_image(format: ImageFormat, mode: ImageMode, size: tuple[int, int], 
         (ImageFormat.PNG, ImageMode.RGBA),
         (ImageFormat.JPEG, ImageMode.RGB),
     }
-    if (format, mode) not in supported:
-        raise ValueError(f"Unsupported format/mode combination: {format}/{mode}")
+    if (image_format, mode) not in supported:
+        raise ValueError(f"Unsupported format/mode combination: {image_format}/{mode}")
 
     if noise:
         channels = 3 if mode is ImageMode.RGB else 4
@@ -92,16 +95,11 @@ def generate_image(format: ImageFormat, mode: ImageMode, size: tuple[int, int], 
         image = Image.new(str(mode), size, "red")
 
     buffer = BytesIO()
-    image.save(buffer, format=str(format))
-    return buffer.getvalue()
-
-@pytest.fixture(params=["PNG", "JPEG"])
-def payload(request) -> tuple[bytes, str]:
-    fmt = request.param
-    return image_with_junk(fmt), f"image.{fmt.lower()}"
+    image.save(buffer, format=str(image_format))
+    return buffer.getvalue(), f"{size[0]}x{size[1]}x{mode}_{"NOISY" if noise else "RED"}.{image_format}"
 
 
-def test_the_file():
+def test_the_file(resource, total_streamed):
     resource, total_streamed = real_counted_resource("cursor-2025-models.png")
     size = resource.info.file_size
 
@@ -122,14 +120,21 @@ def test_the_file():
     print(total_streamed())
 
 
-def test_get_image_header_reads_only_header(payload):
-    data, filename = payload
-    resource, stream = counted_resource(data, filename)
+def test_get_image_header_reads_only_header():
+    image_size = (1000, 1000)
+    image_bytes, filename = generate_image(ImageFormat.PNG, ImageMode.RGB, image_size)
+    resource, total_streamed = counted_resource(image_bytes, filename)
 
     info = get_image_info(resource)
 
-    assert info.size == (10, 10)
-    assert stream.served < 4096, f"read {stream.served} bytes of {len(data)}-byte member"
+    assert info.size == image_size
+    print(total_streamed())
+    print(total_streamed())
+    info = get_image_info(resource)
+    print(total_streamed())
+    info = get_image_info_with_extrema(resource)
+    print(total_streamed())
+    assert total_streamed() < 4096, f"read {total_streamed()} bytes of {len(image_bytes)}-byte member"
 
 
 def test_full_read_registers_exactly_payload_size():
