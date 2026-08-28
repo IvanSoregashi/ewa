@@ -7,7 +7,7 @@ is all we need to count what the reader actually pulls through.
 
 import io
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
@@ -385,7 +385,7 @@ def test_optimization_result_is_reportable():
 
 
 @pytest.fixture(scope="session")
-def image_on_disk() -> Path:
+def image_on_disk() -> Iterator[Path]:
     """A generated image written to the real images dir; removed after the session."""
     images_dir.mkdir(parents=True, exist_ok=True)
     image_bytes, filename = generate_image(ImageFormat.PNG, ImageMode.RGB, (1000, 1000), noise=True)
@@ -422,9 +422,7 @@ def test_real_file_reads_stay_lazy(image_on_disk: Path):
 
     assert first.size == second.size == (1000, 1000)
     lazy_served = total_served()
-    assert lazy_served < max(4096, len(image_on_disk.read_bytes()) * 0.1), (
-        f"header ops pulled {lazy_served} bytes"
-    )
+    assert lazy_served == 114, f"header ops pulled {lazy_served} bytes"
 
     before_content = total_served()
     assert len(resource.content) == image_on_disk.stat().st_size
