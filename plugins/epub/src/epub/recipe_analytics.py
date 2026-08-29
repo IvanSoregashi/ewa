@@ -1,7 +1,14 @@
 from pathlib import Path
 
-from epub.tables import ProcessedEpubTable, SkippedImageModel, ErrorImageModel, SuccessfulImageModel, \
-    SkippedImagesTable, ErrorImagesTable, SuccessfulImagesTable
+from epub.tables import (
+    ProcessedEpubTable,
+    SkippedImageModel,
+    ErrorImageModel,
+    SuccessfulImageModel,
+    SkippedImagesTable,
+    ErrorImagesTable,
+    SuccessfulImagesTable,
+)
 from library.image.models import OptimizationResult
 
 

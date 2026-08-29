@@ -1,28 +1,42 @@
 import logging
 import os
+from datetime import datetime
 from typing import Any
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import DirectoryPath, FilePath
+from pydantic import DirectoryPath
 from pathlib import Path
+
+default_db_name = "database.db"
+profile_dir = Path("~/.ewa").expanduser().absolute()
+current_dir = Path(".").absolute()
+import_time_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+is_windows: bool = os.name == "nt"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-    profile_dir: Path = Path("~/.ewa").expanduser().absolute()
-    current_dir: DirectoryPath = Path(".").absolute()
-    database_filename: str = "database.db"
-    database_path: FilePath = Path("~/.ewa").expanduser().absolute()
-    database_url: str = f"sqlite:///{Path('~/.ewa').expanduser().absolute() / 'database.db'}"
+    profile_dir: Path = profile_dir
+    current_dir: DirectoryPath = current_dir
+    database_filename: str = default_db_name
+    timestamp_db: bool = False
     log_level_name: str = "INFO"
     log_level: int = 10
-    is_windows: bool = os.name == "nt"
+    is_windows: bool = is_windows
 
     def model_post_init(self, context: Any, /) -> None:
         self.profile_dir.mkdir(parents=True, exist_ok=True)
-        self.database_path = self.profile_dir / self.database_filename
-        self.database_url = f"sqlite:///{self.database_path}"
+        if self.timestamp_db:
+            self.database_filename = f"{import_time_stamp}_{self.database_filename}"
         self.log_level = logging.getLevelName(self.log_level_name)
+
+    @property
+    def database_path(self) -> Path:
+        return self.profile_dir / self.database_filename
+
+    @property
+    def database_url(self) -> str:
+        return f"sqlite:///{self.database_path}"
 
 
 settings = Settings()

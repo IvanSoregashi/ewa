@@ -1,5 +1,6 @@
 from pathlib import Path
 import logging
+from ewa.config import settings
 from library.asserts import require
 from library.epub.epub import EPUB
 from library.epub.media_type import FileName, EpubRole
@@ -10,7 +11,7 @@ from epub.recipe_analytics import record_image_statistics
 logger = logging.getLogger(__name__)
 
 
-def fully_process_encrypted_panda(path: Path, db_url: str | None = None) -> None:
+def fully_process_encrypted_panda(path: Path) -> None:
     destination = Path()  # TODO
     try:
         with EPUB(path).stream_to(destination) as epub:
@@ -26,8 +27,7 @@ def fully_process_encrypted_panda(path: Path, db_url: str | None = None) -> None
             ]
 
             # 3.1 received statistics - save conversion info to SQL
-            if db_url:
-                record_image_statistics(path, image_optimization_results, db_url)
+            record_image_statistics(path, image_optimization_results, settings.database_url)
             # 3.2 received statistics - form a path replacement dictionary
             # 4. for the html spine resources
             #        translate

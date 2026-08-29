@@ -8,7 +8,6 @@ so it survives the per-table engine sessions).
 import sqlite3
 from pathlib import Path
 
-from PIL import Image
 from sqlmodel import Session, select
 from sqlalchemy import create_engine
 
