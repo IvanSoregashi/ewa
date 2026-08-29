@@ -35,7 +35,7 @@ class EpubZipSink:
         # info.CRC = 0
         # info.file_size = 0
         # info.compress_size = 0
-        if resource.media_type in STORE_AS_IS:
+        if resource.media_type in STORE_AS_IS or resource.filename == FileName.MIMETYPE:
             info.compress_type = ZIP_STORED
         else:
             info.compress_type = ZIP_DEFLATED
@@ -53,7 +53,6 @@ class EpubZipSink:
 
     def __enter__(self) -> "EpubZipSink":
         self._zip_file = ZipFile(self.path, "w", compression=ZIP_DEFLATED)
-        # self._write_mimetype()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

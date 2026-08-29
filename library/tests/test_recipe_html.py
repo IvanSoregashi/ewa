@@ -95,9 +95,11 @@ def test_translate_text_replaces_invalid_utf8():
 
 def test_replace_links_updates_href_and_src():
     resource = html_resource(CHAPTER)
+    # table keys/values are ARCHIVE paths; the document at OEBPS/text/chapter.xhtml
+    # refers to them via document-relative links
     table = {
-        "old_target.xhtml": "new_target.xhtml",
-        "images/old_picture.png": "images/new_picture.webp",
+        "OEBPS/text/old_target.xhtml": "OEBPS/text/new_target.xhtml",
+        "OEBPS/text/images/old_picture.png": "OEBPS/text/images/new_picture.webp",
     }
 
     replace_links(resource, table)
@@ -111,7 +113,7 @@ def test_replace_links_updates_href_and_src():
 
 def test_replace_links_touches_only_mapped_links():
     resource = html_resource(CHAPTER)
-    table = {"old_target.xhtml": "renamed.xhtml"}
+    table = {"OEBPS/text/old_target.xhtml": "OEBPS/text/renamed.xhtml"}
 
     replace_links(resource, table)
 
@@ -127,7 +129,7 @@ def test_replace_links_leaves_anchors_and_fragments():
       <a href="https://example.com/page">ext</a>
     </body></html>"""
     resource = html_resource(markup)
-    table = {"chapter2.xhtml#section": "moved.xhtml"}
+    table = {"OEBPS/text/chapter2.xhtml#section": "OEBPS/text/moved.xhtml"}
 
     replace_links(resource, table)
 
@@ -144,7 +146,7 @@ def test_replace_links_handles_multiple_occurrences():
     </body></html>"""
     resource = html_resource(markup)
 
-    replace_links(resource, {"a.xhtml": "b.xhtml"})
+    replace_links(resource, {"OEBPS/text/a.xhtml": "OEBPS/text/b.xhtml"})
 
     content = resource.content
     assert content.count(b"b.xhtml") == 3
@@ -168,7 +170,7 @@ def test_replace_links_result_still_parses():
     """Whatever pretty-print does, the output must remain a valid document
     with the same links (up to mapping)."""
     resource = html_resource(CHAPTER)
-    table = {"old_target.xhtml": "new_target.xhtml"}
+    table = {"OEBPS/text/old_target.xhtml": "OEBPS/text/new_target.xhtml"}
 
     replace_links(resource, table)
 

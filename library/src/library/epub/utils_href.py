@@ -146,7 +146,7 @@ def posix_relative_href(anchor: str, absolute_href: str) -> str:
     href, fragment = split_fragment(absolute_href)
     source_dir = posixpath.dirname(anchor)
     relpath = posixpath.relpath(href, source_dir) if source_dir else href
-    return relpath + fragment if fragment else relpath
+    return relpath + f"#{fragment}" if fragment else relpath
 
 
 def posix_absolute_href(absolute_path: str, href: str) -> str:
@@ -155,4 +155,4 @@ def posix_absolute_href(absolute_path: str, href: str) -> str:
     source_dir = posixpath.dirname(absolute_path)
     absolute_href = posixpath.join(source_dir, href) if source_dir else href
     absolute_href = posixpath.normpath(absolute_href)
-    return absolute_href + fragment if fragment else absolute_href
+    return absolute_href + f"#{fragment}" if fragment else absolute_href
