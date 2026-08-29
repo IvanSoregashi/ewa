@@ -8,7 +8,7 @@ def translate_text(resource: Resource, table: dict) -> None:
     resource.content = resource.content.decode("utf-8", errors="replace").translate(table).encode("utf-8")
 
 
-def replace_links(resource: Resource, table: dict[str, str]) -> None:
+def replace_links(resource: Resource, table: dict) -> None:
     html: HtmlElement = document_fromstring(resource.content)
     for element, attribute, link, pos in html.iterlinks():
         if link in table:

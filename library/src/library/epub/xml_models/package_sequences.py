@@ -19,12 +19,14 @@ class Manifest(BaseXmlModel, tag="manifest", ns=NamespacePrefix.OPF, nsmap=OPF_N
         self.items.append(new_item)
         return new_item
 
-    def remove_item(self, item: ManifestItem | None = None, id: str | None = None):
+    def remove_item(self, item: ManifestItem | None = None, _id: str | None = None, path: str | None = None):
         """Remove a manifest item by its id or object reference."""
         if item is not None:
             self.items = [i for i in self.items if i is not item]
-        elif id is not None:
-            self.items = [i for i in self.items if i.id != id]
+        elif _id is not None:
+            self.items = [i for i in self.items if i.id != _id]
+        elif path is not None:
+            self.items = [i for i in self.items if i.href != path]
 
 
 class SpineItemRef(BaseXmlModel, tag="itemref", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):

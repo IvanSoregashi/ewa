@@ -1,24 +1,7 @@
 import re
 from typing import Generator
 
-
-FONT_FACE = re.compile(r"@font-face\s*\{[^}]*\}")
-
 css_url_pattern: re.Pattern[bytes] = re.compile(rb'url\s*\(\s*([\'"]?)(.*?)\1\s*\)', re.IGNORECASE)
-
-
-def cleanup_panda_line(content: bytes) -> bytes:
-    new_content = content.replace(b'font-family: "SerenePanda"', b"font-family: serif").replace(
-        b"serif, serif", b"serif"
-    )
-    assert b"serenepanda" not in new_content.lower()
-    return new_content
-
-
-def cleanup_font_block(content: bytes) -> bytes:
-    new_text = re.sub(FONT_FACE, "", content.decode("utf-8"))
-    assert "serenepanda" not in new_text.lower()
-    return new_text.encode("utf-8")
 
 
 def parse_css_urls(content: bytes) -> Generator[str, None, None]:
