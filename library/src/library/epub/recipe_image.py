@@ -1,5 +1,5 @@
 import io
-from pathlib import PosixPath
+from pathlib import PurePosixPath
 
 from library.epub.resources import Resource
 from PIL import Image
@@ -32,6 +32,8 @@ def perform_image_optimization(resource: Resource) -> OptimizationResult:
     if result.success:
         resource.content = buffer.getvalue()
         if result.new_image.format is ImageFormat.JPEG and result.original_image.format is ImageFormat.PNG:
-            resource.filename = str(PosixPath(resource.filename).with_suffix(f".jpg"))
+            result.original_image.path = resource.filename
+            result.new_image.path = str(PurePosixPath(resource.filename).with_suffix(".jpg"))
+            resource.filename = result.new_image.path
 
     return result

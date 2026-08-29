@@ -12,6 +12,7 @@ class ImageInfo:
     filesize: int
     format: ImageFormat
     mode: ImageMode
+    path: str | None = None
     extrema: tuple[float, float] | tuple[tuple[int, int], ...] | None = None
 
     @classmethod

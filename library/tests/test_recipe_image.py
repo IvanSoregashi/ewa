@@ -380,6 +380,62 @@ def test_optimization_result_is_reportable():
 
 
 # ---------------------------------------------------------------------------
+# png -> jpg rename with archive-style paths
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "archive_path",
+    ["pic.png", "OEBPS/pic.png", "OEBPS/images/pic.png", "OEBPS/deep/nested/dir/pic.png", "OEBPS/v2.dir/pic.png"],
+)
+def test_rename_png_to_jpg_with_archive_paths(archive_path):
+    """The rename must only touch the final suffix and keep posix separators -
+    str(Path(...)) on Windows would emit backslashes and corrupt the archive path."""
+    image_bytes, _ = generate_image(ImageFormat.PNG, ImageMode.RGB, (1500, 1500), noise=True)
+    resource, _ = counted_resource(image_bytes, archive_path)
+    assert len(resource.content) >= 50 * 1024
+
+    result = perform_image_optimization(resource)
+
+    expected = archive_path.removesuffix(".png") + ".jpg"
+    assert result.new_image.format is ImageFormat.JPEG  # ensure the rename branch is taken
+
+    assert "\\" not in result.new_image.path
+    assert result.new_image.path == expected
+    assert resource.filename == expected
+    assert resource.media_type == "image/jpeg"
+
+    # bookkeeping: original path captured before the rename
+    assert result.original_image.path == archive_path
+    assert result.original_image.format is ImageFormat.PNG
+
+
+def test_rename_keeps_stem_with_multiple_dots():
+    image_bytes, _ = generate_image(ImageFormat.PNG, ImageMode.RGB, (1500, 1500), noise=True)
+    resource, _ = counted_resource(image_bytes, "OEBPS/images/pic.final.png")
+
+    result = perform_image_optimization(resource)
+
+    assert result.new_image.format is ImageFormat.JPEG
+    assert result.new_image.path == "OEBPS/images/pic.final.jpg"
+    assert resource.media_type == "image/jpeg"
+
+
+def test_no_rename_when_png_stays_png():
+    """Extra-efficient RGBA resize keeps the png format - path and media_type untouched."""
+    image_bytes, _ = generate_image(ImageFormat.PNG, ImageMode.RGBA, (4000, 4000), noise=False)
+    resource, _ = counted_resource(image_bytes, "OEBPS/images/solid.png")
+
+    result = perform_image_optimization(resource)
+
+    assert result.success is True
+    assert result.new_image.format is ImageFormat.PNG
+    assert result.new_image.path is None  # rename branch never ran
+    assert resource.filename == "OEBPS/images/solid.png"
+    assert resource.media_type == "image/png"
+
+
+# ---------------------------------------------------------------------------
 # real-file sanity
 # ---------------------------------------------------------------------------
 
