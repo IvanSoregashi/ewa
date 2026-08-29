@@ -55,44 +55,6 @@ def discard_empty_alpha_channels_mode(image: Image.Image) -> tuple[Image.Image, 
     return image, False
 
 
-def get_image_header_info(image: Image.Image, filesize: int) -> dict:
-    bpp = filesize / (image.width * image.height)
-    is_animated = getattr(image, "is_animated", None)
-    if is_animated:
-        n_frames = getattr(image, "n_frames", None)
-
-    result = {
-        "filesize_kb": int(filesize / 1024),
-        "size": image.size,
-        "bpp": f"{bpp:.2f}",
-        "format": image.format,
-        "mode": image.mode,
-        "is_animated": n_frames if is_animated else False,
-    }
-    return result
-
-
-def get_image_transparency_info(image: Image.Image, filesize: int) -> dict:
-    bpp = filesize / (image.width * image.height)
-    is_animated = getattr(image, "is_animated", None)
-    n_frames = getattr(image, "n_frames", None)
-    has_transparency_data = image.has_transparency_data
-    if has_transparency_data and image.format == ImageFormat.PNG:
-        if useless_transparency_mode(image):
-            has_transparency_data = "useless"
-
-    result = {
-        "original_filesize": f"{int(filesize / 1024)} Kb",
-        "original_size": image.size,
-        "bpp": f"{bpp:.2f}",
-        "original_format": image.format,
-        "original_mode": image.mode,
-        "is_animated": n_frames if is_animated else False,
-        "has_transparency_data": has_transparency_data,
-    }
-    return result
-
-
 def useless_transparency_mode(image: Image.Image) -> bool:
     extrema = image.getextrema()
     return len(extrema) == 4 and extrema[3][0] == 255

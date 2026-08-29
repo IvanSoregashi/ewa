@@ -49,6 +49,12 @@ class ImageInfo:
         image = Image.open(file)
         return cls.from_image(image=image, filesize=file.stat().st_size)
 
+    @classmethod
+    def failed(cls, path: str | None = None, filesize: int = 0) -> ImageInfo:
+        """Placeholder for images that could not even be opened:
+        zeroed dimensions, plain "UNKNOWN" format/mode strings."""
+        return cls(size=(0, 0), filesize=filesize, format="UNKNOWN", mode="UNKNOWN", path=path)
+
     @property
     def width(self) -> int:
         return self.size[0]
@@ -90,6 +96,7 @@ class ImageErrorReason(IntEnum):
     ENCODE_FAILED = 2  # encoder refused: mode/format mismatch, plugin error
     TOO_LARGE = 3  # decompression limit or memory exhaustion
     UNKNOWN = 4  # unexpected - bug territory
+    READ_ERROR = 5  # image bytes could not be obtained from the source at all
 
 
 @dataclass(kw_only=True)

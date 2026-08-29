@@ -505,6 +505,48 @@ def test_no_rename_when_png_stays_png():
 
 
 # ---------------------------------------------------------------------------
+# perform_image_optimization must never raise - pre-machine failures included
+# ---------------------------------------------------------------------------
+
+
+def test_perform_optimization_garbage_payload_returns_error_result():
+    """Bytes that Image.open rejects entirely (before optimization_machine)."""
+    resource, _ = counted_resource(b"this is not an image" * 100, "OEBPS/images/garbage.png")
+
+    result = perform_image_optimization(resource)
+
+    assert result.success is False
+    assert result.error == ImageErrorReason.DECODE_FAILED
+    assert result.new_image is None
+    info = result.original_image
+    assert info.size == (0, 0)
+    assert info.filesize == resource.info.file_size
+    assert info.path == "OEBPS/images/garbage.png"
+    assert info.format == "UNKNOWN"
+    assert info.mode == "UNKNOWN"
+
+
+def test_perform_optimization_source_read_failure_returns_read_error():
+    """stream_bytes itself explodes (corrupt zip member, vanished file) -> READ_ERROR."""
+    info = ZipInfo("OEBPS/images/unreadable.png")
+    info.file_size = 1234
+
+    def broken_stream(zip_info: ZipInfo):
+        raise OSError("image file is truncated or source vanished")
+
+    resource = Resource(info=info, stream_bytes=broken_stream)
+
+    result = perform_image_optimization(resource)
+
+    assert result.success is False
+    assert result.error == ImageErrorReason.READ_ERROR
+    assert result.original_image.size == (0, 0)
+    assert result.original_image.filesize == 1234
+    assert result.original_image.path == "OEBPS/images/unreadable.png"
+    assert result.original_image.format == "UNKNOWN"
+
+
+# ---------------------------------------------------------------------------
 # real-file sanity
 # ---------------------------------------------------------------------------
 
