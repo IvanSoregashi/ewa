@@ -34,7 +34,10 @@ def plot_format_mode_percentage(df: pd.DataFrame, save_path: str | None = None, 
 
 
 def plot_filesize_distribution(
-    df: pd.DataFrame, save_path: str | None = None, min_filesize_kb: int | None = None, max_filesize_kb: int | None = None
+    df: pd.DataFrame,
+    save_path: str | None = None,
+    min_filesize_kb: int | None = None,
+    max_filesize_kb: int | None = None,
 ):
     data = df["filesize_kb"]
 

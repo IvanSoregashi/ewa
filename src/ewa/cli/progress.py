@@ -28,7 +28,7 @@ class DisplayProgress(Progress):
         super().__init__(*args, **kwargs)
 
     def __enter__(self) -> Self:
-        builtins.print = self._intercepted_print # error[invalid-assignment]
+        builtins.print = self._intercepted_print  # error[invalid-assignment]
         self.start()
         return self
 
@@ -38,7 +38,7 @@ class DisplayProgress(Progress):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        builtins.print = self.builtin_print # error[invalid-assignment]
+        builtins.print = self.builtin_print  # error[invalid-assignment]
         self.stop()
 
     @staticmethod

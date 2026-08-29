@@ -9,7 +9,7 @@ from library.image.constants import (
     ImageFormat,
     ImageMode,
 )
-from library.image.models import ImageInfo, OperationResult, OptimizationResult
+from library.image.models import ImageInfo, OperationResult, OptimizationResult, ImageSkipReason
 
 
 def crop_dimensions(image_dimensions: tuple[int, int], max_dimensions: tuple[int, int]) -> tuple[int, int]:
@@ -94,7 +94,7 @@ def optimize_png_image(image: Image.Image, buffer: BytesIO, original_image_info:
     image_info = deepcopy(original_image_info)
 
     if getattr(image, "is_animated", None):
-        return OptimizationResult(skip="Animated PNG", original_image=original_image_info)
+        return OptimizationResult(skip=ImageSkipReason.HAS_ANIMATION, original_image=original_image_info)
 
     # Reduce the image dimensions
     if image_info.is_extra_efficient:
@@ -117,7 +117,7 @@ def optimize_png_image(image: Image.Image, buffer: BytesIO, original_image_info:
 
     #  Not processed 1, L, LA, I, P modes, need additional investigation
     if original_image_info == image_info:
-        return OptimizationResult(skip="Image was not optimized", original_image=original_image_info)
+        return OptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
 
     image.save(buffer, format=image_info.format, optimize=True)
     return OptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
@@ -131,16 +131,17 @@ def optimize_jpg_image(image: Image.Image, buffer: BytesIO, original_image_info:
     if resized_size != image_info.size:
         image_info.size = resized_size
         image.save(buffer, format=ImageFormat.JPEG, optimize=True, quality=85)
+        image_info.filesize = len(buffer.getvalue())
         return OptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
 
-    return OptimizationResult(skip="Image was not optimized", original_image=original_image_info)
+    return OptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
 
 
 def optimize_gif_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> OptimizationResult:
     image_info = deepcopy(original_image_info)
 
     if getattr(image, "is_animated", None):
-        return OptimizationResult(skip="Animated GIF", original_image=original_image_info)
+        return OptimizationResult(skip=ImageSkipReason.HAS_ANIMATION, original_image=original_image_info)
 
     image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
 
@@ -149,16 +150,14 @@ def optimize_gif_image(image: Image.Image, buffer: BytesIO, original_image_info:
         image.save(buffer, format=ImageFormat.GIF, optimize=True, quality=85)
         return OptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
 
-    return OptimizationResult(skip="Image was not optimized", original_image=original_image_info)
+    return OptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
 
 
 def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> OptimizationResult:
     min_filesize = 50 * 1024
     original_image_info = ImageInfo.from_image(image=image, filesize=filesize)
     if filesize < min_filesize:
-        return OptimizationResult(
-            skip=f"Image is smaller then min threshold {filesize / 1024:.2f}KB", original_image=original_image_info,
-        )
+        return OptimizationResult(skip=ImageSkipReason.SMALL_IMAGE, original_image=original_image_info)
 
     if original_image_info.format == ImageFormat.PNG:
         return optimize_png_image(image, buffer, original_image_info)
@@ -169,4 +168,4 @@ def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> 
     if original_image_info.format == ImageFormat.GIF:
         return optimize_gif_image(image, buffer, original_image_info)
 
-    return OptimizationResult(skip="Image was not optimized", original_image=original_image_info)
+    return OptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)

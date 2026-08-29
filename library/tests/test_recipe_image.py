@@ -132,7 +132,10 @@ def generate_image(
 
     buffer = BytesIO()
     image.save(buffer, format=str(image_format))
-    return buffer.getvalue(), f"{size[0]}x{size[1]}x{mode}_{"NOISY" if noise else "RED"}{"" if alpha is None else f"_A{alpha}"}.{image_format}"
+    return (
+        buffer.getvalue(),
+        f"{size[0]}x{size[1]}x{mode}_{'NOISY' if noise else 'RED'}{'' if alpha is None else f'_A{alpha}'}.{image_format}",
+    )
 
 
 # ---------------------------------------------------------------------------

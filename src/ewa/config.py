@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     current_dir: DirectoryPath = Path(".").absolute()
     database_filename: str = "database.db"
     database_path: FilePath = Path("~/.ewa").expanduser().absolute()
-    database_url: str = f"sqlite:///{Path("~/.ewa").expanduser().absolute() / "database.db"}"
+    database_url: str = f"sqlite:///{Path('~/.ewa').expanduser().absolute() / 'database.db'}"
     log_level_name: str = "INFO"
     log_level: int = 10
     is_windows: bool = os.name == "nt"

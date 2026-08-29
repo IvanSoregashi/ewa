@@ -117,7 +117,7 @@ def test_replace_links_touches_only_mapped_links():
 
     content = resource.content
     assert b'href="renamed.xhtml"' in content
-    assert b'images/old_picture.png' in content  # unmapped: untouched
+    assert b"images/old_picture.png" in content  # unmapped: untouched
 
 
 def test_replace_links_leaves_anchors_and_fragments():

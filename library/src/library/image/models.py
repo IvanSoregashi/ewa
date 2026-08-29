@@ -1,4 +1,5 @@
 from dataclasses import dataclass, asdict
+from enum import IntEnum
 from pathlib import Path
 
 from PIL import Image
@@ -59,11 +60,17 @@ class ImageInfo:
         )
 
 
+class ImageSkipReason(IntEnum):
+    NOT_OPTIMIZED = 1
+    SMALL_IMAGE = 2
+    HAS_ANIMATION = 3
+
+
 @dataclass(kw_only=True)
 class OperationResult:
     success: bool = False
     error: str | None = None
-    skip: str | None = None
+    skip: int | None = None
 
     def as_dict(self) -> dict:
         return asdict(self)
