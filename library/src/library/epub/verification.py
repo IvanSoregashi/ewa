@@ -1,18 +1,8 @@
 import logging
-import tempfile
-from collections.abc import Generator
-from contextlib import contextmanager
 from enum import StrEnum
-from pathlib import Path
-from typing import Self
-from zipfile import is_zipfile, ZIP_STORED
+from zipfile import ZIP_STORED
 
-from library.asserts import require
 from library.epub.epub import EPUB
-from library.epub.epub_core import EpubCore
-from library.epub.resources import ResourceIndex
-from library.epub.sink import EpubZipSink
-from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
 from library.epub.xml_literals import FileContents
 from library.epub.media_type import FileName
 

@@ -4,7 +4,7 @@ from collections.abc import Generator, Callable
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Self
-from zipfile import is_zipfile, ZIP_STORED
+from zipfile import is_zipfile
 
 from library.asserts import require
 from library.epub.epub_core import EpubCore
@@ -12,8 +12,6 @@ from library.epub.errors import EpubSpecificationError, EpubError
 from library.epub.resources import ResourceIndex
 from library.epub.sink import EpubZipSink
 from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
-from library.epub.xml_literals import FileContents
-from library.epub.media_type import FileName
 
 logger = logging.getLogger("epub")
 

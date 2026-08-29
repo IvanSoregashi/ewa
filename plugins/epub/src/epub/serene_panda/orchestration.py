@@ -1,15 +1,10 @@
 import json
 import logging
 import shutil
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from epub.tables import EpubFileModel, EpubBookTable
-from library.epub.utils import string_to_int_hash64
 
-from ewa.cli.progress import track_unknown, track_sized
 from ewa.main import settings
-from ewa.ui import print_success, print_error
 
 from library.epub.epub import EPUB
 

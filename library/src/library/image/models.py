@@ -66,10 +66,17 @@ class ImageSkipReason(IntEnum):
     HAS_ANIMATION = 3
 
 
+class ImageErrorReason(IntEnum):
+    DECODE_FAILED = 1  # pixel data unreadable: truncated, corrupt payload
+    ENCODE_FAILED = 2  # encoder refused: mode/format mismatch, plugin error
+    TOO_LARGE = 3  # decompression limit or memory exhaustion
+    UNKNOWN = 4  # unexpected - bug territory
+
+
 @dataclass(kw_only=True)
 class OperationResult:
     success: bool = False
-    error: str | None = None
+    error: int | None = None
     skip: int | None = None
 
     def as_dict(self) -> dict:

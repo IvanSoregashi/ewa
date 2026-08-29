@@ -19,7 +19,8 @@ from PIL import Image
 from library.epub.recipe_image import get_image_info, get_image_info_with_extrema, perform_image_optimization
 from library.epub.resources import Resource
 from library.image.constants import ImageFormat, ImageMode, MEDIUM_WIDTH_SIZE
-from library.image.models import ImageInfo
+from library.image.models import ImageInfo, ImageErrorReason, ImageSkipReason
+from library.image.optimization import optimization_machine
 
 images_dir = Path(__file__).parent / "samples" / "images"
 

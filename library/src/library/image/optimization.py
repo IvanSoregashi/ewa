@@ -1,3 +1,4 @@
+import logging
 from copy import deepcopy
 from io import BytesIO
 
@@ -9,7 +10,14 @@ from library.image.constants import (
     ImageFormat,
     ImageMode,
 )
-from library.image.models import ImageInfo, OperationResult, OptimizationResult, ImageSkipReason
+from library.image.models import (
+    ImageErrorReason,
+    ImageInfo,
+    OptimizationResult,
+    ImageSkipReason,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def crop_dimensions(image_dimensions: tuple[int, int], max_dimensions: tuple[int, int]) -> tuple[int, int]:
@@ -153,6 +161,24 @@ def optimize_gif_image(image: Image.Image, buffer: BytesIO, original_image_info:
     return OptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
 
 
+def classify_error(e: Exception) -> ImageErrorReason:
+    """Best-effort classification of the single-net exception.
+
+    Type checks are reliable; decode-vs-encode relies on Pillow's stable
+    message fragments, since exception types overlap between the two stages.
+    """
+    if isinstance(e, (Image.DecompressionBombError, MemoryError)):
+        return ImageErrorReason.TOO_LARGE
+
+    message = str(e).lower()
+    if any(fragment in message for fragment in ("truncated", "broken", "cannot identify", "tile cannot extend")):
+        return ImageErrorReason.DECODE_FAILED
+    if any(fragment in message for fragment in ("cannot write mode", "cannot save", "encoder")):
+        return ImageErrorReason.ENCODE_FAILED
+
+    return ImageErrorReason.UNKNOWN
+
+
 def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> OptimizationResult:
     """Single failure net: any pixel-decoding/encoding failure on a broken or
     exotic image becomes an error result instead of an exception."""
@@ -160,7 +186,6 @@ def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> 
     original_image_info = ImageInfo.from_image(image=image, filesize=filesize)
 
     try:
-
         if filesize < min_filesize:
             return OptimizationResult(skip=ImageSkipReason.SMALL_IMAGE, original_image=original_image_info)
 
@@ -176,4 +201,5 @@ def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> 
         return OptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
 
     except Exception as e:
-        return OptimizationResult(error=f"optimization failed: {e}", original_image=original_image_info)
+        logger.warning(f"optimization failed ({classify_error(e)}): {e}")
+        return OptimizationResult(error=classify_error(e), original_image=original_image_info)

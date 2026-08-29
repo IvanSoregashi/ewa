@@ -1,5 +1,4 @@
 import logging
-from enum import StrEnum
 
 from library.epub.manifest import EpubManifest
 from library.epub.media_type import EpubRole, FileName
