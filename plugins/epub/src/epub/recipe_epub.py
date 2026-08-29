@@ -36,10 +36,10 @@ def fully_process_encrypted_panda(path: Path) -> None:
                 for image_resource in epub.resources.by_role(EpubRole.IMAGE)
             ]
 
-            # 3.1 received statistics - save conversion info to SQL
+            # 3.1. received statistics - save conversion info to SQL
             recipe_analytics.record_image_statistics(path, image_optimization_results, settings.database_url)
 
-            # 3.2 received statistics - form a path replacement dictionary
+            # 3.2. received statistics - form a path replacement dictionary
             # (keys/values are archive paths; opf is at the root, so manifest hrefs match)
             replacement_dict = {}
             for result in image_optimization_results:
@@ -54,8 +54,10 @@ def fully_process_encrypted_panda(path: Path) -> None:
                     recipe_html.replace_links(html_resource, replacement_dict)
                 recipe_html.translate_text(html_resource, sp_dictionary)
 
-            # 5. package: drop the font item from the package document itself
-            #    and sync the parsed package into its resource
+            # 5. package: apply renames to the manifest, drop the font item from
+            #    the package document itself, and sync the parsed package into its resource
+            if replacement_dict:
+                recipe_package.replace_links(epub, replacement_dict)
             epub.core.package.manifest.remove_item(path=font.info.filename)
             epub.core.package_resource.content = epub.core.package.to_xml_bytes()
 

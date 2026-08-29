@@ -32,20 +32,21 @@ def relocate_package(epub: EPUB, target_package_path: str = FileName.DEFAULT_OPF
     package_resource.content = package.to_xml_bytes()
 
     # container must follow: it still points at the old opf location
-    container_resource = epub.resources.by_path(FileName.CONTAINER)
-    if container_resource is not None:
-        container_resource.content = FileTemplate.CONTAINER.format(opf_path=target_package_path).encode("utf-8")
+    container_resource = require(epub.resources.by_path(FileName.CONTAINER), FileName.CONTAINER)
+    container_resource.content = FileTemplate.CONTAINER.format(opf_path=target_package_path).encode("utf-8")
+    epub.core._manifest = None
     return True
 
 
-def replace_links(epub: EPUB, replace_links: dict[str, str]) -> None:
+def replace_links(epub: EPUB, replace_dict: dict[str, str]) -> None:
     """Update manifest hrefs after resource renames.
 
     Args and keys are archive paths; the opf is expected to be standardized to
     the archive root (standardize_opf_location), where manifest hrefs coincide
-    with archive paths.
+    with archive paths. Media-type is refreshed from the renamed resource.
     """
     manifest = epub.core.manifest
-    for old_link, new_link in replace_links.items():
+    for old_link, new_link in replace_dict.items():
         manifest_item = require(manifest.by_path(old_link), f"Manifest({old_link})")
         manifest_item.item.href = new_link
+        manifest_item.item.media_type = manifest_item.resource.media_type.value

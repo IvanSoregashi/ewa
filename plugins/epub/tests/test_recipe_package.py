@@ -1,11 +1,11 @@
-"""End-to-end smoke for the recipe_package fixes: opf standardization, manifest
-removal, sync, and packaging - using a synthetic epub, no repo fixtures."""
+"""End-to-end smoke for the recipe_package fixes: opf relocation, manifest
+removal, rename handling, and packaging - using a synthetic epub, no repo fixtures."""
 
 import zipfile
 from io import BytesIO
 from pathlib import Path
 
-from epub.recipe_package import relocate_package
+from epub.recipe_package import relocate_package, replace_links
 from library.epub.epub import EPUB
 from library.epub.media_type import FileName
 
@@ -32,7 +32,7 @@ def build_epub(path: Path) -> None:
         z.writestr("OEBPS/images/pic.png", b"fakepng" * 1000)
 
 
-def test_standardize_remove_font_sync_package(tmp_path: Path):
+def test_relocate_remove_font_sync_package(tmp_path: Path):
     src = tmp_path / "book.epub"
     build_epub(src)
 
@@ -54,20 +54,42 @@ def test_standardize_remove_font_sync_package(tmp_path: Path):
         names = z.namelist()
         assert names[0] == "mimetype"
         assert z.getinfo("mimetype").compress_type == zipfile.ZIP_STORED
-        assert "fonts/SerenePanda.ttf" not in names  # resource removed
+        assert "OEBPS/fonts/SerenePanda.ttf" not in names  # resource removed
         assert "OEBPS/content.opf" not in names
         assert "content.opf" in names  # opf relocated to the root
 
         container = z.read("META-INF/container.xml").decode()
-        assert 'full-path="content.opf"' in container  # container regenerated for the new opf location
+        assert 'full-path="content.opf"' in container  # container updated for the new opf location
 
         opf = z.read("content.opf").decode()
         assert 'href="fonts/SerenePanda.ttf"' not in opf  # font manifest item removed
         assert 'href="OEBPS/text/chapter.xhtml"' in opf  # hrefs rewritten for the new opf location
-        assert 'href="OEBPS/images/pic.png"' in opf
+        assert 'href="OEBPS/images/pic.png"' in opf  # untouched image keeps its archive-path href
 
 
-def test_standardize_is_noop_for_root_opf(tmp_path: Path):
+def test_replace_links_updates_href_and_media_type(tmp_path: Path):
+    """Simulate what perform_image_optimization does on png->jpg: rename the
+    resource, then update the manifest through replace_links."""
+    src = tmp_path / "book.epub"
+    build_epub(src)
+    epub = EPUB(src)
+    relocate_package(epub)
+
+    image = epub.resources.by_path("OEBPS/images/pic.png")
+    image.filename = "OEBPS/images/pic.jpg"  # filename setter re-derives media_type
+    assert image.media_type == "image/jpeg"
+
+    replace_links(epub, {"OEBPS/images/pic.png": "OEBPS/images/pic.jpg"})
+    epub.core.package_resource.content = epub.core.package.to_xml_bytes()
+
+    opf = epub.core.package_resource.content.decode()
+    assert 'href="OEBPS/images/pic.jpg"' in opf
+    assert 'media-type="image/jpeg"' in opf
+    assert 'href="OEBPS/images/pic.png"' not in opf
+    assert 'media-type="image/png"' not in opf
+
+
+def test_relocate_is_noop_for_root_opf(tmp_path: Path):
     src = tmp_path / "already.epub"
     build_epub(src)
     epub = EPUB(src)
