@@ -8,6 +8,7 @@ from library.epub.epub import EPUB
 from library.epub.utils import string_to_int_hash, bt_to_mb
 from library.epub.utils_zip import timestamp_from_zip_info
 from library.database.sqlite_model_table import SQLiteModelTable
+from library.image.models import OptimizationResult
 
 
 class EpubFileModel(SQLModel, table=True):
@@ -190,3 +191,144 @@ class EpubOpfHash(SQLModel, table=True):
 
 
 class EpubHashTable(SQLiteModelTable[EpubOpfHash]): ...
+
+
+# ---------------------------------------------------------------------------
+# image optimization statistics (fully_process_encrypted_panda, step 3.1)
+# ---------------------------------------------------------------------------
+
+
+class ProcessedEpubModel(SQLModel, table=True):
+    __tablename__ = "processed_epubs"
+
+    id: int | None = Field(primary_key=True)
+    filepath: str = Field(index=True)
+
+    @classmethod
+    def from_path(cls, path: Path) -> ProcessedEpubModel:
+        return cls(filepath=str(path.absolute()))
+
+
+class SkippedImageModel(SQLModel, table=True):
+    __tablename__ = "skipped_images"
+
+    id: int | None = Field(primary_key=True)
+    epub_id: int = Field(foreign_key="processed_epubs.id", index=True)
+    skip_reason: int
+    filesize: int
+    size: str
+    format: str
+    mode: str
+    is_animated: bool
+    n_frames: int
+    has_transparency_data: bool | None
+
+    @classmethod
+    def from_result(cls, epub_id: int, result: OptimizationResult) -> SkippedImageModel:
+        info = result.original_image
+        return cls(
+            epub_id=epub_id,
+            skip_reason=int(result.skip),
+            filesize=info.filesize,
+            size=f"{info.width}x{info.height}",
+            format=str(info.format),
+            mode=str(info.mode),
+            is_animated=info.is_animated,
+            n_frames=info.n_frames,
+            has_transparency_data=info.has_transparency_data,
+        )
+
+
+class ErrorImageModel(SQLModel, table=True):
+    __tablename__ = "error_images"
+
+    id: int | None = Field(primary_key=True)
+    epub_id: int = Field(foreign_key="processed_epubs.id", index=True)
+    error: int
+    filepath: str
+    filesize: int
+
+    @classmethod
+    def from_result(cls, epub_id: int, result: OptimizationResult) -> ErrorImageModel:
+        # original_image is the ImageInfo.failed placeholder: path and filesize are all we know
+        info = result.original_image
+        return cls(
+            epub_id=epub_id,
+            error=int(result.error),
+            filepath=info.path or "",
+            filesize=info.filesize,
+        )
+
+
+class SuccessfulImageModel(SQLModel, table=True):
+    __tablename__ = "successful_images"
+
+    id: int | None = Field(primary_key=True)
+    epub_id: int = Field(foreign_key="processed_epubs.id", index=True)
+    original_filesize: int
+    original_size: str
+    original_format: str
+    original_mode: str
+    new_filesize: int
+    new_size: str
+    new_format: str
+    new_mode: str
+
+    @staticmethod
+    def _image_fields(info) -> tuple[int, str, str, str]:
+        return info.filesize, f"{info.width}x{info.height}", str(info.format), str(info.mode)
+
+    @classmethod
+    def from_result(cls, epub_id: int, result: OptimizationResult) -> SuccessfulImageModel:
+        original_fields = cls._image_fields(result.original_image)
+        new_fields = cls._image_fields(result.new_image)
+        return cls(
+            epub_id=epub_id,
+            original_filesize=original_fields[0],
+            original_size=original_fields[1],
+            original_format=original_fields[2],
+            original_mode=original_fields[3],
+            new_filesize=new_fields[0],
+            new_size=new_fields[1],
+            new_format=new_fields[2],
+            new_mode=new_fields[3],
+        )
+
+
+class ProcessedEpubTable(SQLiteModelTable[ProcessedEpubModel]):
+    def get_or_create_id(self, filepath: str) -> int:
+        """Requires an open session (`with self:`)."""
+        existing = self.get_one(filepath=filepath)
+        if existing is not None:
+            return existing.id
+        self.insert_one(ProcessedEpubModel(filepath=filepath))
+        return self.get_one(filepath=filepath).id
+
+
+class SkippedImagesTable(SQLiteModelTable[SkippedImageModel]): ...
+
+
+class ErrorImagesTable(SQLiteModelTable[ErrorImageModel]): ...
+
+
+class SuccessfulImagesTable(SQLiteModelTable[SuccessfulImageModel]): ...
+
+
+def record_image_statistics(filepath: Path, results: list[OptimizationResult], db_url: str) -> None:
+    """Step 3.1: persist per-image optimization outcomes for one epub."""
+    with ProcessedEpubTable(db_url) as epub_table:
+        epub_id = epub_table.get_or_create_id(str(filepath.absolute()))
+
+    skipped = [SkippedImageModel.from_result(epub_id, r) for r in results if r.skip is not None]
+    errors = [ErrorImageModel.from_result(epub_id, r) for r in results if r.error is not None]
+    successes = [SuccessfulImageModel.from_result(epub_id, r) for r in results if r.success]
+
+    if skipped:
+        with SkippedImagesTable(db_url) as table:
+            table.insert_many(skipped)
+    if errors:
+        with ErrorImagesTable(db_url) as table:
+            table.insert_many(errors)
+    if successes:
+        with SuccessfulImagesTable(db_url) as table:
+            table.insert_many(successes)

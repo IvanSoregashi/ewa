@@ -5,12 +5,13 @@ from library.epub.epub import EPUB
 from library.epub.media_type import FileName, EpubRole
 from library.epub.recipe_css import de_panda_css_resource
 from library.epub.recipe_image import perform_image_optimization
+from epub.tables import record_image_statistics
 
 
 logger = logging.getLogger(__name__)
 
 
-def fully_process_encrypted_panda(path: Path) -> None:
+def fully_process_encrypted_panda(path: Path, db_url: str | None = None) -> None:
     destination = Path()  # TODO
     try:
         with EPUB(path).stream_to(destination) as epub:
@@ -25,15 +26,9 @@ def fully_process_encrypted_panda(path: Path) -> None:
                 perform_image_optimization(image_resource) for image_resource in epub.resources.by_role(EpubRole.IMAGE)
             ]
 
-            for image_optimization_result in image_optimization_results:
-                if image_optimization_result.success:
-                    continue
-                if image_optimization_result.skip:
-                    continue
-                if image_optimization_result.error:
-                    continue
-
             # 3.1 received statistics - save conversion info to SQL
+            if db_url:
+                record_image_statistics(path, image_optimization_results, db_url)
             # 3.2 received statistics - form a path replacement dictionary
             # 4. for the html spine resources
             #        translate
