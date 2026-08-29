@@ -5,8 +5,7 @@ from library.epub.epub import EPUB
 from library.epub.media_type import FileName, EpubRole
 from library.epub.recipe_css import de_panda_css_resource
 from library.epub.recipe_image import perform_image_optimization
-from epub.tables import record_image_statistics
-
+from epub.recipe_analytics import record_image_statistics
 
 logger = logging.getLogger(__name__)
 

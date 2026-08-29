@@ -17,8 +17,8 @@ from epub.tables import (
     ProcessedEpubModel,
     SkippedImageModel,
     SuccessfulImageModel,
-    record_image_statistics,
 )
+from epub.recipe_analytics import record_image_statistics
 from library.epub.recipe_image import perform_image_optimization
 from library.image.constants import ImageFormat, ImageMode
 from library.image.models import ImageErrorReason, ImageSkipReason
