@@ -19,6 +19,7 @@ from PIL import Image
 from library.epub.recipe_image import get_image_info, get_image_info_with_extrema, perform_image_optimization
 from library.epub.resources import Resource
 from library.image.constants import ImageFormat, ImageMode, MEDIUM_WIDTH_SIZE
+from library.image.models import ImageInfo
 
 images_dir = Path(__file__).parent / "samples" / "images"
 
@@ -136,6 +137,31 @@ def generate_image(
         buffer.getvalue(),
         f"{size[0]}x{size[1]}x{mode}_{'NOISY' if noise else 'RED'}{'' if alpha is None else f'_A{alpha}'}.{image_format}",
     )
+
+
+# ---------------------------------------------------------------------------
+# ImageInfo.from_image must never fail on an image that opened fine
+# ---------------------------------------------------------------------------
+
+
+def test_from_image_accepts_unknown_pillow_format_and_mode():
+    """16-bit grayscale PNG opens as mode 'I;16'; cameras produce 'MPO' format -
+    neither is in the core enums, but from_image must still work."""
+    buffer = BytesIO()
+    Image.new("I;16", (4, 4), 7).save(buffer, format="PNG")
+    with Image.open(BytesIO(buffer.getvalue())) as image:
+        info = ImageInfo.from_image(image, filesize=100)
+    assert info.mode == ImageMode("I;16")
+    assert info.format is ImageFormat.PNG
+
+    mpo_image = Image.new("RGB", (2, 2))
+    mpo_image.format = "MPO"
+    info_mpo = ImageInfo.from_image(mpo_image, filesize=100)
+    assert info_mpo.format == ImageFormat("MPO")
+
+    # ad-hoc members are stable singletons afterwards
+    assert ImageMode("I;16") is ImageMode("I;16")
+    assert ImageFormat("MPO") is ImageFormat("MPO")
 
 
 # ---------------------------------------------------------------------------

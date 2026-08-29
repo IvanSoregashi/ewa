@@ -154,18 +154,26 @@ def optimize_gif_image(image: Image.Image, buffer: BytesIO, original_image_info:
 
 
 def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> OptimizationResult:
+    """Single failure net: any pixel-decoding/encoding failure on a broken or
+    exotic image becomes an error result instead of an exception."""
     min_filesize = 50 * 1024
     original_image_info = ImageInfo.from_image(image=image, filesize=filesize)
-    if filesize < min_filesize:
-        return OptimizationResult(skip=ImageSkipReason.SMALL_IMAGE, original_image=original_image_info)
 
-    if original_image_info.format == ImageFormat.PNG:
-        return optimize_png_image(image, buffer, original_image_info)
+    try:
 
-    if original_image_info.format == ImageFormat.JPEG:
-        return optimize_jpg_image(image, buffer, original_image_info)
+        if filesize < min_filesize:
+            return OptimizationResult(skip=ImageSkipReason.SMALL_IMAGE, original_image=original_image_info)
 
-    if original_image_info.format == ImageFormat.GIF:
-        return optimize_gif_image(image, buffer, original_image_info)
+        if original_image_info.format == ImageFormat.PNG:
+            return optimize_png_image(image, buffer, original_image_info)
 
-    return OptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
+        if original_image_info.format == ImageFormat.JPEG:
+            return optimize_jpg_image(image, buffer, original_image_info)
+
+        if original_image_info.format == ImageFormat.GIF:
+            return optimize_gif_image(image, buffer, original_image_info)
+
+        return OptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
+
+    except Exception as e:
+        return OptimizationResult(error=f"optimization failed: {e}", original_image=original_image_info)
