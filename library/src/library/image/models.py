@@ -7,22 +7,41 @@ from PIL import Image
 from library.image.constants import ImageFormat, ImageMode, EFFICIENT_BPP, EXTRA_EFFICIENT_BPP
 
 
-@dataclass
+@dataclass(kw_only=True)
 class ImageInfo:
+    path: str | None = None
     size: tuple[int, int]
     filesize: int
     format: ImageFormat
     mode: ImageMode
-    path: str | None = None
     extrema: tuple[float, float] | tuple[tuple[int, int], ...] | None = None
+    is_animated: bool = False
+    n_frames: int = 1
+    has_transparency_data: bool | None = None
+    dpi: tuple[int, int] | None = None
+    interlaced: bool | None = None  # png "interlace"
+    progressive: bool | None = None  # jpeg "progressive"
+    has_exif: bool = False
+    has_icc_profile: bool = False
 
     @classmethod
     def from_image(cls, image: Image.Image, filesize: int) -> ImageInfo:
+        info = image.info or {}
+        n_frames = getattr(image, "n_frames", 1)
+
         return cls(
             size=image.size,
             filesize=filesize,
             format=ImageFormat(image.format),
             mode=ImageMode(image.mode),
+            is_animated=bool(getattr(image, "is_animated", False)),
+            n_frames=int(n_frames),
+            has_transparency_data=getattr(image, "has_transparency_data", None),
+            dpi=tuple(info["dpi"]) if "dpi" in info else None,
+            interlaced=bool(info["interlace"]) if "interlace" in info else None,
+            progressive=bool(info.get("progressive") or info.get("progression")),
+            has_exif=bool(info.get("exif") or info.get("xmp")),
+            has_icc_profile="icc_profile" in info,
         )
 
     @classmethod

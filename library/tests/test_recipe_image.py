@@ -165,6 +165,45 @@ def test_from_image_accepts_unknown_pillow_format_and_mode():
     assert ImageFormat("MPO") is ImageFormat("MPO")
 
 
+def test_from_image_extracts_header_extras_static():
+    buffer = BytesIO()
+    Image.new("RGBA", (32, 16), (255, 0, 0, 128)).save(buffer, format="PNG")
+    with Image.open(BytesIO(buffer.getvalue())) as image:
+        info = ImageInfo.from_image(image, filesize=len(buffer.getvalue()))
+
+    assert info.is_animated is False
+    assert info.n_frames == 1
+    assert info.has_transparency_data is True
+    assert info.progressive is None or info.progressive is False
+    assert info.has_icc_profile is False
+
+
+def test_from_image_extracts_jpeg_markers():
+    buffer = BytesIO()
+    image = Image.new("RGB", (64, 64), "green")
+    image.save(buffer, format="JPEG", quality=90, dpi=(300, 300), progressive=True, icc_profile=b"fake-icc")
+    with Image.open(BytesIO(buffer.getvalue())) as jpeg:
+        info = ImageInfo.from_image(jpeg, filesize=len(buffer.getvalue()))
+
+    assert info.progressive is True
+    assert info.dpi is not None and round(info.dpi[0]) == 300
+    assert info.has_icc_profile is True
+    assert info.is_animated is False
+
+
+def test_from_image_extracts_animation():
+    """A real two-frame animated GIF."""
+    buffer = BytesIO()
+    frame_a = Image.new("RGB", (16, 16), "red")
+    frame_b = Image.new("RGB", (16, 16), "blue")
+    frame_a.save(buffer, format="GIF", save_all=True, append_images=[frame_b], duration=100, loop=0)
+    with Image.open(BytesIO(buffer.getvalue())) as image:
+        info = ImageInfo.from_image(image, filesize=len(buffer.getvalue()))
+
+    assert info.is_animated is True
+    assert info.n_frames == 2
+
+
 # ---------------------------------------------------------------------------
 # get_image_info
 # ---------------------------------------------------------------------------

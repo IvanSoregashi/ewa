@@ -101,7 +101,7 @@ def useless_transparency_mode(image: Image.Image) -> bool:
 def optimize_png_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> OptimizationResult:
     image_info = deepcopy(original_image_info)
 
-    if getattr(image, "is_animated", None):
+    if original_image_info.is_animated:
         return OptimizationResult(skip=ImageSkipReason.HAS_ANIMATION, original_image=original_image_info)
 
     # Reduce the image dimensions
@@ -148,7 +148,7 @@ def optimize_jpg_image(image: Image.Image, buffer: BytesIO, original_image_info:
 def optimize_gif_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> OptimizationResult:
     image_info = deepcopy(original_image_info)
 
-    if getattr(image, "is_animated", None):
+    if original_image_info.is_animated:
         return OptimizationResult(skip=ImageSkipReason.HAS_ANIMATION, original_image=original_image_info)
 
     image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
