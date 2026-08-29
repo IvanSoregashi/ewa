@@ -1,14 +1,10 @@
-"""Coverage for library.epub.image_recipe: get_image_info, get_image_info_with_extrema, perform_image_optimization.
+"""Coverage for library.epub.recipe_image: get_image_info, get_image_info_with_extrema, perform_image_optimization.
 
-All images are generated on the fly (no repo fixtures). Read-accounting lives
-entirely in this file: Resource accepts an injected stream_bytes callable, which
-is all we need to count what the reader actually pulls through.
+All images are generated on the fly (no repo fixtures). Read-accounting helpers
+live in library.test_utils.utils_image and are shared with plugin tests.
 """
 
-import io
-import random
 from collections.abc import Callable, Iterator
-from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZipInfo
@@ -20,7 +16,7 @@ from library.epub.recipe_image import get_image_info, get_image_info_with_extrem
 from library.epub.resources import Resource
 from library.image.constants import ImageFormat, ImageMode, MEDIUM_WIDTH_SIZE
 from library.image.models import ImageInfo, ImageErrorReason, ImageSkipReason
-from library.image.optimization import optimization_machine
+from library.test_utils.utils_image import CountingBytesIO, CountingReader, counted_resource, generate_image
 
 images_dir = Path(__file__).parent / "samples" / "images"
 
@@ -30,114 +26,6 @@ COMBOS = [
     (ImageFormat.JPEG, ImageMode.RGB),
 ]
 COMBO_IDS = ["png-rgb", "png-rgba", "jpeg-rgb"]
-
-
-class CountingBytesIO(io.BytesIO):
-    def __init__(self, data: bytes):
-        super().__init__(data)
-        self.served = 0
-
-    def read(self, size=-1):
-        chunk = super().read(size)
-        self.served += len(chunk)
-        return chunk
-
-
-class CountingReader:
-    """Wraps a real binary file handle, counting served bytes."""
-
-    def __init__(self, handle):
-        self._handle = handle
-        self.served = 0
-
-    def read(self, size=-1):
-        chunk = self._handle.read(size)
-        self.served += len(chunk)
-        return chunk
-
-    def seek(self, *args):
-        return self._handle.seek(*args)
-
-    def tell(self):
-        return self._handle.tell()
-
-    def close(self):
-        self._handle.close()
-
-    def readable(self):
-        return True
-
-    def seekable(self):
-        return True
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        self.close()
-
-
-def counted_resource(data: bytes, filename: str) -> tuple[Resource, Callable[[], int]]:
-    """Resource whose stream accounting is aggregated across every stream() call."""
-    info = ZipInfo(filename)
-    info.file_size = len(data)
-
-    streams: list[CountingBytesIO] = []
-
-    def stream_bytes(info: ZipInfo) -> CountingBytesIO:
-        stream = CountingBytesIO(data)  # fresh instance per stream() call
-        streams.append(stream)
-        return stream
-
-    def total_served() -> int:
-        return sum(s.served for s in streams)
-
-    return Resource(info=info, stream_bytes=stream_bytes), total_served
-
-
-@lru_cache
-def generate_image(
-    image_format: ImageFormat,
-    mode: ImageMode,
-    size: tuple[int, int],
-    noise: bool = False,
-    alpha: int | None = None,
-) -> tuple[bytes, str]:
-    """Generate image bytes of the given format/mode/size.
-
-    noise=False -> solid single-color image (compresses well).
-    noise=True  -> every pixel random (JPEG will be large and incompressible).
-    alpha       -> RGBA only: force the alpha channel to this constant value
-                   (e.g. alpha=255 -> useless transparency). None keeps natural alpha.
-
-    Supported combos: PNG+RGB, PNG+RGBA, JPEG+RGB.
-    """
-    supported = {
-        (ImageFormat.PNG, ImageMode.RGB),
-        (ImageFormat.PNG, ImageMode.RGBA),
-        (ImageFormat.JPEG, ImageMode.RGB),
-    }
-    if (image_format, mode) not in supported:
-        raise ValueError(f"Unsupported format/mode combination: {image_format}/{mode}")
-    if alpha is not None and mode is not ImageMode.RGBA:
-        raise ValueError(f"alpha is only supported for RGBA, got {mode}")
-
-    if noise:
-        channels = 3 if mode is ImageMode.RGB else 4
-        raw = random.randbytes(size[0] * size[1] * channels)
-        image = Image.frombytes(str(mode), size, raw)
-    else:
-        image = Image.new(str(mode), size, "red")
-
-    if alpha is not None:
-        image.putalpha(Image.new("L", image.size, alpha))
-
-    buffer = BytesIO()
-    image.save(buffer, format=str(image_format))
-    return (
-        buffer.getvalue(),
-        f"{size[0]}x{size[1]}x{mode}_{'NOISY' if noise else 'RED'}{'' if alpha is None else f'_A{alpha}'}.{image_format}",
-    )
 
 
 # ---------------------------------------------------------------------------

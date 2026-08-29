@@ -216,7 +216,8 @@ class SkippedImageModel(SQLModel, table=True):
     epub_id: int = Field(foreign_key="processed_epubs.id", index=True)
     skip_reason: int
     filesize: int
-    size: str
+    width: int
+    height: int
     format: str
     mode: str
     is_animated: bool
@@ -230,7 +231,8 @@ class SkippedImageModel(SQLModel, table=True):
             epub_id=epub_id,
             skip_reason=int(result.skip),
             filesize=info.filesize,
-            size=f"{info.width}x{info.height}",
+            width=info.width,
+            height=info.height,
             format=str(info.format),
             mode=str(info.mode),
             is_animated=info.is_animated,
@@ -266,32 +268,36 @@ class SuccessfulImageModel(SQLModel, table=True):
     id: int | None = Field(primary_key=True)
     epub_id: int = Field(foreign_key="processed_epubs.id", index=True)
     original_filesize: int
-    original_size: str
+    original_width: int
+    original_height: int
     original_format: str
     original_mode: str
     new_filesize: int
-    new_size: str
+    new_width: int
+    new_height: int
     new_format: str
     new_mode: str
 
     @staticmethod
-    def _image_fields(info) -> tuple[int, str, str, str]:
-        return info.filesize, f"{info.width}x{info.height}", str(info.format), str(info.mode)
+    def _image_fields(info) -> tuple[int, int, int, str, str]:
+        return info.filesize, info.width, info.height, str(info.format), str(info.mode)
 
     @classmethod
     def from_result(cls, epub_id: int, result: OptimizationResult) -> SuccessfulImageModel:
-        original_fields = cls._image_fields(result.original_image)
-        new_fields = cls._image_fields(result.new_image)
+        o = cls._image_fields(result.original_image)
+        n = cls._image_fields(result.new_image)
         return cls(
             epub_id=epub_id,
-            original_filesize=original_fields[0],
-            original_size=original_fields[1],
-            original_format=original_fields[2],
-            original_mode=original_fields[3],
-            new_filesize=new_fields[0],
-            new_size=new_fields[1],
-            new_format=new_fields[2],
-            new_mode=new_fields[3],
+            original_filesize=o[0],
+            original_width=o[1],
+            original_height=o[2],
+            original_format=o[3],
+            original_mode=o[4],
+            new_filesize=n[0],
+            new_width=n[1],
+            new_height=n[2],
+            new_format=n[3],
+            new_mode=n[4],
         )
 
 
