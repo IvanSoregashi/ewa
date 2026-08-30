@@ -49,11 +49,11 @@ class Meta(DCElement, tag=MetadataType.META, ns=NamespacePrefix.OPF):
 
 
 class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP, search_mode="unordered"):
+    titles: list[DCTitle] = element(tag=DCMetadataType.TITLE, default=[])
+    creators: list[DCCreator] = element(tag=DCMetadataType.CREATOR, default=[])
     identifiers: list[DCIdentifier] = element(tag=DCMetadataType.IDENTIFIER, default=[])
     languages: list[DCLanguage] = element(tag=DCMetadataType.LANGUAGE, default=[])
-    titles: list[DCTitle] = element(tag=DCMetadataType.TITLE, default=[])
     descriptions: list[DCElement] = element(tag=DCMetadataType.DESCRIPTION, default=[])
-    creators: list[DCCreator] = element(tag=DCMetadataType.CREATOR, default=[])
     contributors: list[DCCreator] = element(tag=DCMetadataType.CONTRIBUTOR, default=[])
     publishers: list[DCElement] = element(tag=DCMetadataType.PUBLISHER, default=[])
     rights: list[DCElement] = element(tag=DCMetadataType.RIGHTS, default=[])

@@ -12,7 +12,7 @@ from library.asserts import require
 from library.epub.epub_core import EpubCore
 from library.epub.errors import EpubSpecificationError, EpubError
 from library.epub.media_type import EpubRole
-from library.epub.resources import ResourceIndex
+from library.epub.resources import ResourceIndex, IndexInfo
 from library.epub.sink import EpubZipSink
 from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
 from library.utils import verify_destination
@@ -138,15 +138,19 @@ class EPUB:
 
     def info(self):
         with self.keep_open():
-            images = self.resources.by_role(EpubRole.IMAGE)
+            total = self.resources.stats()
+            images = self.resources.by_role(EpubRole.IMAGE).stats()
+            htmls = self.resources.by_role(EpubRole.HTML).stats()
+            fonts = self.resources.by_role(EpubRole.FONT).stats()
+
             package = self.core.package
             return EpubInfo(
                 path=self.path,
-                file_size=self.path.stat().st_size,
-                file_count=len(self.resources),
-                images_size=sum(image.info.file_size for image in images),
-                images_count=len(images),
-                chapters=len(package.spine.itemrefs),
+                path_size=self.path.stat().st_size,
+                total=total,
+                images=images,
+                htmls=htmls,
+                fonts=fonts,
                 identifier=package.metadata.uuid_id_or_all_identifiers,
                 title=package.metadata.title,
                 author=package.metadata.aut_or_all_creators,
@@ -156,15 +160,15 @@ class EPUB:
 @dataclass(kw_only=True)
 class EpubInfo:
     path: Path
-    file_size: int
-    file_count: int | None = None
-    images_size: int | None = None
-    images_count: int | None = None
-    chapters: int | None = None
+    path_size: int
+    total: IndexInfo | None = None
+    images: IndexInfo | None = None
+    htmls: IndexInfo | None = None
+    fonts: IndexInfo | None = None
     identifier: str | None = None
     title: str | None = None
     author: str | None = None
 
     @classmethod
     def failed(cls, path: Path) -> EpubInfo:
-        return cls(path=path, file_size=path.stat().st_size)
+        return cls(path=path, path_size=path.stat().st_size)

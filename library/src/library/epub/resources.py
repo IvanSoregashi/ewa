@@ -1,6 +1,7 @@
 import io
 import logging
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, BinaryIO, Generator
 from zipfile import ZipInfo
@@ -158,3 +159,17 @@ class ResourceIndex:
                 yield from self.by_role(role)
         else:
             yield from self._items
+
+    def stats(self):
+        return IndexInfo(
+            count=len(self._items),
+            total_size=sum(i.info.file_size for i in self._items),
+            compress_size=sum(i.info.compress_size for i in self._items),
+        )
+
+
+@dataclass
+class IndexInfo:
+    count: int
+    total_size: int
+    compress_size: int

@@ -4,6 +4,7 @@ from pathlib import Path
 from zipfile import ZipInfo
 from sqlmodel import SQLModel, Field, Relationship
 
+from library.asserts import require
 from library.epub.epub import EPUB
 from library.epub.utils import string_to_int_hash, bt_to_mb
 from library.epub.utils_zip import timestamp_from_zip_info
@@ -220,6 +221,7 @@ class SkippedImageModel(SQLModel, table=True):
     height: int
     format: str
     mode: str
+    bpp: float
     is_animated: bool
     n_frames: int
     has_transparency_data: bool | None
@@ -235,6 +237,7 @@ class SkippedImageModel(SQLModel, table=True):
             height=info.height,
             format=str(info.format),
             mode=str(info.mode),
+            bpp=info.bpp,
             is_animated=info.is_animated,
             n_frames=info.n_frames,
             has_transparency_data=info.has_transparency_data,
@@ -272,11 +275,13 @@ class SuccessfulImageModel(SQLModel, table=True):
     original_height: int
     original_format: str
     original_mode: str
+    original_bpp: float
     new_filesize: int
     new_width: int
     new_height: int
     new_format: str
     new_mode: str
+    new_bpp: float
 
     @staticmethod
     def _image_fields(info) -> tuple[int, int, int, str, str]:
@@ -284,20 +289,22 @@ class SuccessfulImageModel(SQLModel, table=True):
 
     @classmethod
     def from_result(cls, epub_id: int, result: ImageOptimizationResult) -> SuccessfulImageModel:
-        o = cls._image_fields(result.original_image)
-        n = cls._image_fields(result.new_image)
+        o = require(result.original_image)
+        n = require(result.new_image)
         return cls(
             epub_id=epub_id,
-            original_filesize=o[0],
-            original_width=o[1],
-            original_height=o[2],
-            original_format=o[3],
-            original_mode=o[4],
-            new_filesize=n[0],
-            new_width=n[1],
-            new_height=n[2],
-            new_format=n[3],
-            new_mode=n[4],
+            original_filesize=o.filesize,
+            original_width=o.width,
+            original_height=o.height,
+            original_format=o.format,
+            original_mode=o.mode,
+            original_bpp=o.bpp,
+            new_filesize=n.filesize,
+            new_width=n.width,
+            new_height=n.height,
+            new_format=n.format,
+            new_mode=n.mode,
+            new_bpp=n.bpp,
         )
 
 

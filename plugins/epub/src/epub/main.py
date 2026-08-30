@@ -38,7 +38,7 @@ def setup():
 @app.command("get-conf")
 def get_config(key: str = typer.Argument("")):
     if key:
-        print_success(f"{key}={getattr(settings, key, "not-found")!r}")
+        print_success(f"{key}={getattr(settings, key, 'not-found')!r}")
     else:
         print_success(f"settings:\n{settings.model_dump_json(indent=4)}")
 
@@ -48,9 +48,9 @@ def set_config(key: str = typer.Option("", "-k"), value: str = typer.Option("", 
     try:
         print_success("before change: " + repr(getattr(settings, key, "not-found")))
         match value.lower():
-            case 'false':
+            case "false":
                 value = False
-            case 'true':
+            case "true":
                 value = True
         setattr(settings, key, value)
         print_success("after change: " + repr(getattr(settings, key, "not-found")))
@@ -60,7 +60,18 @@ def set_config(key: str = typer.Option("", "-k"), value: str = typer.Option("", 
 
 @app.command()
 def decrypt(epub_path: Path = typer.Argument(exists=True)):
-    fully_process_encrypted_panda(str(epub_path))
+    start = time.time()
+    result = fully_process_encrypted_panda(str(epub_path))
+    elapsed = time.time() - start
+
+    print(result)
+    print(result.original_epub)
+    print(result.new_epub)
+    result.report()
+    print(f"ELAPSED {elapsed:.2f}s")
+
+    if result.success and result.new_epub and result.new_epub.path:
+        Path(result.new_epub.path).unlink(missing_ok=True)
 
 
 @app.command("showres")
