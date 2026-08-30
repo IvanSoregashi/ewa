@@ -13,19 +13,21 @@ logger = logging.getLogger(__name__)
 
 
 class EpubZipSink:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path | BinaryIO):
+        # ZipFile accepts both a filesystem path and a binary file object;
+        # a file object lets callers package into memory buffers or pipes.
         self.path = path
         # TODO path validation
         self._zip_file: ZipFile | None = None
 
     def __repr__(self):
-        return f"EpubZipSink({self.path})"
+        return f"EpubZipSink({self.path!r})"
 
     @property
     def zip_file(self) -> ZipFile:
         # TODO consider custom exception
         # TODO consider just instantiating it?
-        return require(self._zip_file, f"{self.path}._zip_file")
+        return require(self._zip_file, f"{self}._zip_file")
 
     def write_resource(self, resource: Resource):
         logger.warning(f"{self} Writing resource: {resource}")

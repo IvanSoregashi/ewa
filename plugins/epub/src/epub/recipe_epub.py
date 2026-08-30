@@ -123,6 +123,7 @@ def fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
 
     # move original to processed
     processed_path = settings.processed_epub_dir / relative_path
+    processed_path.parent.mkdir(parents=True, exist_ok=True)
     if processed_path.exists():
         logger.warning(f"PROCESSED PATH EXISTS {str(processed_path)!s}")
     else:

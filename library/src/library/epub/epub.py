@@ -81,8 +81,15 @@ class EPUB:
         self.source.extract_all(destination=dest_dir)
         return EPUB(dest_dir)
 
-    def package_into(self, destination: str | Path, manifest_only: bool = False, sort_by_role: bool = False) -> None:
-        resolved_destination = self._verify_destination(Path(destination))
+    def package_into(
+        self,
+        destination: str | Path | BinaryIO,
+        manifest_only: bool = False,
+        sort_by_role: bool = False,
+    ) -> None:
+        resolved_destination = (
+            self._verify_destination(destination) if isinstance(destination, (str, Path)) else destination
+        )
         resources = self.get_resources(manifest_only=manifest_only).iter(sort_by_role=sort_by_role)
         try:
             with self.source.open(), EpubZipSink(resolved_destination) as sink:
@@ -93,7 +100,8 @@ class EPUB:
             raise e
         logger.info(f"{self} successfully packaged into EPUB({destination}).")
 
-    def _verify_destination(self, destination: Path) -> Path:
+    def _verify_destination(self, destination: str | Path) -> Path:
+        destination: Path = Path(destination)
         if destination.suffix.lower() != ".epub":
             if not destination.is_dir():
                 raise NotADirectoryError(f"Path {destination} is neither a directory nor a epub.")
