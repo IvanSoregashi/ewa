@@ -123,7 +123,7 @@ class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_N
 
     def add_tag(self, value: str, **kwargs):
         for subj in self.subjects:
-            if subj.text == tag:
+            if subj.text == value:
                 return
         self.add_metadata(tag=DCMetadataType.SUBJECT, text=value, **kwargs)
 

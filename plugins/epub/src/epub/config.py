@@ -10,7 +10,9 @@ class EpubSettings(Settings):
     D_DISK: Path = Path(r"D:").absolute()
     epub_dir: Path = Path(r"D:\EPUB")
     encrypted_epub_dir: Path = Path(r"D:\ENCRYPTED_EPUBS")
-    epub_uwumtl_dir: Path = Path(r"D:\EPUB_UWUMTL")
+    processed_epub_dir: Path = Path(r"D:\PROCESSED_EPUB")
+    decrypted_epub_dir: Path = Path(r"D:\DECRYPTED_EPUB")
+    quarantine_epub_dir: Path = Path(r"D:\QUARANTINE_EPUB")
 
     epub_settings_dir: Path = Field(init=False, default=Path())
     container_dir: Path = Field(init=False, default=Path())
@@ -26,6 +28,7 @@ class EpubSettings(Settings):
         super().model_post_init(context)
         self.epub_dir.mkdir(parents=True, exist_ok=True)
         self.encrypted_epub_dir.mkdir(parents=True, exist_ok=True)
+        self.processed_epub_dir.mkdir(parents=True, exist_ok=True)
 
         self.epub_settings_dir = self.profile_dir / "epub"
 

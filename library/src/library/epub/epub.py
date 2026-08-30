@@ -2,6 +2,7 @@ import logging
 import tempfile
 from collections.abc import Generator, Callable
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 from zipfile import is_zipfile
@@ -9,6 +10,7 @@ from zipfile import is_zipfile
 from library.asserts import require
 from library.epub.epub_core import EpubCore
 from library.epub.errors import EpubSpecificationError, EpubError
+from library.epub.media_type import EpubRole
 from library.epub.resources import ResourceIndex
 from library.epub.sink import EpubZipSink
 from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
@@ -99,8 +101,13 @@ class EPUB:
         if destination.exists():
             raise FileExistsError(f"File {destination} already exists.")
         if not destination.parent.exists():
-            raise FileNotFoundError(f"Directory {destination.parent} does not exist.")
+            destination.parent.mkdir(parents=True)
         return destination
+
+    @contextmanager
+    def keep_open(self) -> Generator[Self, None, None]:
+        with self.source.open():
+            yield self
 
     @contextmanager
     def stream_to(self, destination: str | Path) -> Generator[Self, None, None]:
@@ -111,3 +118,36 @@ class EPUB:
             logger.error(f"{self} will not be packaged to {destination!r}.")
         else:
             self.package_into(destination)
+
+    def info(self):
+        with self.keep_open():
+            images = self.resources.by_role(EpubRole.IMAGE)
+            package = self.core.package
+            return EpubInfo(
+                path=self.path,
+                file_size=self.path.stat().st_size,
+                file_count=len(self.resources),
+                images_size=sum(image.info.file_size for image in images),
+                images_count=len(images),
+                chapters=len(package.spine.itemrefs),
+                identifier=package.metadata.uuid_id_or_all_identifiers,
+                title=package.metadata.title,
+                author=package.metadata.aut_or_all_creators,
+            )
+
+
+@dataclass(kw_only=True)
+class EpubInfo:
+    path: Path
+    file_size: int
+    file_count: int | None
+    images_size: int | None
+    images_count: int | None
+    chapters: int | None
+    identifier: str | None
+    title: str | None
+    author: str | None
+
+    @classmethod
+    def failed(cls, path: Path) -> EpubInfo:
+        return cls(path=path, file_size=path.stat().st_size)

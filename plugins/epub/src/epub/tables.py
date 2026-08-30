@@ -8,7 +8,7 @@ from library.epub.epub import EPUB
 from library.epub.utils import string_to_int_hash, bt_to_mb
 from library.epub.utils_zip import timestamp_from_zip_info
 from library.database.sqlite_model_table import SQLiteModelTable
-from library.image.models import OptimizationResult
+from library.image.models import ImageOptimizationResult
 
 
 class EpubFileModel(SQLModel, table=True):
@@ -225,7 +225,7 @@ class SkippedImageModel(SQLModel, table=True):
     has_transparency_data: bool | None
 
     @classmethod
-    def from_result(cls, epub_id: int, result: OptimizationResult) -> SkippedImageModel:
+    def from_result(cls, epub_id: int, result: ImageOptimizationResult) -> SkippedImageModel:
         info = result.original_image
         return cls(
             epub_id=epub_id,
@@ -251,7 +251,7 @@ class ErrorImageModel(SQLModel, table=True):
     filesize: int
 
     @classmethod
-    def from_result(cls, epub_id: int, result: OptimizationResult) -> ErrorImageModel:
+    def from_result(cls, epub_id: int, result: ImageOptimizationResult) -> ErrorImageModel:
         # original_image is the ImageInfo.failed placeholder: path and filesize are all we know
         info = result.original_image
         return cls(
@@ -283,7 +283,7 @@ class SuccessfulImageModel(SQLModel, table=True):
         return info.filesize, info.width, info.height, str(info.format), str(info.mode)
 
     @classmethod
-    def from_result(cls, epub_id: int, result: OptimizationResult) -> SuccessfulImageModel:
+    def from_result(cls, epub_id: int, result: ImageOptimizationResult) -> SuccessfulImageModel:
         o = cls._image_fields(result.original_image)
         n = cls._image_fields(result.new_image)
         return cls(

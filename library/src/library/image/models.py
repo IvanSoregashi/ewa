@@ -1,9 +1,11 @@
-from dataclasses import dataclass, asdict
+import zipfile
+from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
 
 from PIL import Image
 
+from library.analytics import OperationResult
 from library.image.constants import ImageFormat, ImageMode, EFFICIENT_BPP, EXTRA_EFFICIENT_BPP
 
 
@@ -98,18 +100,25 @@ class ImageErrorReason(IntEnum):
     UNKNOWN = 4  # unexpected - bug territory
     READ_ERROR = 5  # image bytes could not be obtained from the source at all
 
+    @classmethod
+    def from_error(cls, e: Exception) -> ImageErrorReason:
+        if isinstance(e, Image.UnidentifiedImageError):
+            return cls.DECODE_FAILED
+        if isinstance(e, (Image.DecompressionBombError, MemoryError)):
+            return cls.TOO_LARGE
+        if isinstance(e, (OSError, zipfile.BadZipFile)):
+            return cls.READ_ERROR
+
+        message = str(e).lower()
+        if any(fragment in message for fragment in ("truncated", "broken", "cannot identify", "tile cannot extend")):
+            return cls.DECODE_FAILED
+        if any(fragment in message for fragment in ("cannot write mode", "cannot save", "encoder")):
+            return cls.ENCODE_FAILED
+
+        return cls.UNKNOWN
+
 
 @dataclass(kw_only=True)
-class OperationResult:
-    success: bool = False
-    error: int | None = None
-    skip: int | None = None
-
-    def as_dict(self) -> dict:
-        return asdict(self)
-
-
-@dataclass(kw_only=True)
-class OptimizationResult(OperationResult):
+class ImageOptimizationResult(OperationResult):
     original_image: ImageInfo
     new_image: ImageInfo | None = None

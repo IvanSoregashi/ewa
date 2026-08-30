@@ -13,7 +13,7 @@ from library.image.constants import (
 from library.image.models import (
     ImageErrorReason,
     ImageInfo,
-    OptimizationResult,
+    ImageOptimizationResult,
     ImageSkipReason,
 )
 
@@ -60,11 +60,11 @@ def useless_transparency_mode(image: Image.Image) -> bool:
     return len(extrema) == 4 and extrema[3][0] == 255
 
 
-def optimize_png_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> OptimizationResult:
+def optimize_png_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> ImageOptimizationResult:
     image_info = deepcopy(original_image_info)
 
     if original_image_info.is_animated:
-        return OptimizationResult(skip=ImageSkipReason.HAS_ANIMATION, original_image=original_image_info)
+        return ImageOptimizationResult(skip=ImageSkipReason.HAS_ANIMATION, original_image=original_image_info)
 
     # Reduce the image dimensions
     if image_info.is_extra_efficient:
@@ -83,17 +83,17 @@ def optimize_png_image(image: Image.Image, buffer: BytesIO, original_image_info:
         image_info.format = ImageFormat.JPEG
         image.save(buffer, format=ImageFormat.JPEG, optimize=True, quality=85)
         image_info.filesize = len(buffer.getvalue())
-        return OptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
+        return ImageOptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
 
     #  Not processed 1, L, LA, I, P modes, need additional investigation
     if original_image_info == image_info:
-        return OptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
+        return ImageOptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
 
     image.save(buffer, format=image_info.format, optimize=True)
-    return OptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
+    return ImageOptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
 
 
-def optimize_jpg_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> OptimizationResult:
+def optimize_jpg_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> ImageOptimizationResult:
     image_info = deepcopy(original_image_info)
     image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
 
@@ -102,46 +102,28 @@ def optimize_jpg_image(image: Image.Image, buffer: BytesIO, original_image_info:
         image_info.size = resized_size
         image.save(buffer, format=ImageFormat.JPEG, optimize=True, quality=85)
         image_info.filesize = len(buffer.getvalue())
-        return OptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
+        return ImageOptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
 
-    return OptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
+    return ImageOptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
 
 
-def optimize_gif_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> OptimizationResult:
+def optimize_gif_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> ImageOptimizationResult:
     image_info = deepcopy(original_image_info)
 
     if original_image_info.is_animated:
-        return OptimizationResult(skip=ImageSkipReason.HAS_ANIMATION, original_image=original_image_info)
+        return ImageOptimizationResult(skip=ImageSkipReason.HAS_ANIMATION, original_image=original_image_info)
 
     image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
 
     if resized_size != image_info.size:
         image_info.size = resized_size
         image.save(buffer, format=ImageFormat.GIF, optimize=True, quality=85)
-        return OptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
+        return ImageOptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
 
-    return OptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
-
-
-def classify_error(e: Exception) -> ImageErrorReason:
-    """Best-effort classification of the single-net exception.
-
-    Type checks are reliable; decode-vs-encode relies on Pillow's stable
-    message fragments, since exception types overlap between the two stages.
-    """
-    if isinstance(e, (Image.DecompressionBombError, MemoryError)):
-        return ImageErrorReason.TOO_LARGE
-
-    message = str(e).lower()
-    if any(fragment in message for fragment in ("truncated", "broken", "cannot identify", "tile cannot extend")):
-        return ImageErrorReason.DECODE_FAILED
-    if any(fragment in message for fragment in ("cannot write mode", "cannot save", "encoder")):
-        return ImageErrorReason.ENCODE_FAILED
-
-    return ImageErrorReason.UNKNOWN
+    return ImageOptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
 
 
-def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> OptimizationResult:
+def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> ImageOptimizationResult:
     """Single failure net: any pixel-decoding/encoding failure on a broken or
     exotic image becomes an error result instead of an exception."""
     min_filesize = 50 * 1024
@@ -149,7 +131,7 @@ def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> 
 
     try:
         if filesize < min_filesize:
-            return OptimizationResult(skip=ImageSkipReason.SMALL_IMAGE, original_image=original_image_info)
+            return ImageOptimizationResult(skip=ImageSkipReason.SMALL_IMAGE, original_image=original_image_info)
 
         if original_image_info.format == ImageFormat.PNG:
             return optimize_png_image(image, buffer, original_image_info)
@@ -160,8 +142,9 @@ def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> 
         if original_image_info.format == ImageFormat.GIF:
             return optimize_gif_image(image, buffer, original_image_info)
 
-        return OptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
+        return ImageOptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
 
     except Exception as e:
-        logger.warning(f"optimization failed ({classify_error(e)}): {e}")
-        return OptimizationResult(error=classify_error(e), original_image=original_image_info)
+        reason = ImageErrorReason.from_error(e)
+        logger.warning(f"optimization failed ({reason.name}): {e}")
+        return ImageOptimizationResult(error=reason, original_image=original_image_info)

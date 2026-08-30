@@ -2,7 +2,6 @@
 removal, rename handling, and packaging - using a synthetic epub, no repo fixtures."""
 
 import zipfile
-from io import BytesIO
 from pathlib import Path
 
 from epub.recipe_package import relocate_package, replace_links

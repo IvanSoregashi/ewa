@@ -9,10 +9,10 @@ from epub.tables import (
     ErrorImagesTable,
     SuccessfulImagesTable,
 )
-from library.image.models import OptimizationResult
+from library.image.models import ImageOptimizationResult
 
 
-def record_image_statistics(filepath: Path, results: list[OptimizationResult], db_url: str) -> None:
+def record_image_statistics(filepath: Path, results: list[ImageOptimizationResult], db_url: str) -> None:
     """Step 3.1: persist per-image optimization outcomes for one epub."""
     with ProcessedEpubTable(db_url) as epub_table:
         epub_id = epub_table.get_or_create_id(str(filepath.absolute()))
