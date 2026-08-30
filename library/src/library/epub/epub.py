@@ -1,5 +1,6 @@
 import io
 import logging
+import tempfile
 from collections.abc import Generator, Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from library.epub.media_type import EpubRole
 from library.epub.resources import ResourceIndex
 from library.epub.sink import EpubZipSink
 from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
+from library.utils import verify_destination
 
 logger = logging.getLogger("epub")
 
@@ -96,15 +98,17 @@ class EPUB:
             - an open binary file object: the archive is written there directly,
               nothing touches the filesystem.
         """
-        buffer = destination if isinstance(destination, io.BytesIO) else io.BytesIO()
-        self.package_into_buffer(buffer=buffer, manifest_only=manifest_only, sort_by_role=sort_by_role)
-        if isinstance(destination, (str, Path)):
-            try:
-                resolved_path = self._verify_destination(destination)
+        try:
+            if isinstance(destination, (str, Path)):
+                resolved_path = verify_destination(destination, self.path.name)
+                buffer = io.BytesIO()
+                self.package_into_buffer(buffer=buffer, manifest_only=manifest_only, sort_by_role=sort_by_role)
                 resolved_path.write_bytes(buffer.getvalue())
-            except Exception as e:
-                logger.error(f"package_into: failed to compress into EPUB: {e}")
-                raise e
+            else:
+                self.package_into_buffer(buffer=destination, manifest_only=manifest_only, sort_by_role=sort_by_role)
+        except Exception as e:
+            logger.error(f"package_into: failed to compress into EPUB: {e}")
+            raise e
 
     def package_into_buffer(
         self,
@@ -116,18 +120,6 @@ class EPUB:
         with EpubZipSink(buffer) as sink:
             for resource in resources:
                 sink.write_resource(resource)
-
-    def _verify_destination(self, destination: str | Path) -> Path:
-        destination: Path = Path(destination)
-        if destination.suffix.lower() != ".epub":
-            if not destination.is_dir():
-                raise NotADirectoryError(f"Path {destination} is neither a directory nor a epub.")
-            destination = destination / self.path.name
-        if destination.exists():
-            raise FileExistsError(f"File {destination} already exists.")
-        if not destination.parent.exists():
-            destination.parent.mkdir(parents=True)
-        return destination
 
     @contextmanager
     def keep_open(self) -> Generator[Self, None, None]:
@@ -165,13 +157,13 @@ class EPUB:
 class EpubInfo:
     path: Path
     file_size: int
-    file_count: int | None
-    images_size: int | None
-    images_count: int | None
-    chapters: int | None
-    identifier: str | None
-    title: str | None
-    author: str | None
+    file_count: int | None = None
+    images_size: int | None = None
+    images_count: int | None = None
+    chapters: int | None = None
+    identifier: str | None = None
+    title: str | None = None
+    author: str | None = None
 
     @classmethod
     def failed(cls, path: Path) -> EpubInfo:

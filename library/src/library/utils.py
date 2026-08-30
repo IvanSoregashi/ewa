@@ -4,6 +4,10 @@ import string
 from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
+from typing import TypeVar
+
+strPath = str | Path
+StrPathT = TypeVar("StrPathT", str, Path, strPath)
 
 
 def is_sublist(sublist, superlist):
@@ -46,3 +50,22 @@ def ignore_absolute_paths(absolute_paths: list[Path]) -> Callable[[str, list[str
         return set(ignored_names)
 
     return _ignore_patterns
+
+
+def verify_destination(destination: str | Path, filename: str) -> Path:
+    destination: Path = Path(destination)
+    filename: Path = Path(filename)
+    suffix = filename.suffix.lower()
+
+    if destination.suffix.lower() != suffix:
+        if not destination.is_dir():
+            raise NotADirectoryError(f"Path {destination} is neither a directory nor a epub.")
+        destination = destination / filename
+
+    if destination.exists():
+        raise FileExistsError(f"File {destination} already exists.")
+
+    if not destination.parent.exists():
+        destination.parent.mkdir(parents=True)
+
+    return destination

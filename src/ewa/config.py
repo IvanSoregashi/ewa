@@ -18,17 +18,18 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     profile_dir: Path = profile_dir
     current_dir: DirectoryPath = current_dir
-    database_filename: str = default_db_name
-    timestamp_db: bool = False
-    log_level_name: str = "INFO"
+    timestamp_db: bool = True
+    log_level_name: str = "DEBUG"
     log_level: int = 10
     is_windows: bool = is_windows
 
     def model_post_init(self, context: Any, /) -> None:
         self.profile_dir.mkdir(parents=True, exist_ok=True)
-        if self.timestamp_db:
-            self.database_filename = f"{import_time_stamp}_{self.database_filename}"
         self.log_level = logging.getLevelName(self.log_level_name)
+
+    @property
+    def database_filename(self) -> str:
+        return f"{import_time_stamp}_{default_db_name}" if self.timestamp_db else default_db_name
 
     @property
     def database_path(self) -> Path:

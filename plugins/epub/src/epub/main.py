@@ -9,14 +9,13 @@ from pydantic import DirectoryPath
 from sqlalchemy.exc import PendingRollbackError
 from sqlmodel import col
 
-from epub.serene_panda import orchestration
+from epub.recipe_epub import fully_process_encrypted_panda
 from epub.serene_panda.orchestration import move_file_preserving_hierarchy
 from ewa.ui import print_success, print_error
 from ewa.cli.print_table import print_table_from_models, print_table_from_dicts
 from epub.tables import EpubBookTable, EpubContentsTable, EpubOpfHash, EpubHashTable
 from library.epub.media_type import FileName, EpubRole
 from library.epub.utils import to_hex_hash
-from library.epub.utils_href import posix_relative_href
 from library.epub.epub import EPUB
 from epub.config import settings
 
@@ -33,43 +32,35 @@ def plugin():
 @app.callback()
 def setup():
     """Initialize the database on first run."""
-    print_success(f"setup callback called, settings: {settings.model_dump_json(indent=4)}")
+    pass
+
+
+@app.command("get-conf")
+def get_config(key: str = typer.Argument("")):
+    if key:
+        print_success(f"{key}={getattr(settings, key, "not-found")!r}")
+    else:
+        print_success(f"settings:\n{settings.model_dump_json(indent=4)}")
+
+
+@app.command("set-conf")
+def set_config(key: str = typer.Option("", "-k"), value: str = typer.Option("", "-v")):
+    try:
+        print_success("before change: " + repr(getattr(settings, key, "not-found")))
+        match value.lower():
+            case 'false':
+                value = False
+            case 'true':
+                value = True
+        setattr(settings, key, value)
+        print_success("after change: " + repr(getattr(settings, key, "not-found")))
+    except Exception as e:
+        print_error(str(e))
 
 
 @app.command()
-def decrypt(epub_path: Path = typer.Argument(None, exists=True)):
-    changes_dir = settings.current_dir / "changes"
-    changes_dir.mkdir(parents=True, exist_ok=True)
-
-    new_name = epub_path.with_stem(epub_path.stem.replace("(Encoded)", "").strip()).name
-    destination = changes_dir / new_name
-
-    with EPUB(epub_path).stream_to(destination) as epub:
-        epub.require_specification(EpubSpecification.SERENE_PANDA_ENCRYPTED)
-
-        assert len(epub.resources.fonts) == 1, "SEVERAL FONTS FOUND"
-        font_resource = epub.resources.fonts[0]
-        font_resource.write_to_filesystem(settings.serene_panda_fonts_dir / font_resource.hash_prefixed_name)
-
-        epub.core.remove_resource(font_resource)
-
-        for style_resource in epub.resources.styles:
-            relative_path = posix_relative_href(
-                anchor=style_resource.info.filename, absolute_href=font_resource.info.filename
-            )
-            if relative_path in parse_css_urls(style_resource.content):
-                style_resource.content = replace_css_url(
-                    style_resource.content, relative_path, font_resource.hash_prefixed_name
-                )
-
-        dictionary = orchestration.translation_dictionary()
-        for content_resource in epub.resources.markup_content:
-            if content_resource.spine_item_ref is None:
-                logger.warning(f"content_resource {content_resource.info.filename} is not in the spine")
-            content_resource.content = content_resource.content.decode("utf-8").translate(dictionary).encode("utf-8")
-            # content_resource.content = pretty_print_bs4_bytes(content_resource.content)
-
-        epub.core.remove_garbage()
+def decrypt(epub_path: Path = typer.Argument(exists=True)):
+    fully_process_encrypted_panda(str(epub_path))
 
 
 @app.command("showres")

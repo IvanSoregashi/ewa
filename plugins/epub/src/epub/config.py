@@ -26,10 +26,6 @@ class EpubSettings(Settings):
 
     def model_post_init(self, context: Any, /) -> None:
         super().model_post_init(context)
-        self.epub_dir.mkdir(parents=True, exist_ok=True)
-        self.encrypted_epub_dir.mkdir(parents=True, exist_ok=True)
-        self.processed_epub_dir.mkdir(parents=True, exist_ok=True)
-
         self.epub_settings_dir = self.profile_dir / "epub"
 
         self.container_dir = self.epub_settings_dir / "container"
@@ -37,17 +33,21 @@ class EpubSettings(Settings):
         self.ncx_dir = self.epub_settings_dir / "ncx"
         self.opf_dir = self.epub_settings_dir / "opf"
         self.style_dir = self.epub_settings_dir / "style"
-        self.container_dir.mkdir(parents=True, exist_ok=True)
-        self.nav_dir.mkdir(parents=True, exist_ok=True)
-        self.ncx_dir.mkdir(parents=True, exist_ok=True)
-        self.opf_dir.mkdir(parents=True, exist_ok=True)
-        self.style_dir.mkdir(parents=True, exist_ok=True)
-
         self.serene_panda_dir = self.epub_settings_dir / "serene_panda"
+
         self.serene_panda_fonts_dir = self.serene_panda_dir / "fonts"
         self.serene_panda_alpha_dir = self.serene_panda_dir / "alpha"
-        self.serene_panda_fonts_dir.mkdir(parents=True, exist_ok=True)
-        self.serene_panda_alpha_dir.mkdir(parents=True, exist_ok=True)
+
+        for dir_path in (
+            self.container_dir,
+            self.nav_dir,
+            self.ncx_dir,
+            self.ncx_dir,
+            self.opf_dir,
+            self.serene_panda_fonts_dir,
+            self.serene_panda_alpha_dir,
+        ):
+            dir_path.mkdir(parents=True, exist_ok=True)
 
 
 settings = EpubSettings()
