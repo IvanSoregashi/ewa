@@ -8,7 +8,16 @@ from pathlib import Path
 
 from PIL import Image
 
-from library.image.optimize_gif import downscale_frames, drop_frames, reindex_palette, resave_optimized
+from library.image.optimize_gif import (
+    convert_to_mp4,
+    convert_to_webp,
+    downscale_frames,
+    downscale_then_webp,
+    drop_frames,
+    gifsicle_optimize,
+    reindex_palette,
+    resave_optimized,
+)
 
 SAMPLES = Path(__file__).parent / "samples" / "images"
 
@@ -32,10 +41,15 @@ def print_table(rows: list[dict]) -> None:
 
 
 OPTIMIZERS = {
-    "resave_optimized": resave_optimized,
-    "reindex_palette_128": lambda im, size: reindex_palette(im, size, colors=128),
-    "drop_half": lambda im, size: drop_frames(im, size, keep_every=2),
-    "downscale_half": lambda im, size: downscale_frames(im, size, factor=0.5),
+    "resave_optimized": lambda im, size, src: resave_optimized(im, size),
+    "reindex_palette_128": lambda im, size, src: reindex_palette(im, size, colors=128),
+    "drop_half": lambda im, size, src: drop_frames(im, size, keep_every=2),
+    "downscale_half": lambda im, size, src: downscale_frames(im, size, factor=0.5),
+    "convert_to_webp_q80": lambda im, size, src: convert_to_webp(im, size, quality=80),
+    "downscale_webp": lambda im, size, src: downscale_then_webp(im, size, factor=0.5, quality=80),
+    "ffmpeg_mp4_crf23": lambda im, size, src: convert_to_mp4(im, size, crf=23, source_bytes=src),
+    "ffmpeg_mp4_crf30": lambda im, size, src: convert_to_mp4(im, size, crf=30),
+    "gifsicle_lossy80": lambda im, size, src: gifsicle_optimize(im, size, lossy=80, colors=128, source_bytes=src),
 }
 
 
@@ -46,14 +60,21 @@ def test_optimize_all_samples():
         out_dir.mkdir(exist_ok=True)
         for path in sorted(SAMPLES.glob("*.gif")):
             original_size = path.stat().st_size
+            source_bytes = path.read_bytes()  # for external tools: skip PIL re-encode
             with Image.open(path) as image:
                 if not getattr(image, "is_animated", False):
                     continue
-                new_bytes, info = func(image, original_size)
-                (out_dir / path.name).write_bytes(new_bytes)
+                new_bytes, info = func(image, original_size, source_bytes)
+                if new_bytes is None:
+                    rows.append({"function": name, "file": path.name, "original_kb": round(original_size / 1024),
+                                 "new_kb": "-", "savings_%": info.get("skipped", "skipped")})
+                    continue
+                suffix = ".mp4" if info.get("format") == "mp4" else (".webp" if info.get("format") == "webp" else ".gif")
+                (out_dir / (path.stem + suffix)).write_bytes(new_bytes)
                 rows.append({
                     "function": name,
                     "file": path.name,
+                    "format": info.get("format", "gif"),
                     "original_kb": round(original_size / 1024),
                     "new_kb": round(len(new_bytes) / 1024),
                     "savings_%": info["savings_percent"],
