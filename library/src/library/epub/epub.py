@@ -1,10 +1,10 @@
+import io
 import logging
-import tempfile
 from collections.abc import Generator, Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Self
+from typing import BinaryIO, Self
 from zipfile import is_zipfile
 
 from library.asserts import require
@@ -83,22 +83,39 @@ class EPUB:
 
     def package_into(
         self,
-        destination: str | Path | BinaryIO,
+        destination: str | Path | io.BytesIO,
         manifest_only: bool = False,
-        sort_by_role: bool = False,
+        sort_by_role: bool = True,
     ) -> None:
-        resolved_destination = (
-            self._verify_destination(destination) if isinstance(destination, (str, Path)) else destination
-        )
+        """Package the current state into a new epub archive.
+
+        destination may be:
+            - a filepath (str | Path): the archive is assembled in an internal
+              buffer first and only written to disk on success, so a failure
+              mid-packaging never leaves a truncated file behind;
+            - an open binary file object: the archive is written there directly,
+              nothing touches the filesystem.
+        """
+        buffer = destination if isinstance(destination, io.BytesIO) else io.BytesIO()
+        self.package_into_buffer(buffer=buffer, manifest_only=manifest_only, sort_by_role=sort_by_role)
+        if isinstance(destination, (str, Path)):
+            try:
+                resolved_path = self._verify_destination(destination)
+                resolved_path.write_bytes(buffer.getvalue())
+            except Exception as e:
+                logger.error(f"package_into: failed to compress into EPUB: {e}")
+                raise e
+
+    def package_into_buffer(
+        self,
+        buffer: BinaryIO,
+        manifest_only: bool = False,
+        sort_by_role: bool = True,
+    ) -> None:
         resources = self.get_resources(manifest_only=manifest_only).iter(sort_by_role=sort_by_role)
-        try:
-            with self.source.open(), EpubZipSink(resolved_destination) as sink:
-                for resource in resources:
-                    sink.write_resource(resource)
-        except Exception as e:
-            logger.error(f"package_into: failed to compress into EPUB: {e}")
-            raise e
-        logger.info(f"{self} successfully packaged into EPUB({destination}).")
+        with EpubZipSink(buffer) as sink:
+            for resource in resources:
+                sink.write_resource(resource)
 
     def _verify_destination(self, destination: str | Path) -> Path:
         destination: Path = Path(destination)

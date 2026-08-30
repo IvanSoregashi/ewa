@@ -1,4 +1,5 @@
 from copy import copy
+from typing import BinaryIO
 from zipfile import ZipFile, ZIP_DEFLATED, ZipInfo, ZIP_STORED
 from pathlib import Path
 
@@ -14,8 +15,7 @@ logger = logging.getLogger(__name__)
 
 class EpubZipSink:
     def __init__(self, path: Path | BinaryIO):
-        # ZipFile accepts both a filesystem path and a binary file object;
-        # a file object lets callers package into memory buffers or pipes.
+        # ZipFile accepts both a filesystem path and a binary file object.        self.path = path
         self.path = path
         # TODO path validation
         self._zip_file: ZipFile | None = None
