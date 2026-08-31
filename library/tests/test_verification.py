@@ -1,7 +1,8 @@
 """Tests for library.epub.verification chapter XML checks.
 
 Synthetic epub built inline (same pattern as plugins/epub test_recipe_package),
-no repo fixtures."""
+no repo fixtures. Sampling tests use uniformly valid/broken books so outcomes
+are deterministic regardless of which chapters random.sample picks."""
 
 import zipfile
 from pathlib import Path
@@ -10,7 +11,6 @@ import pytest
 
 from library.epub.epub import EPUB
 from library.epub.media_type import FileName
-from library.epub.resources import Resource
 from library.epub.verification import verify_chapter_xml, verify_chapters_xml
 
 VALID_CHAPTER = """<?xml version="1.0" encoding="utf-8"?>
@@ -50,62 +50,69 @@ def build_epub(path: Path, chapters: dict[str, str]) -> None:
             z.writestr(name, content)
 
 
-def make_resource(markup: str, filename: str = "OEBPS/text/chapter.xhtml") -> Resource:
-    from io import BytesIO
-    from zipfile import ZipInfo
-
-    data = markup.encode("utf-8")
-    info = ZipInfo(filename)
-    info.file_size = len(data)
-    return Resource(info=info, stream_bytes=lambda i: BytesIO(data))
-
-
 # ---------------------------------------------------------------------------
-# verify_chapter_xml
+# verify_chapter_xml - spot check of one random chapter
 # ---------------------------------------------------------------------------
 
 
-def test_verify_chapter_xml_accepts_wellformed_xhtml():
-    assert verify_chapter_xml(make_resource(VALID_CHAPTER)) is True
+def test_verify_chapter_xml_accepts_wellformed_xhtml(tmp_path: Path):
+    path = tmp_path / "book.epub"
+    build_epub(path, {"OEBPS/text/chapter.xhtml": VALID_CHAPTER})
+
+    assert verify_chapter_xml(EPUB(path)) is True
 
 
-def test_verify_chapter_xml_rejects_unclosed_void_element():
+def test_verify_chapter_xml_rejects_broken_chapter(tmp_path: Path):
     """Exactly the artifact lxml's HTML serializer produces: <br> without the
     self-closing slash - well-formed HTML, invalid XML."""
-    with pytest.raises(ValueError, match="chapter.xhtml.*not well-formed XML"):
-        verify_chapter_xml(make_resource(BROKEN_CHAPTER))
+    path = tmp_path / "book.epub"
+    build_epub(path, {"OEBPS/text/chapter.xhtml": BROKEN_CHAPTER})
+
+    with pytest.raises(ValueError) as excinfo:
+        verify_chapter_xml(EPUB(path))
+
+    message = str(excinfo.value)
+    assert "not well-formed XML" in message
+    assert "chapter.xhtml" in message
 
 
-def test_verify_chapter_xml_rejects_empty_content():
+def test_verify_chapter_xml_rejects_empty_chapter(tmp_path: Path):
+    path = tmp_path / "book.epub"
+    build_epub(path, {"OEBPS/text/chapter.xhtml": ""})
+
     with pytest.raises(ValueError, match="not well-formed XML"):
-        verify_chapter_xml(make_resource(""))
+        verify_chapter_xml(EPUB(path))
+
+
+def test_verify_chapter_xml_without_chapters_raises(tmp_path: Path):
+    path = tmp_path / "book.epub"
+    build_epub(path, {})
+
+    with pytest.raises(ValueError, match="no chapter entries"):
+        verify_chapter_xml(EPUB(path))
 
 
 # ---------------------------------------------------------------------------
-# verify_chapters_xml
+# verify_chapters_xml - count-sampled or all chapters
 # ---------------------------------------------------------------------------
 
 
 def test_verify_chapters_xml_all_valid(tmp_path: Path):
     path = tmp_path / "book.epub"
-    chapters = {f"OEBPS/text/ch{i}.xhtml": VALID_CHAPTER for i in range(3)}
-    build_epub(path, chapters)
+    build_epub(path, {f"OEBPS/text/ch{i}.xhtml": VALID_CHAPTER for i in range(3)})
 
-    assert verify_chapters_xml(EPUB(path)) is True
+    assert verify_chapters_xml(EPUB(path)) is True  # None (default) = all
 
 
 def test_verify_chapters_xml_collects_all_failures(tmp_path: Path):
     """One broken chapter must not hide another: the error lists every
     offending filename."""
     path = tmp_path / "book.epub"
-    build_epub(
-        path,
-        {
-            "OEBPS/text/good.xhtml": VALID_CHAPTER,
-            "OEBPS/text/bad1.xhtml": BROKEN_CHAPTER,
-            "OEBPS/text/bad2.xhtml": BROKEN_CHAPTER,
-        },
-    )
+    build_epub(path, {
+        "OEBPS/text/good.xhtml": VALID_CHAPTER,
+        "OEBPS/text/bad1.xhtml": BROKEN_CHAPTER,
+        "OEBPS/text/bad2.xhtml": BROKEN_CHAPTER,
+    })
 
     with pytest.raises(ValueError) as excinfo:
         verify_chapters_xml(EPUB(path))
@@ -117,9 +124,23 @@ def test_verify_chapters_xml_collects_all_failures(tmp_path: Path):
     assert "good.xhtml" not in message
 
 
+def test_verify_chapters_xml_checks_sample_size(tmp_path: Path):
+    """count=N verifies N random chapters; counts beyond the available
+    chapters verify all."""
+    path = tmp_path / "book.epub"
+    build_epub(path, {f"OEBPS/text/bad{i}.xhtml": BROKEN_CHAPTER for i in range(3)})
+    epub = EPUB(path)
+
+    with pytest.raises(ValueError, match="2 chapter\(s\)"):
+        verify_chapters_xml(epub, count=2)
+
+    with pytest.raises(ValueError, match="3 chapter\(s\)"):  # count > available: all checked
+        verify_chapters_xml(epub, count=10)
+
+
 def test_verify_chapters_xml_ignores_non_chapter_resources(tmp_path: Path):
-    """Opf/container are XML too, but the check targets chapters only; a
-    broken non-HTML resource must not fail the verification."""
+    """Chapter detection is by suffix; broken non-chapter entries must not
+    fail the verification."""
     path = tmp_path / "book.epub"
     build_epub(path, {"OEBPS/text/chapter.xhtml": VALID_CHAPTER})
     with zipfile.ZipFile(path, "a") as z:

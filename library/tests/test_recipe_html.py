@@ -7,11 +7,10 @@ the same way as in test_image_recipe, over plain HTML/XHTML bytes.
 from io import BytesIO
 from zipfile import ZipInfo
 
-from lxml import html as lxml_html
+from lxml import etree, html as lxml_html
 
 from library.epub.recipe_html import replace_links, translate_text
 from library.epub.resources import Resource
-from library.epub.verification import verify_chapter_xml
 
 
 def html_resource(markup: str, filename: str = "OEBPS/text/chapter.xhtml") -> Resource:
@@ -222,7 +221,7 @@ def test_replace_links_output_stays_valid_xml():
     replace_links(resource, table)
 
     content = resource.content
-    verify_chapter_xml(resource)  # raises if the output is not well-formed XML
+    etree.fromstring(content)  # raises if the output is not well-formed XML
     assert b'href="new_target.xhtml"' in content
     assert b"<br/>" in content  # not <br>
     assert b'xmlns="http://www.w3.org/1999/xhtml"' in content
@@ -238,4 +237,4 @@ def test_replace_links_falls_back_to_html_parse_for_broken_xml():
 
     parsed = lxml_html.document_fromstring(resource.content)
     assert [link for _, _, link, _ in parsed.iterlinks()] == ["new.xhtml"]
-    verify_chapter_xml(resource)  # output is XML despite the HTML-parse fallback
+    etree.fromstring(resource.content)  # output is XML despite the HTML-parse fallback
