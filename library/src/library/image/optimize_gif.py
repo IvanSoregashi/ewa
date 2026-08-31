@@ -123,13 +123,20 @@ def convert_to_webp(
     original_size: int,
     quality: int = 80,
     method: int = 4,
+    keep_alpha: bool = False,
 ) -> tuple[bytes, dict]:
     """Transcode the animation to animated WebP: modern video-style temporal
-    compression, Pillow-native (no external tools)."""
+    compression, Pillow-native (no external tools).
+
+    Frames are flattened to RGB by default: lossy VP8 frames carrying ALPH
+    data are rejected by several image viewers (verified on the sample set),
+    while dropping alpha costs ~nothing on these sources.
+    """
     frames, durations = [], []
+    target_mode = "RGBA" if keep_alpha else "RGB"
     for frame in ImageSequence.Iterator(image):
         durations.append(frame.info.get("duration", 100))
-        frames.append(frame.convert("RGBA"))
+        frames.append(frame.convert(target_mode))
 
     buffer = io.BytesIO()
     frames[0].save(
