@@ -39,10 +39,12 @@ def pretty_print_bytes(content: bytes) -> bytes:
     content = html.tostring(
         html.document_fromstring(content, parser=html.HTMLParser(remove_blank_text=True, remove_pis=True)),
         pretty_print=True,
+        encoding="utf-8",
     )
     return etree.tostring(
         etree.fromstring(content, parser=etree.XMLParser(remove_blank_text=True, remove_pis=True, recover=True)),
         pretty_print=True,
+        encoding="utf-8",
     )
 
 

@@ -9,6 +9,7 @@ from library.image.constants import (
     EXTRA_WIDTH_SIZE,
     ImageFormat,
     ImageMode,
+    USELESS_ALPHA_THRESHOLD,
 )
 from library.image.models import (
     ImageErrorReason,
@@ -49,7 +50,7 @@ def discard_empty_alpha_channels_mode(image: Image.Image) -> tuple[Image.Image, 
     """Allows to discard empty alpha channels from PNG"""
     if image.mode == "RGBA":
         extrema = image.getextrema()  # LOADS PIXEL DATA
-        no_transparency = len(extrema) == 4 and extrema[3][0] == 255
+        no_transparency = len(extrema) == 4 and extrema[3][0] >= USELESS_ALPHA_THRESHOLD
         if no_transparency:
             return image.convert("RGB"), True
     return image, False
@@ -57,7 +58,7 @@ def discard_empty_alpha_channels_mode(image: Image.Image) -> tuple[Image.Image, 
 
 def useless_transparency_mode(image: Image.Image) -> bool:
     extrema = image.getextrema()
-    return len(extrema) == 4 and extrema[3][0] == 255
+    return len(extrema) == 4 and extrema[3][0] >= USELESS_ALPHA_THRESHOLD
 
 
 def optimize_png_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> ImageOptimizationResult:

@@ -47,6 +47,8 @@ def resave_optimized(image: Image.Image, original_size: int) -> tuple[bytes, dic
 
 def reindex_palette(image: Image.Image, original_size: int, colors: int = 128) -> tuple[bytes, dict]:
     """Quantize every frame to one shared adaptive palette of `colors` entries."""
+
+
 def reindex_palette(image: Image.Image, original_size: int, colors: int = 128) -> tuple[bytes, dict]:
     """Quantize every frame to one shared adaptive palette of `colors` entries."""
     frames, durations = [], []
@@ -71,16 +73,18 @@ def reindex_palette(image: Image.Image, original_size: int, colors: int = 128) -
         optimize=True,
     )
     new_bytes = buffer.getvalue()
-    return new_bytes, {"colors": colors, "frames": len(frames), "savings_percent": _savings_percent(original_size, new_bytes)}
+    return new_bytes, {
+        "colors": colors,
+        "frames": len(frames),
+        "savings_percent": _savings_percent(original_size, new_bytes),
+    }
 
 
 def drop_frames(image: Image.Image, original_size: int, keep_every: int = 2) -> tuple[bytes, dict]:
     """Keep every Nth frame, stretching durations to preserve total runtime."""
     all_durations = [frame.info.get("duration", 100) for frame in ImageSequence.Iterator(image)]
     frames = [frame.copy() for frame in ImageSequence.Iterator(image)][::keep_every]
-    kept_durations = [
-        sum(all_durations[i : i + keep_every]) for i in range(0, len(all_durations), keep_every)
-    ]
+    kept_durations = [sum(all_durations[i : i + keep_every]) for i in range(0, len(all_durations), keep_every)]
 
     buffer = io.BytesIO()
     frames[0].save(
@@ -111,8 +115,13 @@ def downscale_frames(image: Image.Image, original_size: int, factor: float = 0.5
 
     buffer = io.BytesIO()
     frames[0].save(
-        buffer, format="GIF", save_all=True, append_images=frames[1:], duration=durations,
-        loop=image.info.get("loop", 0), optimize=True,
+        buffer,
+        format="GIF",
+        save_all=True,
+        append_images=frames[1:],
+        duration=durations,
+        loop=image.info.get("loop", 0),
+        optimize=True,
     )
     new_bytes = buffer.getvalue()
     return new_bytes, {"new_size": frames[0].size, "savings_percent": _savings_percent(original_size, new_bytes)}
@@ -195,7 +204,6 @@ def _tool_available(name: str) -> bool:
     return shutil.which(name) is not None
 
 
-
 def _tool_available(name: str) -> bool:
     return shutil.which(name) is not None
 
@@ -225,13 +233,22 @@ def convert_to_mp4(
             image.save(source_path, format="GIF", save_all=True)
         # yuv420p for reader compatibility; even dimensions required by h264
         command = [
-            "ffmpeg", "-y", "-loglevel", "error",
-            "-i", source_path,
-            "-movflags", "+faststart",
-            "-crf", str(crf),
-            "-preset", preset,
-            "-pix_fmt", "yuv420p",
-            "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+            "ffmpeg",
+            "-y",
+            "-loglevel",
+            "error",
+            "-i",
+            source_path,
+            "-movflags",
+            "+faststart",
+            "-crf",
+            str(crf),
+            "-preset",
+            preset,
+            "-pix_fmt",
+            "yuv420p",
+            "-vf",
+            "scale=trunc(iw/2)*2:trunc(ih/2)*2",
             f"{tmp}/out.mp4",
         ]
         result = subprocess.run(command, capture_output=True, text=True)

@@ -66,19 +66,30 @@ def test_optimize_all_samples():
                     continue
                 new_bytes, info = func(image, original_size, source_bytes)
                 if new_bytes is None:
-                    rows.append({"function": name, "file": path.name, "original_kb": round(original_size / 1024),
-                                 "new_kb": "-", "savings_%": info.get("skipped", "skipped")})
+                    rows.append(
+                        {
+                            "function": name,
+                            "file": path.name,
+                            "original_kb": round(original_size / 1024),
+                            "new_kb": "-",
+                            "savings_%": info.get("skipped", "skipped"),
+                        }
+                    )
                     continue
-                suffix = ".mp4" if info.get("format") == "mp4" else (".webp" if info.get("format") == "webp" else ".gif")
+                suffix = (
+                    ".mp4" if info.get("format") == "mp4" else (".webp" if info.get("format") == "webp" else ".gif")
+                )
                 (out_dir / (path.stem + suffix)).write_bytes(new_bytes)
-                rows.append({
-                    "function": name,
-                    "file": path.name,
-                    "format": info.get("format", "gif"),
-                    "original_kb": round(original_size / 1024),
-                    "new_kb": round(len(new_bytes) / 1024),
-                    "savings_%": info["savings_percent"],
-                })
+                rows.append(
+                    {
+                        "function": name,
+                        "file": path.name,
+                        "format": info.get("format", "gif"),
+                        "original_kb": round(original_size / 1024),
+                        "new_kb": round(len(new_bytes) / 1024),
+                        "savings_%": info["savings_percent"],
+                    }
+                )
 
     print()
     headers = list(rows[0])

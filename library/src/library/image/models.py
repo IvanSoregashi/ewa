@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image
 
 from library.analytics import OperationResult
-from library.image.constants import ImageFormat, ImageMode, EFFICIENT_BPP, EXTRA_EFFICIENT_BPP
+from library.image.constants import ImageFormat, ImageMode, EFFICIENT_BPP, EXTRA_EFFICIENT_BPP, USELESS_ALPHA_THRESHOLD
 
 
 @dataclass(kw_only=True)
@@ -83,7 +83,7 @@ class ImageInfo:
             self.extrema is not None
             and self.mode is ImageMode.RGBA
             and len(self.extrema) == 4
-            and self.extrema[3][0] == 255
+            and self.extrema[3][0] >= USELESS_ALPHA_THRESHOLD
         )
 
 

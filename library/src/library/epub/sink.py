@@ -30,7 +30,7 @@ class EpubZipSink:
         return require(self._zip_file, f"{self}._zip_file")
 
     def write_resource(self, resource: Resource):
-        logger.warning(f"{self} Writing resource: {resource}")
+        # logger.debug(f"{self} Writing resource: {resource}")
         if resource.is_deleted:
             return
         info = copy(resource.info)

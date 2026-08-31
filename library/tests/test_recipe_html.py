@@ -11,6 +11,7 @@ from lxml import html as lxml_html
 
 from library.epub.recipe_html import replace_links, translate_text
 from library.epub.resources import Resource
+from library.epub.verification import verify_chapter_xml
 
 
 def html_resource(markup: str, filename: str = "OEBPS/text/chapter.xhtml") -> Resource:
@@ -179,3 +180,62 @@ def test_replace_links_result_still_parses():
     srcs = [link for element, _, link, _ in parsed.iterlinks() if element.tag == "img"]
     assert hrefs == ["new_target.xhtml"]
     assert srcs == ["images/old_picture.png"]
+
+
+def test_replace_links_pretty_print_flag_controls_serialization():
+    markup = '<html><body><a href="old.xhtml">x</a></body></html>'
+    table = {"OEBPS/text/old.xhtml": "OEBPS/text/new.xhtml"}
+
+    pretty_resource = html_resource(markup)
+    replace_links(pretty_resource, table, pretty_print_result=True)
+    plain_resource = html_resource(markup)
+    replace_links(plain_resource, table, pretty_print_result=False)
+
+    assert b"new.xhtml" in pretty_resource.content
+    assert b"new.xhtml" in plain_resource.content
+    assert b"\n" in pretty_resource.content  # pretty-print added indentation
+    plain_body = plain_resource.content.split(b"?>", 1)[-1].lstrip(b"\n")
+    assert b"\n" not in plain_body  # plain serialization added no indentation
+
+
+# ---------------------------------------------------------------------------
+# XML-preserving serialization (option A: chapters stay valid parseable XML)
+# ---------------------------------------------------------------------------
+
+XHTML_CHAPTER = """<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head><title>Chapter</title></head>
+  <body>
+    <p>Hello <br/> world</p>
+    <a href="old_target.xhtml">link</a>
+    <img src="images/old_picture.png" alt="x"/>
+  </body>
+</html>"""
+
+
+def test_replace_links_output_stays_valid_xml():
+    """Void elements stay self-closed, the XML declaration and namespaces
+    survive: the output passes verify_chapter_xml."""
+    resource = html_resource(XHTML_CHAPTER)
+    table = {"OEBPS/text/old_target.xhtml": "OEBPS/text/new_target.xhtml"}
+
+    replace_links(resource, table)
+
+    content = resource.content
+    verify_chapter_xml(resource)  # raises if the output is not well-formed XML
+    assert b'href="new_target.xhtml"' in content
+    assert b"<br/>" in content  # not <br>
+    assert b'xmlns="http://www.w3.org/1999/xhtml"' in content
+    assert b"<?xml" in content
+
+
+def test_replace_links_falls_back_to_html_parse_for_broken_xml():
+    """Non-well-formed sources still get their links rewritten, and the output
+    is still XML-serialized."""
+    resource = html_resource('<html><body><p>x<br><p>y <a href="old.xhtml">go</a></body></html>')
+
+    replace_links(resource, {"OEBPS/text/old.xhtml": "OEBPS/text/new.xhtml"})
+
+    parsed = lxml_html.document_fromstring(resource.content)
+    assert [link for _, _, link, _ in parsed.iterlinks()] == ["new.xhtml"]
+    verify_chapter_xml(resource)  # output is XML despite the HTML-parse fallback

@@ -23,7 +23,7 @@ class Resource:
         self.stream_bytes = stream_bytes
 
         self.media_type, self.role = type_and_role_from_filename(self.info.filename)
-        logger.debug(f"{self} MediaType({self.media_type}) EpubRole({self.role})")
+        # logger.debug(f"{self} MediaType({self.media_type}) EpubRole({self.role})")
 
         self._content: bytes | None = None
         self._hex_hash: str | None = None
@@ -64,7 +64,7 @@ class Resource:
 
     @content.setter
     def content(self, value: bytes) -> None:
-        logger.info(f"{self} reassigning the byte contents")
+        # logger.debug(f"{self} reassigning the byte contents")
         self._content = value
 
     @property

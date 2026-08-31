@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     profile_dir: Path = profile_dir
     current_dir: DirectoryPath = current_dir
     timestamp_db: bool = True
-    log_level_name: str = "DEBUG"
+    log_level_name: str = "INFO"
     log_level: int = 10
     is_windows: bool = is_windows
 
