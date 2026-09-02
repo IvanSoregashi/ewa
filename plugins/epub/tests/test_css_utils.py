@@ -1,4 +1,4 @@
-from library.utils_css import cleanup_font_block, cleanup_panda_line
+from epub.recipe_css import cleanup_font_block, cleanup_panda_line
 
 css_stylesheet_bytes = b""".calibre {
     display: block;

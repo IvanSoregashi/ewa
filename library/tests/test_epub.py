@@ -5,7 +5,7 @@ import pytest
 
 from library.epub.epub import EPUB
 
-ARCHIVE = "C:/Users/Ivan/Projects/ewa/library/tests/samples/source/archive.zip"
+ARCHIVE = "C:/Users/Ivan/Projects/ewa/library/tests/samples/source/archive.epub"
 DIRECTORY = "C:/Users/Ivan/Projects/ewa/library/tests/samples/source/directory"
 EPUB1 = "C:/Users/Ivan/Projects/ewa/library/tests/samples/source/a-monster-second-chance.epub"
 DIRECTORY1 = "C:/Users/Ivan/Projects/ewa/library/tests/samples/source/a-monster-second-chance"
@@ -49,7 +49,7 @@ def test_stream_copy(epub_path, destination):
 
 def test_archive_repackaging(destination):
     epub1 = EPUB(EPUB1)
-    epub1.package_into(destination)
+    epub1.package_into(destination, sort_by_role=False)
     epub2 = EPUB(destination)
 
     source1 = epub1.source

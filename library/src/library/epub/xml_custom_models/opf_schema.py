@@ -130,12 +130,12 @@ class Manifest(XMLElement, tag="manifest", ns=XMLNamespace.OPF):
         self.items = self.items + [new_item]
         return new_item
 
-    def remove_item(self, item: ManifestItem | None = None, id: str | None = None):
+    def remove_item(self, item: ManifestItem | None = None, _id: str | None = None):
         """Remove a manifest item by its id or object reference."""
         if item is not None:
             self.items = [i for i in self.items if i._elem is not item._elem]
         elif id is not None:
-            self.items = [i for i in self.items if i.id != id]
+            self.items = [i for i in self.items if i.id != _id]
 
 
 # ---------------------------------------------------------------------------

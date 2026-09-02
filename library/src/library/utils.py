@@ -52,15 +52,23 @@ def ignore_absolute_paths(absolute_paths: list[Path]) -> Callable[[str, list[str
     return _ignore_patterns
 
 
-def verify_destination(destination: str | Path, filename: str) -> Path:
+def verify_destination(destination: str | Path, filename: str, suffix: str| None = None) -> Path:
     destination: Path = Path(destination)
     filename: Path = Path(filename)
-    suffix = filename.suffix.lower()
 
-    if destination.suffix.lower() != suffix:
+    if suffix is None and filename.suffix:
+        suffix = filename.suffix.lower()
+
+    if not suffix and not destination.suffix:
+        raise ValueError("Suffix must be provided.")
+
+    if suffix and destination.suffix.lower() != suffix:
         if not destination.is_dir():
             raise NotADirectoryError(f"Path {destination} is neither a directory nor a epub.")
         destination = destination / filename
+
+    if destination.is_dir():
+        raise IsADirectoryError(f"Path {destination} is a directory.")
 
     if destination.exists():
         raise FileExistsError(f"File {destination} already exists.")

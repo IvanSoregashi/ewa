@@ -11,7 +11,7 @@ from library.epub.source import DirectorySource, SourceProtocol, ZipFileSource
 logger = logging.getLogger(__name__)
 SAMPLE_DIR = Path(__file__).parent / "samples" / "source"
 DIRECTORY = SAMPLE_DIR / "directory"
-ARCHIVE = SAMPLE_DIR / "archive.zip"
+ARCHIVE = SAMPLE_DIR / "archive.epub"
 RELATIVE_NAMELIST = [
     "mimetype",
     "META-INF/",

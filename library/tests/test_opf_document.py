@@ -209,7 +209,7 @@ def test_opf_manifest_add_remove(package_class):
     assert len(doc.manifest.items) == initial_count + 1
 
     # Remove
-    doc.manifest.remove_item(id="added-item")
+    doc.manifest.remove_item(_id="added-item")
     assert len(doc.manifest.items) == initial_count
 
 

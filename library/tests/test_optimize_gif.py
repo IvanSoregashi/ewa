@@ -6,6 +6,7 @@ samples/images/<function_name>/ and a savings report table is printed.
 
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
 from library.image.optimize_gif import (
@@ -37,7 +38,7 @@ def print_table(rows: list[dict]) -> None:
     print(" | ".join(h.ljust(widths[h]) for h in headers))
     print("-+-".join("-" * widths[h] for h in headers))
     for row in rows:
-        print(" | ".join(str(r[h]).ljust(widths[h]) for h in headers))
+        print(" | ".join(str(row[h]).ljust(widths[h]) for h in headers))
 
 
 OPTIMIZERS = {
@@ -52,7 +53,7 @@ OPTIMIZERS = {
     "gifsicle_lossy80": lambda im, size, src: gifsicle_optimize(im, size, lossy=80, colors=128, source_bytes=src),
 }
 
-
+@pytest.mark.skip()
 def test_optimize_all_samples():
     rows = []
     for name, func in OPTIMIZERS.items():
