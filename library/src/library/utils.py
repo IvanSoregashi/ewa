@@ -52,7 +52,7 @@ def ignore_absolute_paths(absolute_paths: list[Path]) -> Callable[[str, list[str
     return _ignore_patterns
 
 
-def verify_destination(destination: str | Path, filename: str, suffix: str| None = None) -> Path:
+def verify_destination(destination: str | Path, filename: str, suffix: str | None = None) -> Path:
     destination: Path = Path(destination)
     filename: Path = Path(filename)
 

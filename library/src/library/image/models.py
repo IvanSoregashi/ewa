@@ -91,6 +91,7 @@ class ImageSkipReason(IntEnum):
     NOT_OPTIMIZED = 1
     SMALL_IMAGE = 2
     HAS_ANIMATION = 3
+    WORSE_CONVERSION = 4
 
 
 class ImageErrorReason(IntEnum):

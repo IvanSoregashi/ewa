@@ -17,7 +17,7 @@ class VideoTagInfo:
     The poster shares the basename with the mp4, so both derive from a single
     replacement-mechanism entry (old gif archive path -> VideoTagInfo)."""
 
-    video_path: str   # archive path of the mp4
+    video_path: str  # archive path of the mp4
     poster_path: str  # archive path of the poster jpeg
     width: int
     height: int
@@ -116,6 +116,9 @@ def replace_gifs_with_videos(
         element.getparent().replace(element, _video_element(element, info, resource.filename))
 
     resource.content = etree.tostring(
-        html.getroottree(), encoding="utf-8", xml_declaration=True, pretty_print=pretty_print_result,
+        html.getroottree(),
+        encoding="utf-8",
+        xml_declaration=True,
+        pretty_print=pretty_print_result,
     )
     return len(replacements)

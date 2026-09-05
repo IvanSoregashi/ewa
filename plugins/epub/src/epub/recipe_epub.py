@@ -15,6 +15,7 @@ from library.epub.media_type import EpubRole, FileName
 from library.epub import recipe_image, recipe_html
 from epub import recipe_analytics, recipe_css, recipe_package
 from library.epub.resources import IndexInfo
+from library.image.constants import ImageFormat
 
 logger = logging.getLogger(__name__)
 sp_dictionary_path: Path = settings.serene_panda_dir / "translator.json"
@@ -144,7 +145,7 @@ def fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
     try:
         with EPUB(current_path).keep_open() as epub:
             original_info = epub.info()
-            #recipe_package.relocate_package(epub)
+            # recipe_package.relocate_package(epub)
             for f in epub.resources.by_role(EpubRole.OPF):
                 if f.filename != FileName.DEFAULT_OPF:
                     # EPUB STAYS IN PLACE
@@ -223,3 +224,18 @@ def fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
         pass
 
     return EpubOptimizationResult(success=True, original_epub=original_info, new_epub=new_info)
+
+
+def image_stats(path: str) -> None:
+    current_path = Path(path)
+    counter = 0
+    images: dict[int, list[int]] = {}
+    with EPUB(current_path).keep_open() as epub:
+        for image_resource in epub.resources.by_role(EpubRole.IMAGE):
+            filesize = int(image_resource.info.file_size / 1024)
+            percent_comp = int((image_resource.info.compress_size / image_resource.info.file_size) * 100)
+            image_info = recipe_image.get_image_info(image_resource)
+            images.setdefault(filesize, []).append(percent_comp)
+
+    for size, list_percent in sorted(images.items()):
+        logger.info(f"{size} KB files={len(list_percent)}, avg_percent={sum(list_percent) // len(list_percent)}")

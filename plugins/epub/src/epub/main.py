@@ -9,7 +9,7 @@ from pydantic import DirectoryPath
 from sqlalchemy.exc import PendingRollbackError
 from sqlmodel import col
 
-from epub.recipe_epub import fully_process_encrypted_panda
+from epub.recipe_epub import fully_process_encrypted_panda, image_stats
 from epub.serene_panda.orchestration import move_file_preserving_hierarchy
 from ewa.ui import print_success, print_error
 from ewa.cli.print_table import print_table_from_models, print_table_from_dicts
@@ -72,6 +72,14 @@ def decrypt(epub_path: Path = typer.Argument(exists=True)):
 
     if result.success and result.new_epub and result.new_epub.path:
         Path(result.new_epub.path).unlink(missing_ok=True)
+
+
+@app.command("il")
+def image_log(epub_path: Path = typer.Argument(exists=True)):
+    start = time.time()
+    image_stats(str(epub_path))
+    elapsed = time.time() - start
+    print(f"ELAPSED {elapsed:.2f}s")
 
 
 @app.command("showres")

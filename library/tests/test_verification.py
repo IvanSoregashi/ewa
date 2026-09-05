@@ -108,11 +108,14 @@ def test_verify_chapters_xml_collects_all_failures(tmp_path: Path):
     """One broken chapter must not hide another: the error lists every
     offending filename."""
     path = tmp_path / "book.epub"
-    build_epub(path, {
-        "OEBPS/text/good.xhtml": VALID_CHAPTER,
-        "OEBPS/text/bad1.xhtml": BROKEN_CHAPTER,
-        "OEBPS/text/bad2.xhtml": BROKEN_CHAPTER,
-    })
+    build_epub(
+        path,
+        {
+            "OEBPS/text/good.xhtml": VALID_CHAPTER,
+            "OEBPS/text/bad1.xhtml": BROKEN_CHAPTER,
+            "OEBPS/text/bad2.xhtml": BROKEN_CHAPTER,
+        },
+    )
 
     with pytest.raises(ValueError) as excinfo:
         verify_chapters_xml(EPUB(path))

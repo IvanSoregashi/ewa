@@ -19,4 +19,3 @@ class EpubOperation(Protocol):
 
 class ResourceOperation(Protocol):
     def perform(self, resource: Resource) -> OperationResult: ...
-

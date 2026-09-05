@@ -53,6 +53,7 @@ OPTIMIZERS = {
     "gifsicle_lossy80": lambda im, size, src: gifsicle_optimize(im, size, lossy=80, colors=128, source_bytes=src),
 }
 
+
 @pytest.mark.skip()
 def test_optimize_all_samples():
     rows = []
