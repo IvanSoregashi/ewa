@@ -1,3 +1,4 @@
+import io
 import logging
 from copy import deepcopy
 from io import BytesIO
@@ -64,7 +65,7 @@ def useless_transparency_mode(image: Image.Image) -> bool:
     return len(extrema) == 4 and extrema[3][0] >= USELESS_ALPHA_THRESHOLD
 
 
-def optimize_png_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> ImageOptimizationResult:
+def optimize_png_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo, filesize: int, compression: int) -> ImageOptimizationResult:
     image_info = deepcopy(original_image_info)
 
     if original_image_info.is_animated:
@@ -86,27 +87,45 @@ def optimize_png_image(image: Image.Image, buffer: BytesIO, original_image_info:
     if not image_info.is_efficient and image_info.mode == ImageMode.RGB:
         image_info.format = ImageFormat.JPEG
         image.save(buffer, format=ImageFormat.JPEG, optimize=True, quality=85)
-        image_info.filesize = len(buffer.getvalue())
-        return ImageOptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
+        new_size = len(buffer.getvalue())
+        if new_size < filesize:
+            image_info.filesize = new_size
+            return ImageOptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
 
     #  Not processed 1, L, LA, I, P modes, need additional investigation
-    if original_image_info == image_info:
+    if original_image_info == image_info and compression > 96:
         return ImageOptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
 
     image.save(buffer, format=image_info.format, optimize=True)
     return ImageOptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
 
 
-def optimize_jpg_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> ImageOptimizationResult:
+def optimize_jpg_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo, filesize: int, compression: int) -> ImageOptimizationResult:
     image_info = deepcopy(original_image_info)
-    image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
+    if original_image_info.bpp < 0.1:
+        image, image_info.size = crop_image_dimensions(image, EXTRA_WIDTH_SIZE)
+    else:
+        image, image_info.size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
 
     #  Image was resized
-    if resized_size != image_info.size:
-        image_info.size = resized_size
-        image.save(buffer, format=ImageFormat.JPEG, optimize=True, quality=85)
-        image_info.filesize = len(buffer.getvalue())
-        return ImageOptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
+    if image_info.size != original_image_info.size or compression < 96:
+        jpg_buffer = io.BytesIO()
+        image.save(jpg_buffer, format=ImageFormat.JPEG, optimize=True, quality=85)
+        png_buffer = io.BytesIO()
+        image.save(png_buffer, format=ImageFormat.PNG, optimize=True)
+        new_size_jpg = len(jpg_buffer.getvalue())
+        new_size_png = len(png_buffer.getvalue())
+
+        if new_size_jpg < new_size_png and new_size_jpg < filesize:
+            image_info.filesize = new_size_jpg
+            buffer.write(jpg_buffer.getbuffer())
+            return ImageOptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
+
+        if new_size_png < filesize:
+            image_info.filesize = new_size_png
+            image_info.format = ImageFormat.PNG
+            buffer.write(png_buffer.getbuffer())
+            return ImageOptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
 
     return ImageOptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
 
@@ -136,7 +155,7 @@ def convert_animation_to_mp4(
     return ImageOptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
 
 
-def optimize_gif_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> ImageOptimizationResult:
+def optimize_gif_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo, filesize: int, compression: int) -> ImageOptimizationResult:
     image_info = deepcopy(original_image_info)
 
     if original_image_info.is_animated:
@@ -154,7 +173,7 @@ def optimize_gif_image(image: Image.Image, buffer: BytesIO, original_image_info:
     return ImageOptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
 
 
-def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> ImageOptimizationResult:
+def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int, compression: int) -> ImageOptimizationResult:
     """Single failure net: any pixel-decoding/encoding failure on a broken or
     exotic image becomes an error result instead of an exception."""
     min_filesize = 50 * 1024
@@ -165,15 +184,16 @@ def optimization_machine(image: Image.Image, buffer: BytesIO, filesize: int) -> 
             return ImageOptimizationResult(skip=ImageSkipReason.SMALL_IMAGE, original_image=original_image_info)
 
         if original_image_info.format == ImageFormat.PNG:
-            return optimize_png_image(image, buffer, original_image_info)
+            return optimize_png_image(image, buffer, original_image_info, filesize, compression)
 
         if original_image_info.format == ImageFormat.JPEG:
-            return optimize_jpg_image(image, buffer, original_image_info)
+            return optimize_jpg_image(image, buffer, original_image_info, filesize, compression)
 
         if original_image_info.format == ImageFormat.GIF:
-            return optimize_gif_image(image, buffer, original_image_info)
+            return optimize_gif_image(image, buffer, original_image_info, filesize, compression)
 
         return ImageOptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
+
 
     except Exception as e:
         reason = ImageErrorReason.from_error(e)
