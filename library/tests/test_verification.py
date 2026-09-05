@@ -11,7 +11,7 @@ import pytest
 
 from library.epub.epub import EPUB
 from library.epub.media_type import FileName
-from library.epub.verification import verify_chapter_xml, verify_chapters_xml
+from library.epub.verification import verify_chapter_xml, verify_chapters_xml, verify_no_giant_gifs
 
 VALID_CHAPTER = """<?xml version="1.0" encoding="utf-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -147,3 +147,27 @@ def test_verify_chapters_xml_ignores_non_chapter_resources(tmp_path: Path):
         z.writestr("OEBPS/text/not_a_chapter.txt", "<this is not xml at all")
 
     assert verify_chapters_xml(EPUB(path)) is True
+
+
+# ---------------------------------------------------------------------------
+# verify_no_giant_gifs
+# ---------------------------------------------------------------------------
+
+
+def test_verify_no_giant_gifs_detects_oversized(tmp_path: Path):
+    path = tmp_path / "book.epub"
+    build_epub(path, {"OEBPS/text/chapter.xhtml": VALID_CHAPTER})
+    with zipfile.ZipFile(path, "a") as z:
+        z.writestr("OEBPS/images/big.gif", b"\x00" * (5 * 1024 * 1024 + 1))
+        z.writestr("OEBPS/images/small.gif", b"\x00" * 1024)
+
+    assert verify_no_giant_gifs(EPUB(path)) is False
+
+
+def test_verify_no_giant_gifs_passes_when_all_small(tmp_path: Path):
+    path = tmp_path / "book.epub"
+    build_epub(path, {"OEBPS/text/chapter.xhtml": VALID_CHAPTER})
+    with zipfile.ZipFile(path, "a") as z:
+        z.writestr("OEBPS/images/small.gif", b"\x00" * 1024)
+
+    assert verify_no_giant_gifs(EPUB(path)) is True

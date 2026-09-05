@@ -24,6 +24,20 @@ def _savings_percent(original_size: int, new_bytes: bytes) -> float:
     return round(100.0 * (1 - len(new_bytes) / original_size), 1)
 
 
+def generate_poster(source_bytes: bytes, quality: int = 85) -> tuple[bytes, tuple[int, int]]:
+    """Extract the first frame of an animation as a JPEG poster.
+
+    Returns (jpeg_bytes, (width, height) of the source). Raises on undecodable
+    sources - callers decide whether that is fatal.
+    """
+    with Image.open(io.BytesIO(source_bytes)) as image:
+        width, height = image.size
+        image.seek(0)
+        poster = io.BytesIO()
+        image.convert("RGB").save(poster, format="JPEG", quality=quality)
+    return poster.getvalue(), (width, height)
+
+
 def resave_optimized(image: Image.Image, original_size: int) -> tuple[bytes, dict]:
     """Re-encode as-is: let Pillow do interframe diffing and palette cleanup."""
     frames, durations = [], []
@@ -43,10 +57,6 @@ def resave_optimized(image: Image.Image, original_size: int) -> tuple[bytes, dic
     )
     new_bytes = buffer.getvalue()
     return new_bytes, {"frames": len(frames), "savings_percent": _savings_percent(original_size, new_bytes)}
-
-
-def reindex_palette(image: Image.Image, original_size: int, colors: int = 128) -> tuple[bytes, dict]:
-    """Quantize every frame to one shared adaptive palette of `colors` entries."""
 
 
 def reindex_palette(image: Image.Image, original_size: int, colors: int = 128) -> tuple[bytes, dict]:
@@ -198,10 +208,6 @@ def downscale_then_webp(
         "quality": quality,
         "savings_percent": _savings_percent(original_size, new_bytes),
     }
-
-
-def _tool_available(name: str) -> bool:
-    return shutil.which(name) is not None
 
 
 def _tool_available(name: str) -> bool:

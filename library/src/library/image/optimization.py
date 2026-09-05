@@ -7,6 +7,8 @@ from PIL import Image
 from library.image.constants import (
     MEDIUM_WIDTH_SIZE,
     EXTRA_WIDTH_SIZE,
+    ANIMATION_CRF,
+    ANIMATION_SIZE_LIMIT,
     ImageFormat,
     ImageMode,
     USELESS_ALPHA_THRESHOLD,
@@ -17,6 +19,7 @@ from library.image.models import (
     ImageOptimizationResult,
     ImageSkipReason,
 )
+from library.image.optimize_gif import convert_to_mp4
 
 logger = logging.getLogger(__name__)
 
@@ -108,10 +111,37 @@ def optimize_jpg_image(image: Image.Image, buffer: BytesIO, original_image_info:
     return ImageOptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
 
 
+def convert_animation_to_mp4(
+    image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo
+) -> ImageOptimizationResult:
+    """Transcode an oversized animation to MP4 (h264, crf 30) via system ffmpeg.
+
+    Device-validated markup standard (see recipe_html.replace_gifs_with_videos):
+    Moon+ and BOOX play videos bound by the `src` attribute; posters and previews
+    are handled at the recipe layer (same-basename JPEG + <img> fallback).
+
+    The result carries ImageFormat.MP4 so the caller can rename the resource
+    (.gif -> .mp4). On ffmpeg absence/failure the animation is skipped (kept
+    as GIF).
+    """
+    mp4_bytes, info = convert_to_mp4(image, original_image_info.filesize, crf=ANIMATION_CRF)
+    if mp4_bytes is None:
+        logger.warning(f"animation conversion skipped: {info}")
+        return ImageOptimizationResult(skip=ImageSkipReason.HAS_ANIMATION, original_image=original_image_info)
+
+    image_info = deepcopy(original_image_info)
+    image_info.format = ImageFormat.MP4
+    image_info.filesize = len(mp4_bytes)
+    buffer.write(mp4_bytes)
+    return ImageOptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
+
+
 def optimize_gif_image(image: Image.Image, buffer: BytesIO, original_image_info: ImageInfo) -> ImageOptimizationResult:
     image_info = deepcopy(original_image_info)
 
     if original_image_info.is_animated:
+        # if original_image_info.filesize > ANIMATION_SIZE_LIMIT:
+        #     return convert_animation_to_mp4(image, buffer, original_image_info)
         return ImageOptimizationResult(skip=ImageSkipReason.HAS_ANIMATION, original_image=original_image_info)
 
     image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)

@@ -48,5 +48,9 @@ def perform_image_optimization(resource: Resource) -> ImageOptimizationResult:
             result.original_image.path = resource.filename
             result.new_image.path = str(PurePosixPath(resource.filename).with_suffix(".jpg"))
             resource.filename = new_image_info.path
+        # elif new_image_info.format is ImageFormat.MP4 and result.original_image.format is ImageFormat.GIF:
+        #     result.original_image.path = resource.filename
+        #     result.new_image.path = str(PurePosixPath(resource.filename).with_suffix(".mp4"))
+        #     resource.filename = new_image_info.path
 
     return result

@@ -137,6 +137,12 @@ class ResourceIndex:
         self._items.append(resource)
         self._by_path[resource.info.filename] = resource
 
+    def rename(self, resource: Resource, old_filename: str) -> None:
+        """Re-key a resource that was renamed in place (info.filename mutated
+        by the filename setter): the index still maps the old path."""
+        self._by_path.pop(old_filename, None)
+        self._by_path[resource.info.filename] = resource
+
     def remove(self, resource: Resource) -> None:
         """Remove a resource from the index."""
         self._items.remove(resource)

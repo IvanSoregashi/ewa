@@ -42,7 +42,7 @@ def test_record_image_statistics():
     db_url = DB_URL
     keeper = sqlite3.connect(MEM_DB_URI, uri=True, check_same_thread=False)  # keeps the memory db alive
     try:
-        book = Path("/fake/books/book.epub")
+        book = Path("fake/books/book.epub")
         record_image_statistics(book, [success_result, skip_result, error_result], db_url)
         # rerun of the same book must not duplicate the epub row
         record_image_statistics(book, [skip_result], db_url)
@@ -51,7 +51,7 @@ def test_record_image_statistics():
         with Session(engine) as session:
             epub_rows = session.exec(select(ProcessedEpubModel)).all()
             assert len(epub_rows) == 1
-            assert epub_rows[0].filepath == str(book)
+            assert epub_rows[0].filepath == str(book.absolute())
 
             skipped = session.exec(select(SkippedImageModel)).all()
             assert len(skipped) == 2  # skip from first run + rerun

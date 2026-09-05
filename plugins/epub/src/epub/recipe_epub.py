@@ -106,6 +106,22 @@ class EpubOptimizationResult(OperationResult):
 
 
 def fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
+    """
+
+    1. Check EPUB eligibility
+    2. relocate opf to root -> content.opf
+    3. font check, remove sp font resource, remove from manifest
+    4. cleanup css
+    5. images - optimization (all images)
+    6. put stats in db
+    7. form replacement dict
+    8. htmls - replace links, translate
+    9. replace links - in opf
+    10. save opf
+    11. save epub
+    12. verify formed epub
+    13. move original
+    """
     current_path = Path(path)
     if not current_path.is_relative_to(settings.encrypted_epub_dir):
         logger.warning(f"SKIP {str(current_path)!s} FILE NOT FROM {str(settings.encrypted_epub_dir)!s}")
@@ -128,36 +144,36 @@ def fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
     try:
         with EPUB(current_path).keep_open() as epub:
             original_info = epub.info()
-            # 0. standardize the archive layout: opf at the root
-            recipe_package.relocate_package(epub)
+            #recipe_package.relocate_package(epub)
+            for f in epub.resources.by_role(EpubRole.OPF):
+                if f.filename != FileName.DEFAULT_OPF:
+                    # EPUB STAYS IN PLACE
+                    return EpubOptimizationResult(
+                        skip=EpubSkipReason.NON_DEFAULT_OPF,
+                        original_epub=original_info,
+                    )
 
-            # 1. remove font
             fonts = [f for f in epub.resources.by_role(EpubRole.FONT) if "serenepanda" in f.filename.lower()]
             if len(fonts) != 1 or fonts[0].filename != FileName.SP_FONT:
                 # EPUB STAYS IN PLACE
                 return EpubOptimizationResult(
                     skip=EpubSkipReason.NOT_IMPLEMENTED,
-                    original_epub=EpubInfo.failed(current_path),
+                    original_epub=original_info,
                 )
             font = fonts[0]
             epub.resources.remove(font)
             epub.core.package.manifest.remove_item(path=font.filename)
 
-            # 2. cleanup css
             for css_resource in epub.resources.by_role(EpubRole.STYLE):
                 recipe_css.de_panda_css_resource(css_resource)
 
-            # 3. all image resources - through optimization
             image_optimization_results = [
                 recipe_image.perform_image_optimization(image_resource)
                 for image_resource in epub.resources.by_role(EpubRole.IMAGE)
             ]
 
-            # 3.1. received statistics - save conversion info to SQL
             recipe_analytics.record_image_statistics(current_path, image_optimization_results, settings.database_url)
 
-            # 3.2. received statistics - form a path replacement dictionary
-            # (keys/values are archive paths; opf is at the root, so manifest hrefs match)
             replacement_dict = {}
             for result in image_optimization_results:
                 if result.success and result.new_image and result.new_image.path:
@@ -167,22 +183,15 @@ def fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
                         new_path += ".jpg"
                     replacement_dict[old_path] = new_path
 
-            # 4. for the html resources:
             for html_resource in epub.resources.by_role(EpubRole.HTML):
-                # - if path replacement dictionary - make replacements
                 if replacement_dict:
                     recipe_html.replace_links(html_resource, replacement_dict)
-                # - translate
                 recipe_html.translate_text(html_resource, sp_dictionary)
 
-            # 5. package: apply renames to the manifest, drop the font item from
-            #    the package document itself, and sync the parsed package into its resource
             if replacement_dict:
                 recipe_package.replace_links(epub, replacement_dict)
             epub.core.package_resource.content = epub.core.package.to_xml_bytes()
 
-            # 6. Save the updated epub: package_into assembles the archive in a
-            #    buffer internally and only touches the destination on success.
             epub.package_into(destination_path, sort_by_role=True)
 
     except Exception as e:
@@ -210,6 +219,7 @@ def fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
     if processed_path.exists():
         logger.warning(f"PROCESSED PATH EXISTS {str(processed_path)!s}, NOT MOVING ORIGINAL")
     else:
-        shutil.move(current_path, processed_path)
+        # shutil.move(current_path, processed_path)
+        pass
 
     return EpubOptimizationResult(success=True, original_epub=original_info, new_epub=new_info)

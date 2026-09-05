@@ -11,6 +11,7 @@ class EpubSkipReason(IntEnum):
     DESTINATION_EXISTS = 1
     NOT_IMPLEMENTED = 2
     INCORRECT_DIRECTORY = 3
+    NON_DEFAULT_OPF = 4
 
 
 class EpubErrorReason(IntEnum):

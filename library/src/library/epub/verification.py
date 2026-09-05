@@ -8,6 +8,7 @@ from lxml import etree
 from library.epub.epub import EPUB
 from library.epub.xml_literals import FileContents
 from library.epub.media_type import FileName
+from library.image.constants import ANIMATION_SIZE_LIMIT
 
 logger = logging.getLogger("verification")
 
@@ -140,4 +141,28 @@ def verify_chapters_xml(epub: EPUB, count: int | None = None) -> bool:
         message = f"{epub}: {len(failures)} chapter(s) are not well-formed XML:\n" + "\n".join(failures)
         logger.error(message)
         raise ValueError(message)
+    return True
+
+
+def verify_no_giant_gifs(epub: EPUB, size_limit: int = ANIMATION_SIZE_LIMIT) -> bool:
+    """Confirm that no GIF in this EPUB exceeds `size_limit`.
+
+    Source-only and instant: ZIP entries carry the uncompressed size in their
+    headers, so no content is read at all. Deviates from the other verifiers by
+    contract: returns False instead of raising when giant gifs are found (the
+    caller decides whether to run the conversion recipe).
+
+    Returns:
+        True if every GIF entry is at or below `size_limit`, False otherwise
+        (each offender logged).
+    """
+    offenders = [
+        info.filename
+        for info in epub.source.infolist()
+        if info.filename.lower().endswith(".gif") and info.file_size > size_limit
+    ]
+    if offenders:
+        for name in offenders:
+            logger.error(f"{name!r} exceeds the animation size limit ({size_limit} bytes)")
+        return False
     return True
