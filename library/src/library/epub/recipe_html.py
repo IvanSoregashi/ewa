@@ -16,8 +16,7 @@ _xml_parser = etree.XMLParser(huge_tree=True)
 # object data, video poster), as smart strings carrying .getparent() and
 # .attrname for write-back
 _LINK_XPATH = etree.XPath(
-    "//*[@*[local-name() = 'href' or local-name() = 'src' or local-name() = 'poster' or local-name() = 'data']]/"
-    "@*[local-name() = 'href' or local-name() = 'src' or local-name() = 'poster' or local-name() = 'data']"
+    "//@*[local-name() = 'href' or local-name() = 'src' or local-name() = 'poster' or local-name() = 'data']"
 )
 
 
