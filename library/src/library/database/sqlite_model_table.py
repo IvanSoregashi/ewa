@@ -6,7 +6,7 @@ from threading import Thread
 import pandas as pd
 
 from sqlmodel import SQLModel, create_engine, Session
-from sqlalchemy import text
+from sqlalchemy import Engine, text
 
 from library.database.sqlite_utils import initialize_db
 from library.database.sqlmodel_statements import (
@@ -20,14 +20,25 @@ from library.database.sqlmodel_statements import (
 TERMINATOR = object()  # Queue terminator
 TableType = TypeVar("TableType", bound=SQLModel)
 
+_engines: dict[str, Engine] = {}
+
+
+def get_engine(url: str, **kwargs) -> Engine:
+    """One engine per database URL per process: reused across table instances
+    (and across mp parents), so connection pools and PRAGMA setup happen once."""
+    engine = _engines.get(url)
+    if engine is None:
+        engine = create_engine(url, **kwargs)
+        initialize_db(engine)
+        _engines[url] = engine
+    return engine
+
 
 class SQLiteModelTable[TableType]:
     """Class is Parent class only, not meant for initialization of Objects, needs to be inherited from."""
 
     def __init__(self, url: str, **kwargs):
-        self.engine = create_engine(url, **kwargs)
-
-        initialize_db(self.engine)
+        self.engine = get_engine(url, **kwargs)
 
         self.session: Session | None = None
         self.write_thread: Thread | None = None
