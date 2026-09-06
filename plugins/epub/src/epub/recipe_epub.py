@@ -134,14 +134,18 @@ def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
         )
 
     # move original to processed
-    processed_path = settings.processed_epub_dir / relative_path
-    processed_path.parent.mkdir(parents=True, exist_ok=True)
-    if processed_path.exists():
-        logger.warning(f"PROCESSED PATH EXISTS {str(processed_path)!s}, NOT MOVING ORIGINAL")
-    else:
-        # shutil.move(current_path, processed_path)
-        pass
-    destination_path.unlink(missing_ok=True)
+    try:
+        processed_path = settings.processed_epub_dir / relative_path
+        processed_path.parent.mkdir(parents=True, exist_ok=True)
+        if processed_path.exists():
+            logger.warning(f"PROCESSED PATH EXISTS {str(processed_path)!s}, NOT MOVING ORIGINAL")
+        else:
+            #shutil.move(current_path, processed_path)
+            pass
+    except Exception as e:
+        # housekeeping only: the processed epub is already written and verified,
+        # so the result stays a success - the original simply remains in place
+        logger.error(f"FAILED TO MOVE ORIGINAL {path} -> {str(processed_path)!s}: {e}")
 
     return EpubOptimizationResult(
         success=True,
