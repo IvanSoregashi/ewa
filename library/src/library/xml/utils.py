@@ -1,11 +1,14 @@
 import re
 import logging
+import html.entities
 from pathlib import Path
 from typing import Literal, overload, Any
 from collections import Counter
 from lxml import etree
 
 logger = logging.getLogger(__name__)
+
+_XML_SAFE_ENTITIES = {"amp", "lt", "gt", "quot", "apos"}
 
 
 @overload
@@ -23,9 +26,25 @@ def prettify(document: bytes, encoding: Literal["unicode"] | None = None) -> byt
 
 
 def fix_invalid_ampersands(content: str) -> str:
-    """Fixes raw ampersands that are not part of a valid XML entity."""
+    """Fixes raw ampersands that are not part of a valid XML entity.
+    Entity-like sequences (&nbsp;) are left for fix_named_entities."""
     logger.warning("Invalid ampersands in xml")
-    return re.sub(r"&(?!amp;|lt;|gt;|quot;|apos;|#x?|#)", "&amp;", content)
+    return re.sub(r"&(?!amp;|lt;|gt;|quot;|apos;|#x?|#|[a-zA-Z]+;)", "&amp;", content)
+
+
+def fix_named_entities(content: str) -> str:
+    """Replaces named HTML entities undefined in XML (&nbsp; &eacute; ...) with
+    their characters. Entities valid in XML (&amp; &lt; ...) and unknown names
+    are left untouched."""
+    logger.warning("Undefined named entities in xml")
+
+    def replace(match: re.Match) -> str:
+        name = match.group(1)
+        if name in _XML_SAFE_ENTITIES:
+            return match.group(0)
+        return html.entities.html5.get(name + ";", match.group(0))
+
+    return re.sub(r"&([a-zA-Z][a-zA-Z0-9]*);", replace, content)
 
 
 def fix_opf_namespace(content: str) -> str:
@@ -34,8 +53,12 @@ def fix_opf_namespace(content: str) -> str:
     return re.sub(r"(<package[^>]+)>", r'\1 xmlns:opf="http://www.idpf.org/2007/opf">', content, count=1)
 
 
-def etree_from_bytes(xml_bytes: bytes) -> etree.Element:
-    parser = etree.XMLParser(remove_blank_text=True, remove_comments=True)
+def etree_from_bytes(xml_bytes: bytes, parser: etree.XMLParser | None = None) -> etree.Element:
+    """Strict XML parse with self-healing retries for known defect classes:
+    raw ampersands, named HTML entities undefined in XML, missing opf namespace.
+    A custom parser profile can be passed (e.g. huge_tree, whitespace-preserving)
+    and is honored on every retry."""
+    parser = parser or etree.XMLParser(remove_blank_text=True, remove_comments=True)
     for _ in range(3):
         try:
             return etree.fromstring(xml_bytes, parser)
@@ -46,7 +69,8 @@ def etree_from_bytes(xml_bytes: bytes) -> etree.Element:
             except UnicodeDecodeError:
                 text = xml_bytes.decode("latin-1")
 
-            text = fix_invalid_ampersands(text) if "xmlParseEntityRef: " in error_msg else text
+            text = fix_invalid_ampersands(text) if "EntityRef" in error_msg else text
+            text = fix_named_entities(text) if "Entity '" in error_msg and "not defined" in error_msg else text
             text = fix_opf_namespace(text) if "Namespace prefix opf" in error_msg else text
             xml_bytes = text.encode("utf-8")
     return etree.fromstring(xml_bytes, parser)
