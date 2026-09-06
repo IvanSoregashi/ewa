@@ -100,6 +100,7 @@ def optimize_png_image(
         return ImageOptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
 
     image.save(buffer, format=image_info.format, optimize=True)
+    image_info.filesize = len(buffer.getvalue())
     return ImageOptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
 
 
@@ -168,6 +169,7 @@ def optimize_gif_image(
     if resized_size != image_info.size:
         image_info.size = resized_size
         image.save(buffer, format=ImageFormat.GIF, optimize=True, quality=85)
+        image_info.filesize = len(buffer.getvalue())
         return ImageOptimizationResult(success=True, original_image=original_image_info, new_image=image_info)
 
     return ImageOptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)

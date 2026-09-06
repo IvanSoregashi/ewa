@@ -52,12 +52,7 @@ def perform_image_optimization(resource: Resource) -> ImageOptimizationResult:
             original_image=ImageInfo.failed(path=resource.filename, filesize=resource.info.file_size),
         )
 
-    filesize = resource.info.file_size / (1024 * 1024)
-    if result.skip:
-        if percent_comp < 90:
-            # logger.warning(f"SKIP {resource.filename} compression {percent_comp}% {filesize:.2f} MB")
-            pass
-
+    result.original_image.path = resource.filename
     if result.success:
         new_image_info = require(result.new_image)
         percent_conv = int((new_image_info.filesize / result.original_image.filesize) * 100)
@@ -65,10 +60,9 @@ def perform_image_optimization(resource: Resource) -> ImageOptimizationResult:
             result.success = False
             result.skip = ImageSkipReason.WORSE_CONVERSION
             return result
-        # logger.info(f"SUCC {resource.filename} compression {percent_comp}%, {percent_conv}%")
+
         resource.content = buffer.getvalue()
         if new_image_info.format is ImageFormat.JPEG and result.original_image.format is ImageFormat.PNG:
-            result.original_image.path = resource.filename
             result.new_image.path = str(PurePosixPath(resource.filename).with_suffix(".jpg"))
             resource.filename = new_image_info.path
 
