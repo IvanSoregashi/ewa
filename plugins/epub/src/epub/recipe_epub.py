@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import logging
 
@@ -15,7 +15,7 @@ from library.epub.media_type import EpubRole, FileName
 from library.epub import recipe_image, recipe_html
 from epub import recipe_analytics, recipe_css, recipe_package
 from library.epub.resources import IndexInfo
-from library.image.constants import ImageFormat
+from library.image.models import ImageOptimizationResult
 
 logger = logging.getLogger(__name__)
 sp_dictionary_path: Path = settings.serene_panda_dir / "translator.json"
@@ -41,6 +41,7 @@ def percent_of(size_of: int, size_to: int) -> str:
 class EpubOptimizationResult(OperationResult):
     original_epub: EpubInfo
     new_epub: EpubInfo | None = None
+    image_results: list[ImageOptimizationResult] = field(default_factory=list)
 
     def report(self):
         original_epub = self.original_epub
@@ -107,6 +108,12 @@ class EpubOptimizationResult(OperationResult):
 
 
 def fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
+    result = _fully_process_encrypted_panda(path)
+    recipe_analytics.record_analytics(Path(path), result, settings.database_url)
+    return result
+
+
+def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
     """
 
     1. Check EPUB eligibility
@@ -173,8 +180,6 @@ def fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
                 for image_resource in epub.resources.by_role(EpubRole.IMAGE)
             ]
 
-            recipe_analytics.record_image_statistics(current_path, image_optimization_results, settings.database_url)
-
             replacement_dict = {}
             for result in image_optimization_results:
                 if result.success and result.new_image and result.new_image.path:
@@ -223,7 +228,12 @@ def fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
         # shutil.move(current_path, processed_path)
         pass
 
-    return EpubOptimizationResult(success=True, original_epub=original_info, new_epub=new_info)
+    return EpubOptimizationResult(
+        success=True,
+        original_epub=original_info,
+        new_epub=new_info,
+        image_results=image_optimization_results,
+    )
 
 
 def image_stats(path: str) -> None:
