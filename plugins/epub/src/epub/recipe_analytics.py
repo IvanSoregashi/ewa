@@ -1,6 +1,4 @@
-from pathlib import Path
-from typing import TYPE_CHECKING
-
+from epub.results import EpubOptimizationResult
 from epub.tables import (
     SkippedImageModel,
     ErrorImageModel,
@@ -16,36 +14,41 @@ from epub.tables import (
     SuccessfulEpubsTable,
 )
 
-if TYPE_CHECKING:
-    from epub.recipe_epub import EpubOptimizationResult
 
+def record_analytics(results: list[EpubOptimizationResult], db_url: str) -> None:
+    """Persist a batch of epub outcomes: one bulk insert per table. Image rows
+    are recorded only for successfully processed books, attributed to their
+    successful_epubs row."""
+    skipped_results = [r for r in results if r.skip is not None]
+    error_results = [r for r in results if r.error is not None]
+    success_results = [r for r in results if r.success]
 
-def record_analytics(filepath: Path, result: "EpubOptimizationResult", db_url: str) -> None:
-    """Persist the epub-level outcome. Image results are recorded only for
-    successfully processed books; skipped and errored books save no images."""
-    if result.error is not None:
-        with ErrorEpubsTable(db_url) as table:
-            table.insert_one(ErrorEpubModel.from_result(result))
-        return
-
-    if result.skip is not None:
+    if skipped_results:
         with SkippedEpubsTable(db_url) as table:
-            table.insert_one(SkippedEpubModel.from_result(result))
+            table.insert_many([SkippedEpubModel.from_result(r) for r in skipped_results])
+
+    if error_results:
+        with ErrorEpubsTable(db_url) as table:
+            table.insert_many([ErrorEpubModel.from_result(r) for r in error_results])
+
+    if not success_results:
         return
 
     with SuccessfulEpubsTable(db_url) as table:
-        row = SuccessfulEpubModel.from_result(result)
-        table.insert_one(row)
-        epub_id = row.id
+        epub_rows = [SuccessfulEpubModel.from_result(r) for r in success_results]
+        table.insert_many(epub_rows)
+        id_by_path = {row.path: row.id for row in epub_rows}
 
     skipped, errors, successes = [], [], []
-    for image_result in result.image_results:
-        if image_result.skip is not None:
-            skipped.append(SkippedImageModel.from_result(epub_id, image_result))
-        elif image_result.error is not None:
-            errors.append(ErrorImageModel.from_result(epub_id, image_result))
-        elif image_result.success:
-            successes.append(SuccessfulImageModel.from_result(epub_id, image_result))
+    for result in success_results:
+        epub_id = id_by_path[str(result.new_epub.path)]
+        for image_result in result.image_results:
+            if image_result.skip is not None:
+                skipped.append(SkippedImageModel.from_result(epub_id, image_result))
+            elif image_result.error is not None:
+                errors.append(ErrorImageModel.from_result(epub_id, image_result))
+            elif image_result.success:
+                successes.append(SuccessfulImageModel.from_result(epub_id, image_result))
 
     if skipped:
         with SkippedImagesTable(db_url) as table:

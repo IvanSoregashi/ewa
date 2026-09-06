@@ -1,14 +1,12 @@
-from typing import Any, TYPE_CHECKING
+from typing import Any
 
 from sqlmodel import SQLModel, Field
 
+from epub.results import EpubOptimizationResult
 from library.asserts import require
 from library.epub.resources import IndexInfo
 from library.database.sqlite_model_table import SQLiteModelTable
 from library.image.models import ImageOptimizationResult
-
-if TYPE_CHECKING:
-    from epub.recipe_epub import EpubOptimizationResult
 
 
 def _image_info_fields(info) -> dict[str, Any]:
