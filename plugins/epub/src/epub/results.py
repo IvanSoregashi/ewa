@@ -2,9 +2,10 @@
 and persisted by the analytics recipes."""
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from ewa.cli.print_table import print_table_from_dicts
-from ewa.ui import print_success
+from ewa.ui import print_success, print_error
 from library.analytics import OperationResult
 from library.asserts import require
 from library.epub.epub import EpubInfo
@@ -96,3 +97,15 @@ class EpubOptimizationResult(OperationResult):
                 new_index_info=new_epub.fonts,
             )
             print_table_from_dicts(title="wow stats", dicts=[total, images, chapters, fonts])
+
+    def short_report(self):
+        mb_size = byte_size_to_mb_str(self.original_epub.path_size)
+        ori_path = Path(self.original_epub.path).name
+        if self.error:
+            print_error(f"{mb_size} ERROR {EpubErrorReason(self.error).name} {ori_path!s}")
+        if self.skip:
+            print_success(f"{mb_size} SKIPPED {EpubSkipReason(self.skip).name} {ori_path!s}")
+        if self.success:
+            new_epub = require(self.new_epub)
+            percent = percent_of(self.original_epub.total.compress_size, new_epub.total.compress_size)
+            print_success(f"{mb_size:>09} REDUCED TO {percent} {ori_path!s}")

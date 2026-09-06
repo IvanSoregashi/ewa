@@ -4,12 +4,14 @@ flushes analytics to the database in batches while conversions continue.
 """
 
 import logging
+import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 from epub.config import settings
 from epub.recipe_analytics import record_analytics
 from epub.recipe_epub import EpubOptimizationResult, _fully_process_encrypted_panda
+from ewa.ui import print_success
 
 logger = logging.getLogger(__name__)
 
@@ -30,19 +32,26 @@ def fully_process_encrypted_pandas(
     paths = sorted(path for path in directory.rglob("*.epub"))
     results: list[EpubOptimizationResult] = []
     buffer: list[EpubOptimizationResult] = []
+    flush_end_time = time.time()
 
     def flush() -> None:
-        nonlocal buffer
+        nonlocal buffer, flush_end_time
         if not buffer:
             return
+        length = len(buffer)
         try:
+            flush_start_time = time.time()
+            time_inbetween = flush_start_time - flush_end_time
             record_analytics(buffer, settings.database_url)
+            flush_end_time = time.time()
+            time_flush = flush_end_time - flush_start_time
+            print_success(f"{length} RECORDS PROCESSING {time_inbetween:.2f}s FLUSH {time_flush:.2f}s")
         except Exception as error:
             logger.error(f"analytics flush failed for {len(buffer)} book(s): {error}")
         results.extend(buffer)
         buffer = []
 
-    if max_workers == 0:
+    if not max_workers:
         for path in paths:
             buffer.append(_fully_process_encrypted_panda(str(path)))
             if len(buffer) >= flush_size:

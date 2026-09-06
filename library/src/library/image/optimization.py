@@ -117,7 +117,7 @@ def optimize_jpg_image(
     else:
         image, image_info.size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
 
-    if image_info.size != original_image_info.size or compression < 96:
+    if image_info.size != original_image_info.size or not original_image_info.is_efficient or compression < 75:
         image.save(buffer, format=ImageFormat.JPEG, optimize=True, quality=75)
         image_info.filesize = len(buffer.getvalue())
         return ImageOptimizationResult(success=True, original_image=original_image_info, new_image=image_info)

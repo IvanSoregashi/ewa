@@ -1,12 +1,14 @@
 import json
 import logging
+import shutil
+import time
 from pathlib import Path
 
 from epub.config import settings
 from epub.results import EpubOptimizationResult
 from library.epub.epub import EPUB, EpubInfo
 from library.epub.errors import EpubSkipReason, EpubErrorReason
-from library.epub.media_type import EpubRole, FileName
+from library.epub.media_type import EpubRole, FileName, MediaType
 from library.epub import recipe_image, recipe_html
 from epub import recipe_analytics, recipe_css, recipe_package
 
@@ -16,8 +18,12 @@ sp_dictionary = str.maketrans(json.loads(sp_dictionary_path.read_text(encoding="
 
 
 def fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
+    start = time.time()
     result = _fully_process_encrypted_panda(path)
+    print(f"ELAPSED _fully_process_encrypted_panda: {time.time() - start:.2f} s")
+    start = time.time()
     recipe_analytics.record_analytics([result], settings.database_url)
+    print(f"ELAPSED record_analytics: {time.time() - start:.2f} s")
     return result
 
 
@@ -86,6 +92,7 @@ def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
             image_optimization_results = [
                 recipe_image.perform_image_optimization(image_resource)
                 for image_resource in epub.resources.by_role(EpubRole.IMAGE)
+                if image_resource.media_type is not MediaType.IMAGE_SVG
             ]
 
             replacement_dict = {}
@@ -110,7 +117,7 @@ def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
 
     except Exception as e:
         logger.exception(f"EPUB FAIL {path}, error: {e}")
-        # MOVE TO QUARANTINE OR STAY IN PLACE?
+        destination_path.unlink(missing_ok=True)  # remove an unfinished epub, if one was written
         return EpubOptimizationResult(
             error=EpubErrorReason.UNKNOWN,
             original_epub=EpubInfo.failed(current_path),
@@ -120,8 +127,7 @@ def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
         new_info = EPUB(destination_path).info()
     except Exception as e:
         logger.error(f"EPUB RESULT FAIL {path}, error: {e}")
-        # MOVE DESTINATION TO QUARANTINE
-        # EPUB STAYS IN PLACE
+        destination_path.unlink(missing_ok=True)  # remove the corrupt result
         return EpubOptimizationResult(
             error=EpubErrorReason.INCORRECT_RESULT,
             original_epub=EpubInfo.failed(current_path),
@@ -135,6 +141,7 @@ def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
     else:
         # shutil.move(current_path, processed_path)
         pass
+    destination_path.unlink(missing_ok=True)
 
     return EpubOptimizationResult(
         success=True,

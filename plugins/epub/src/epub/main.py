@@ -9,11 +9,10 @@ from pydantic import DirectoryPath
 from sqlalchemy.exc import PendingRollbackError
 from sqlmodel import col
 
-from epub.recipe_epub import fully_process_encrypted_panda, image_stats
+from epub import recipe_epub, recipe_epubs
 from epub.serene_panda.orchestration import move_file_preserving_hierarchy
 from ewa.ui import print_success, print_error
 from ewa.cli.print_table import print_table_from_models, print_table_from_dicts
-from epub.tables import EpubBookTable, EpubContentsTable, EpubOpfHash, EpubHashTable
 from library.epub.media_type import FileName, EpubRole
 from library.epub.utils import to_hex_hash
 from library.epub.epub import EPUB
@@ -61,12 +60,9 @@ def set_config(key: str = typer.Option("", "-k"), value: str = typer.Option("", 
 @app.command()
 def decrypt(epub_path: Path = typer.Argument(exists=True)):
     start = time.time()
-    result = fully_process_encrypted_panda(str(epub_path))
+    result = recipe_epub.fully_process_encrypted_panda(str(epub_path))
     elapsed = time.time() - start
 
-    print(result)
-    print(result.original_epub)
-    print(result.new_epub)
     result.report()
     print(f"ELAPSED {elapsed:.2f}s")
 
@@ -74,85 +70,27 @@ def decrypt(epub_path: Path = typer.Argument(exists=True)):
         Path(result.new_epub.path).unlink(missing_ok=True)
 
 
-@app.command("il")
-def image_log(epub_path: Path = typer.Argument(exists=True)):
+@app.command("dd")
+def decrypt_dir(epub_dir: DirectoryPath = typer.Argument(exists=True)):
     start = time.time()
-    image_stats(str(epub_path))
+    results = recipe_epubs.fully_process_encrypted_pandas(
+        directory=epub_dir,
+        max_workers=8,
+    )
     elapsed = time.time() - start
+
+    for result in results:
+        result.short_report()
+
     print(f"ELAPSED {elapsed:.2f}s")
 
 
-@app.command("showres")
-def check_epub_resources(epub: Path = typer.Argument(None, exists=True)):
-    from library.epub.epub import EPUB
-
-    start_time = time.time()
-    e = EPUB(epub)
-    with e.source.open():
-        e.resources.interlink_resources()
-        core, common, content, unknown = e.core.resources.statistics()
-        print_table_from_dicts(title="CORE", dicts=core)
-        print_table_from_dicts(title="COMMON", dicts=common)
-        print_table_from_dicts(title="CONTENT", dicts=content)
-        if unknown:
-            print_table_from_dicts(title="UNKNOWN", dicts=unknown)
-    end_time = time.time()
-    print_success(f"success in {end_time - start_time:.5f} seconds")
-
-
-@app.command()
-def count(
-    files: bool = typer.Option(False, "-f", "--files"),
-    rows: bool = typer.Option(False, "-r", "--rows"),
-):
-    if files:
-        print_success(f"Counting epub files in {settings.current_dir}...")
-        print_success(f"{len(tuple(Path(settings.current_dir).rglob('*.epub')))} epub files found")
-    if rows:
-        with EpubContentsTable(settings.database_url) as table:
-            print_success(f"Counting epub file records in {table.model.__tablename__} SQL table...")
-            print_success(f"{table.count_rows()} total rows of files found")
-        with EpubBookTable(settings.database_url) as table:
-            print_success(f"Counting epub file records in {table.model.__tablename__} SQL table...")
-            print_success(f"{table.count_rows()} total rows of epubs found")
-
-
-@app.command()
-def drop(
-    files: bool = typer.Option(False, "-f", "--files"),
-    contents: bool = typer.Option(False, "-c", "--contents"),
-):
-    if files:
-        with EpubBookTable(settings.database_url) as table:
-            table.drop()
-            print_success(f"dropped table {table.model.__tablename__}")
-    if contents:
-        with EpubContentsTable(settings.database_url) as table:
-            table.drop()
-            print_success(f"dropped table {table.model.__tablename__}")
-
-
-@app.command("list")
-def list_scanned_files(
-    files: bool = typer.Option(False, "-f", "--files"),
-    contents: bool = typer.Option(False, "-c", "--contents"),
-    largest: str = typer.Option("", "-l", "--largest"),
-):
-    """Lists all scanned books."""
-    if files:
-        with EpubBookTable(settings.database_url) as table:
-            raw_rows = table.get_many(limit=10)
-            if not raw_rows:
-                print_error(f"Table {table.model.__tablename__} is empty")
-                return
-            print_table_from_models("My Library", raw_rows)
-    if contents:
-        with EpubContentsTable(settings.database_url) as table:
-            raw_rows = table.get_many(limit=10)
-            if not raw_rows:
-                print_error(f"Table {table.model.__tablename__} is empty")
-                return
-            print_table_from_models("My Library", raw_rows)
+@app.command("il")
+def image_log(epub_path: Path = typer.Argument(exists=True)):
+    start = time.time()
+    recipe_epub.image_stats(str(epub_path))
+    elapsed = time.time() - start
+    print(f"ELAPSED {elapsed:.2f}s")
 
 
 @app.command("move-sp")
@@ -211,134 +149,6 @@ def move_serene_panda_encrypted_separately():
             )
 
     logger.warning(f"SKIPPED: {skipped}, MOVED: {moved}, ELAPSED: {time.time() - start_time}")
-
-
-@app.command("mostc")
-def most_common():
-    with EpubHashTable(settings.database_url) as table:
-        common = table.get_most_common(group_fields=["author"], more_then=10)
-        print(common)
-
-
-@app.command("scan-hash")
-def scan_for_hashes(path: DirectoryPath = typer.Option(None, "-p")):
-    start_time = time.time()
-
-    with EpubHashTable(settings.database_url) as table:
-        table.drop()
-        table.create()
-        for directory in Path("D:/").glob("*EPUB*"):
-            for file in directory.rglob("*.epub"):
-                try:
-                    file = file.absolute()
-                    epub = EPUB(file)
-                    package_document = epub.core.package_document
-
-                    ncx_path = None
-                    ncx_hash = None
-                    ncx_resource = epub.core._ncx_resource
-                    if ncx_resource is not None:
-                        ncx_path = ncx_resource.info.filename
-                        ncx_hash = ncx_resource.hex_hash
-
-                    epub_hash_item = EpubOpfHash(
-                        filepath=str(file),
-                        title=package_document.metadata.title,
-                        author=package_document.metadata.aut_or_all_creators,
-                        identifier=package_document.metadata.uuid_id_or_all_identifiers,
-                        opf_path=epub.core.package_resource.info.filename,
-                        opf_hash=epub.core.package_resource.hex_hash,
-                        ncx_path=ncx_path,
-                        ncx_hash=ncx_hash,
-                    )
-                    table.insert_one(epub_hash_item)
-
-                except ValueError as e:
-                    logger.error(f"ValueError: {str(file)!r}\n{e!r}")
-                    continue
-                except AssertionError as e:
-                    logger.error(f"AssertionError: {str(file)!r}\n{e!r}")
-                    move_file_preserving_hierarchy(file, directory / "_class_fails")
-                    continue
-                except PendingRollbackError as e:
-                    logger.error(f"PendingRollbackError: {str(file)!r}\n{e!r}")
-                    break
-                except Exception as e:
-                    logger.error(f"Exception: {str(file)!r}\n{e!r}")
-                    continue
-
-            logger.info(f"ELAPSED: {time.time() - start_time:.2f} {str(table.count_rows())=}")
-
-
-@app.command("list-some")
-def list_some_hashes(
-    a: str = typer.Option(None, "-a"), i: str = typer.Option(None, "-i"), p: str = typer.Option(None, "-p")
-):
-    clause = []
-    with EpubHashTable(settings.database_url) as table:
-        if a is not None:
-            clause.append(table.model.author == a)
-        if p is not None:
-            clause.append(col(table.model.filepath).contains(p))
-        if i is not None:
-            clause.append(col(table.model.identifier).contains(i))
-        all_items = table.get_many(*clause, limit=10000)
-        logger.info(f"{len(all_items)=}")
-        print_table_from_models(f"filters = {a}", all_items)
-
-
-@app.command("move-some")
-def move_some_files(
-    d: str = typer.Option(None, "-d"),
-    a: str = typer.Option(None, "-a"),
-    i: str = typer.Option(None, "-i"),
-    p: str = typer.Option(None, "-p"),
-):
-    epub_dir = settings.epub_dir
-    destination_dir = settings.D_DISK / f"EPUB_{d}"
-    # destination_dir = settings.epub_uwumtl_dir
-    start_time = time.time()
-    moved = 0
-
-    dir_list = list(settings.D_DISK.glob("*EPUB*"))
-
-    clause = []
-    with EpubHashTable(settings.database_url) as table:
-        if a is not None:
-            clause.append(table.model.author == a)
-        if p is not None:
-            clause.append(col(table.model.filepath).contains(p))
-        if i is not None:
-            clause.append(col(table.model.identifier).contains(i))
-        all_items = table.get_many(*clause, limit=10000)
-        logger.info(f"{len(all_items)=}")
-
-        for item in all_items:
-            file = Path(item.filepath)
-            directories = [dr for dr in file.parents if dr in dir_list]
-            assert len(directories) == 1
-            directory = directories[0]
-            if not file.is_relative_to(directory):
-                logger.info(f"NOT RELATIVE [{d}]: {str(file)!r}")
-                continue
-            relative_path = file.relative_to(directory)
-            new_path = destination_dir / relative_path
-            if new_path.exists():
-                logger.info(f"SKIPPING [{d}]: {str(file)!r}")
-                continue
-            new_path.parent.mkdir(parents=True, exist_ok=True)
-
-            try:
-                logger.info(f"MOVING [{d}]: {str(file)!r} -> {str(new_path)!r}")
-                shutil.move(str(file), str(new_path))
-                new_item = item.model_copy(deep=True, update={"filepath": str(new_path)})
-                table.insert_one(new_item)
-                table.delete_one(item)
-                moved += 1
-            except Exception as e:
-                logger.error(f"{str(file)!r}\n{e!r}")
-
-    print_success(f"MOVED: {moved}, ELAPSED: {time.time() - start_time:.2f} s")
 
 
 @app.command("move-ne")
