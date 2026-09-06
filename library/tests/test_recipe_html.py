@@ -9,7 +9,7 @@ from zipfile import ZipInfo
 
 from lxml import etree, html as lxml_html
 
-from library.epub.recipe_html import replace_gifs_with_videos, replace_links, translate_text
+from library.epub.recipe_html import VideoTagInfo, replace_gifs_with_videos, replace_links, translate_text
 from library.epub.resources import Resource
 
 
@@ -246,8 +246,6 @@ def test_replace_links_falls_back_to_html_parse_for_broken_xml():
 
 
 def make_video_table(**overrides) -> dict[str, VideoTagInfo]:
-    from library.epub.recipe_html import VideoTagInfo
-
     return {
         "OEBPS/text/images/old.gif": VideoTagInfo(
             video_path="OEBPS/text/images/old.mp4",
@@ -299,3 +297,70 @@ def test_replace_gifs_with_videos_no_match_leaves_document_valid():
     assert b"<img" in resource.content
     assert b"<video" not in resource.content
     etree.fromstring(resource.content)
+
+
+# ---------------------------------------------------------------------------
+# svg xlink:href (the cover-page case)
+# ---------------------------------------------------------------------------
+
+TITLEPAGE = """<?xml version='1.0' encoding='utf-8'?>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+    <head>
+        <meta name="calibre:cover" content="true"/>
+        <title>Cover</title>
+    </head>
+    <body>
+        <div>
+            <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="100%" height="100%" viewBox="0 0 400 600" preserveAspectRatio="none">
+                <image width="400" height="600" xlink:href="cover.png"/>
+            </svg>
+        </div>
+    </body>
+</html>"""
+
+
+def test_replace_links_rewrites_svg_xlink_href():
+    """Calibre cover pages reference the cover through svg <image xlink:href> -
+    covered by the namespace-agnostic link discovery."""
+    resource = html_resource(TITLEPAGE, filename="OEBPS/titlepage.xhtml")
+    table = {"OEBPS/cover.png": "OEBPS/cover.jpg"}
+
+    replace_links(resource, table)
+
+    content = resource.content
+    assert b'xlink:href="cover.jpg"' in content
+    assert b"cover.png" not in content
+    etree.fromstring(content)  # still valid parseable XML
+
+
+def test_replace_links_covers_all_image_link_forms():
+    """Every attribute form an image can be referenced by in html/xhtml:
+    img/iframe/embed/input/script src, a/link href, object data, video poster,
+    svg image (plain href + xlink:href) and svg use."""
+    markup = """<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <body>
+    <a href="old.png">link</a>
+    <img src="old.png" alt="img"/>
+    <link href="old.png"/>
+    <embed src="old.png"/>
+    <object data="old.png"/>
+    <input src="old.png"/>
+    <script src="old.png"/>
+    <video poster="old.png"/>
+    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+      <image xlink:href="old.png"/>
+      <image href="old.png"/>
+      <use xlink:href="old.png"/>
+    </svg>
+  </body>
+</html>"""
+    resource = html_resource(markup)
+    table = {"OEBPS/text/old.png": "OEBPS/text/new.jpg"}
+
+    replace_links(resource, table)
+
+    content = resource.content
+    assert content.count(b"new.jpg") == 11
+    assert b"old.png" not in content
+    etree.fromstring(content)  # still valid parseable XML

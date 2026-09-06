@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 
 from lxml import etree
@@ -5,9 +6,19 @@ from lxml.html import HtmlElement, document_fromstring
 
 from library.epub.resources import Resource
 from library.epub.utils_href import posix_absolute_href, posix_relative_href
+from library.xml.utils import etree_from_bytes
+
+logger = logging.getLogger(__name__)
 
 _xml_parser = etree.XMLParser(huge_tree=True)
-_xml_parser.set_element_class_lookup(etree.ElementDefaultClassLookup(element=HtmlElement))
+
+# href/src/poster/data in any namespace (plain href/src plus svg's xlink:href,
+# object data, video poster), as smart strings carrying .getparent() and
+# .attrname for write-back
+_LINK_XPATH = etree.XPath(
+    "//*[@*[local-name() = 'href' or local-name() = 'src' or local-name() = 'poster' or local-name() = 'data']]/"
+    "@*[local-name() = 'href' or local-name() = 'src' or local-name() = 'poster' or local-name() = 'data']"
+)
 
 
 @dataclass
@@ -27,36 +38,17 @@ class VideoTagInfo:
 def translate_text(resource: Resource, table: dict) -> None:
     resource.content = resource.content.decode("utf-8", errors="replace").translate(table).encode("utf-8")
 
-
-def replace_links(resource: Resource, table: dict[str, str], pretty_print_result: bool = False) -> None:
-    """Rewrite links according to `table`.
-
-    The table maps ARCHIVE paths (old -> new), e.g. the image rename dictionary.
-    Document links are resolved relative to the document's own location before
-    matching, and the replacement is written relative to the document again.
-
-    The chapter is parsed as XML and serialized back as XML: void elements stay
-    self-closed (`<br/>`), the XML declaration and namespaces survive, so the
-    result remains valid parseable XML (see verification.verify_chapter_xml).
-    Documents that are not well-formed XML (e.g. named entities without a DTD)
-    fall back to the lenient HTML parser - the output is still XML-serialized.
-    `pretty_print_result` toggles serializer indentation only.
-    """
+def replace_links(resource: Resource, replacement_table: dict[str, str], pretty_print_result: bool = False) -> None:
     try:
-        html: HtmlElement = etree.fromstring(resource.content, _xml_parser)
+        html = etree_from_bytes(resource.content, _xml_parser)  # strict XML + self-healing
     except etree.XMLSyntaxError:
-        html = document_fromstring(resource.content)
+        html = document_fromstring(resource.content)  # lenient HTML fallback, still XML-serialized
 
     resource_filename = resource.filename
-
-    table_for_resource = {
-        posix_relative_href(resource_filename, old_link): posix_relative_href(resource_filename, new_link)
-        for old_link, new_link in table.items()
-    }
-
-    for element, attribute, link, pos in html.iterlinks():
-        if link in table_for_resource:
-            element.set(attribute, table_for_resource[link])
+    for item in _LINK_XPATH(html):
+        new_link = replacement_table.get(posix_absolute_href(resource_filename, str(item)))
+        if new_link is not None:
+            item.getparent().set(item.attrname, posix_relative_href(resource_filename, new_link))
 
     resource.content = etree.tostring(
         html.getroottree(),
@@ -105,10 +97,13 @@ def replace_gifs_with_videos(
         html = document_fromstring(resource.content)
 
     replacements = []
-    for element, attribute, link, pos in html.iterlinks():
-        if attribute != "src" or not isinstance(element.tag, str) or etree.QName(element).localname != "img":
+    for item in _LINK_XPATH(html):
+        if item.attrname != "src":
             continue
-        info = table.get(posix_absolute_href(resource.filename, link))
+        element = item.getparent()
+        if not isinstance(element.tag, str) or etree.QName(element).localname != "img":
+            continue
+        info = table.get(posix_absolute_href(resource.filename, str(item)))
         if info is not None:
             replacements.append((element, info))
 
