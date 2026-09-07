@@ -104,14 +104,6 @@ def is_valid_html(html: str) -> bool:
         return False
 
 
-def get_text_normalized(html: str) -> str:
-    soup = BeautifulSoup(html, "html.parser")
-    if soup.body:
-        text = soup.body.get_text()
-        return " ".join(text.split())
-    return ""
-
-
 class TestCleanupCalibreFormattingLxml:
     def test_lxml_matches_bs4(self, chapter_html):
         soup = BeautifulSoup(chapter_html, "html.parser")

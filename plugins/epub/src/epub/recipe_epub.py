@@ -172,13 +172,12 @@ def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
 
 def image_stats(path: str) -> None:
     current_path = Path(path)
-    counter = 0
     images: dict[int, list[int]] = {}
     with EPUB(current_path).keep_open() as epub:
         for image_resource in epub.resources.by_role(EpubRole.IMAGE):
             filesize = int(image_resource.info.file_size / 1024)
             percent_comp = int((image_resource.info.compress_size / image_resource.info.file_size) * 100)
-            image_info = recipe_image.get_image_info(image_resource)
+            #image_info = recipe_image.get_image_info(image_resource)
             images.setdefault(filesize, []).append(percent_comp)
 
     for size, list_percent in sorted(images.items()):
