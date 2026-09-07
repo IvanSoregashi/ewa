@@ -37,17 +37,24 @@ class VideoTagInfo:
 def translate_text(resource: Resource, table: dict) -> None:
     resource.content = resource.content.decode("utf-8", errors="replace").translate(table).encode("utf-8")
 
-def replace_links(resource: Resource, replacement_table: dict[str, str], pretty_print_result: bool = False) -> None:
+
+def replace_links(
+    resource: Resource, replacement_table: dict[str, str], pretty_print_result: bool = False
+) -> dict[str, str]:
     try:
         html = etree_from_bytes(resource.content, _xml_parser)  # strict XML + self-healing
     except etree.XMLSyntaxError:
         html = document_fromstring(resource.content)  # lenient HTML fallback, still XML-serialized
 
     resource_filename = resource.filename
+    replaced = {}
     for item in _LINK_XPATH(html):
-        new_link = replacement_table.get(posix_absolute_href(resource_filename, str(item)))
+        absolute_href = posix_absolute_href(resource_filename, str(item))
+        new_link = replacement_table.get(absolute_href)
         if new_link is not None:
-            item.getparent().set(item.attrname, posix_relative_href(resource_filename, new_link))
+            relative_href = posix_relative_href(resource_filename, new_link)
+            item.getparent().set(item.attrname, relative_href)
+            replaced[absolute_href] = new_link
 
     resource.content = etree.tostring(
         html.getroottree(),
@@ -55,6 +62,7 @@ def replace_links(resource: Resource, replacement_table: dict[str, str], pretty_
         xml_declaration=True,
         pretty_print=pretty_print_result,
     )
+    return replaced
 
 
 def _video_element(img: HtmlElement, info: VideoTagInfo, document_path: str) -> HtmlElement:

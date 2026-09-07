@@ -9,7 +9,7 @@ from epub.results import EpubOptimizationResult
 from library.epub.epub import EPUB, EpubInfo
 from library.epub.errors import EpubSkipReason, EpubErrorReason
 from library.epub.media_type import EpubRole, FileName, MediaType
-from library.epub import recipe_image, recipe_html
+from library.epub import recipe_image, recipe_html, recipe_htmls
 from epub import recipe_analytics, recipe_css, recipe_package
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,7 @@ def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
     13. move original
     """
     current_path = Path(path)
+
     if not current_path.is_relative_to(settings.encrypted_epub_dir):
         logger.warning(f"SKIP {str(current_path)!s} FILE NOT FROM {str(settings.encrypted_epub_dir)!s}")
         # EPUB STAYS IN PLACE
@@ -82,6 +83,7 @@ def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
                     skip=EpubSkipReason.NOT_IMPLEMENTED,
                     original_epub=original_info,
                 )
+
             font = fonts[0]
             epub.resources.remove(font)
             epub.core.package.manifest.remove_item(path=font.filename)
@@ -104,9 +106,21 @@ def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
                         new_path += ".jpg"
                     replacement_dict[old_path] = new_path
 
-            for html_resource in epub.resources.by_role(EpubRole.HTML):
-                if replacement_dict:
-                    recipe_html.replace_links(html_resource, replacement_dict)
+            htmls = epub.resources.by_role(EpubRole.HTML)
+            if replacement_dict:
+                string = json.dumps(replacement_dict, indent=4)
+                logger.warning(f"{epub} REPLACE:\n{string!s}")
+
+                unmatched = recipe_htmls.replace_links_in_htmls(htmls, replacement_dict=replacement_dict)
+                if unmatched:
+                    string = json.dumps(unmatched, indent=4)
+                    logger.error(f"{epub} LINKS NOT REPLACED:\n{string}")
+                    return EpubOptimizationResult(
+                        skip=EpubSkipReason.UNMATCHED_LINKS,
+                        original_epub=original_info,
+                    )
+
+            for html_resource in htmls:
                 recipe_html.translate_text(html_resource, sp_dictionary)
 
             if replacement_dict:
@@ -140,12 +154,14 @@ def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
         if processed_path.exists():
             logger.warning(f"PROCESSED PATH EXISTS {str(processed_path)!s}, NOT MOVING ORIGINAL")
         else:
-            #shutil.move(current_path, processed_path)
+            # shutil.move(current_path, processed_path)
             pass
     except Exception as e:
         # housekeeping only: the processed epub is already written and verified,
         # so the result stays a success - the original simply remains in place
         logger.error(f"FAILED TO MOVE ORIGINAL {path} -> {str(processed_path)!s}: {e}")
+
+    destination_path.unlink(missing_ok=True)
 
     return EpubOptimizationResult(
         success=True,

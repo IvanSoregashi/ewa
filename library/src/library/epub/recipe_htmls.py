@@ -2,9 +2,14 @@
 resources and reports replacement entries that never matched any document.
 """
 
+import json
+
 from library.epub.recipe_html import replace_links
 from library.epub.resources import ResourceIndex
 from library.epub.utils_href import posix_relative_href
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def replace_links_in_htmls(resources: ResourceIndex, replacement_dict: dict[str, str]) -> dict[str, str]:
@@ -12,16 +17,8 @@ def replace_links_in_htmls(resources: ResourceIndex, replacement_dict: dict[str,
     that were never found and replaced in any document (e.g. orphan images
     that no chapter references)."""
     unmatched = replacement_dict.copy()
+    replaced = dict()
     for resource in resources:
-        present_before = {
-            old_link: posix_relative_href(resource.filename, old_link).encode("utf-8") in resource.content
-            for old_link in unmatched
-        }
-        replace_links(resource, replacement_dict)
-        for old_link, was_present in present_before.items():
-            relative = posix_relative_href(resource.filename, old_link)
-            if was_present and relative.encode("utf-8") not in resource.content:
-                # the link was present in this document and is gone after the
-                # replacement: the entry was found and replaced here
-                del unmatched[old_link]
-    return unmatched
+        replaced |= replace_links(resource, replacement_dict)
+
+    return {k: v for k, v in unmatched.items() if k not in replaced}

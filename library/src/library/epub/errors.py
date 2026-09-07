@@ -12,6 +12,7 @@ class EpubSkipReason(IntEnum):
     NOT_IMPLEMENTED = 2
     INCORRECT_DIRECTORY = 3
     NON_DEFAULT_OPF = 4
+    UNMATCHED_LINKS = 5
 
 
 class EpubErrorReason(IntEnum):

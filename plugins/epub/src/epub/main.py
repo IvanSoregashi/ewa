@@ -76,11 +76,12 @@ def decrypt_dir(epub_dir: DirectoryPath = typer.Argument(exists=True)):
     results = recipe_epubs.fully_process_encrypted_pandas(
         directory=epub_dir,
         max_workers=8,
+        flush_size=32,
     )
     elapsed = time.time() - start
 
     for result in results:
-        result.short_report()
+        result.report()
 
     print(f"ELAPSED {elapsed:.2f}s")
 
