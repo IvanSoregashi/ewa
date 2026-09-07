@@ -1,18 +1,14 @@
 import logging
-import shutil
 import time
 
 import typer
 from pathlib import Path
 
 from pydantic import DirectoryPath
-from sqlalchemy.exc import PendingRollbackError
-from sqlmodel import col
 
 from epub import recipe_epub, recipe_epubs
 from epub.serene_panda.orchestration import move_file_preserving_hierarchy
 from ewa.ui import print_success, print_error
-from ewa.cli.print_table import print_table_from_models, print_table_from_dicts
 from library.epub.media_type import FileName, EpubRole
 from library.epub.utils import to_hex_hash
 from library.epub.epub import EPUB

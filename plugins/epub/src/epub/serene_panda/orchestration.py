@@ -6,7 +6,6 @@ from pathlib import Path
 
 from ewa.main import settings
 
-from library.epub.epub import EPUB
 
 logger = logging.getLogger(__name__)
 
@@ -30,18 +29,6 @@ def new_decoded_name(path: Path):
     )
     new_name = path.with_stem(new_stem).name
     return new_name
-
-
-def translate_serene_panda(epub_path: Path, destination: Path):
-    with EPUB(epub_path).stream_to(destination) as epub:
-        if not epub.is_specification(EpubSpecification.SERENE_PANDA_ENCRYPTED):
-            logger.error(f"{epub_path} is not a SERENE_PANDA_ENCRYPTED EPUB")
-            return
-
-        # 1. translate htmls
-        # 2. remove font file
-        # 3. remove font from opf
-        # 4. remove font from css
 
 
 def unpack_epub_by_chapters(epub_path: Path):

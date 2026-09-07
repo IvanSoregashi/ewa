@@ -2,11 +2,8 @@
 resources and reports replacement entries that never matched any document.
 """
 
-import json
-
 from library.epub.recipe_html import replace_links
 from library.epub.resources import ResourceIndex
-from library.epub.utils_href import posix_relative_href
 import logging
 
 logger = logging.getLogger(__name__)

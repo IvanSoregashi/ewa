@@ -31,7 +31,7 @@ def perform_image_optimization(resource: Resource) -> ImageOptimizationResult:
     buffer = io.BytesIO()
     try:
         percent_comp = int((resource.info.compress_size / resource.info.file_size) * 100)
-    except ZeroDivisionError as e:
+    except ZeroDivisionError:
         percent_comp = 100
 
     try:

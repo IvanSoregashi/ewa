@@ -8,7 +8,6 @@ from library.image.constants import (
     MEDIUM_WIDTH_SIZE,
     EXTRA_WIDTH_SIZE,
     ANIMATION_CRF,
-    ANIMATION_SIZE_LIMIT,
     ImageFormat,
     ImageMode,
     USELESS_ALPHA_THRESHOLD,

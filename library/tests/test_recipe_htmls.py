@@ -30,9 +30,7 @@ def reference_chapter(filename: str, form: str) -> tuple[str, bytes]:
             '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:xlink="http://www.w3.org/1999/xlink">'
             '<body><svg><image xlink:href="replaced.png"/></svg></body></html>'
         ),
-        "non-link": (
-            '<html xmlns="http://www.w3.org/1999/xhtml"><body><div data-ref="replaced.png"/></body></html>'
-        ),
+        "non-link": ('<html xmlns="http://www.w3.org/1999/xhtml"><body><div data-ref="replaced.png"/></body></html>'),
         "empty": '<html xmlns="http://www.w3.org/1999/xhtml"><body><p>nothing</p></body></html>',
     }[form]
     return chapter(markup, filename)
@@ -60,10 +58,13 @@ def test_unmatched_reports_orphan_entries():
         reference_chapter("OEBPS/text/ch2.xhtml", "empty"),
     )
 
-    unmatched = replace_links_in_htmls(index, {
-        "OEBPS/text/replaced.png": "OEBPS/text/replaced.jpg",
-        "OEBPS/text/orphan.png": "OEBPS/text/orphan.jpg",
-    })
+    unmatched = replace_links_in_htmls(
+        index,
+        {
+            "OEBPS/text/replaced.png": "OEBPS/text/replaced.jpg",
+            "OEBPS/text/orphan.png": "OEBPS/text/orphan.jpg",
+        },
+    )
 
     assert unmatched == {"OEBPS/text/orphan.png": "OEBPS/text/orphan.jpg"}
 

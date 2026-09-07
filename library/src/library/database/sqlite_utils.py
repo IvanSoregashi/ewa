@@ -1,4 +1,4 @@
-from sqlalchemy import event, text
+from sqlalchemy import event
 
 
 def initialize_db(engine):
