@@ -28,25 +28,17 @@ class EpubCore:
         return f"EpubCore({len(self.resources)})"
 
     @property
-    def ___opf_resource(self):
-        # More reliable but slower
-        if self._package_resource is None:
-            mimetype_resource = require(self.resources.by_path(FileName.MIMETYPE), "MIMETYPE")
-            container_resource: Resource = require(self.resources.by_path(FileName.CONTAINER), "CONTAINER")
-            container_document = ContainerDocument.from_xml_bytes(container_resource.content)
-            assert len(container_document.opf_paths) == 1, "EPUB's with several package documents are not supported"
-            opf_path = require(container_document.opf_path, "opf_path")
-            self._package_resource = require(self.resources.by_path(opf_path), "package_resource")
-        assert self._package_resource is not None, f"{self} opf_resource was found."
-        return self._package_resource
-
-    @property
     def package_resource(self) -> Resource:
         if self._package_resource is None:
-            opfs = self.resources.by_role(EpubRole.OPF)
-            if len(opfs) != 1:
-                raise NotImplementedError("EPUB's with several package documents are not supported")
-            self._package_resource = opfs[0]
+            opf_resources = self.resources.by_role(EpubRole.OPF)
+            if len(opf_resources) != 1:
+                container_resource: Resource = require(self.resources.by_path(FileName.CONTAINER), "CONTAINER")
+                container_document = ContainerDocument.from_xml_bytes(container_resource.content)
+                assert len(container_document.opf_paths) == 1, "EPUB's with several package documents are not supported"
+                opf_path = require(container_document.opf_path, "container's opf_path")
+                self._package_resource = require(self.resources.by_path(opf_path), "package_resource")
+            else:
+                self._package_resource = opf_resources[0]
         return require(self._package_resource, f"{self} package_resource")
 
     @property
