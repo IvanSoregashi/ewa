@@ -6,13 +6,13 @@ from zipfile import ZIP_STORED
 from lxml import etree
 
 from library.epub.epub import EPUB
+from library.epub.errors import EpubSkipReason, EpubErrorReason
+from library.epub.protocols import EpubVerification
 from library.epub.xml_literals import FileContents
-from library.epub.media_type import FileName
+from library.epub.media_type import FileName, EpubRole, MediaType
 from library.image.constants import ANIMATION_SIZE_LIMIT
 
 logger = logging.getLogger("verification")
-
-CHAPTER_SUFFIXES = (".xhtml", ".html", ".htm")
 
 _xml_parser = etree.XMLParser(huge_tree=True)
 
@@ -30,139 +30,125 @@ class EpubSpecification(StrEnum):
     EWA_ONE = "EWA_ONE"
 
 
-def verify_mimetype(epub: EPUB) -> bool:
-    """Confirm that this source is a valid EPUB by checking the mimetype file.
+class MimetypeVerification(EpubVerification):
+    def __init__(self) -> None:
+        self.skip = EpubSkipReason.MIMETYPE_VERIFICATION
+        self.additional_info = ""
+        self.epub_info = None
 
-    Validates:
-        1. A file named 'mimetype' exists at the archive root.
-        2. Its content is exactly 'application/epub+zip'.
-        3. For ZIP sources, it is stored uncompressed (ZIP_STORED).
-
-    Returns:
-        True if all checks pass.
-
-    Raises:
-        ValueError: If any check fails.
-    """
-    mmt = FileName.MIMETYPE
-    mmt_contents = FileContents.MIMETYPE
-
-    with epub.source.open():
-        mimetype_info = epub.source.getinfo(mmt)
-        if mimetype_info is None:
-            message = f"{epub} is missing the '{mmt!s}' file."
-            logger.error(message)
-            raise ValueError(message)
-
-        # Check compression: must be ZIP_STORED (0) or None (directory source)
-        compress_type = mimetype_info.compress_type
-        if compress_type not in (ZIP_STORED, None):
-            message = f"{epub} '{mmt!s}' file must be stored uncompressed (ZIP_STORED=0), got {compress_type=}."
-            logger.error(message)
-            # raise ValueError(message)  # can still work with it
-
-        content = epub.source.read_text(mimetype_info)
-        if content.strip() != mmt_contents:
-            message = f"{epub} '{mmt!s}' content is not '{mmt_contents!r}', got {content!r}."
-            logger.error(message)
-            raise ValueError(message)
-
-    return True
+    def verify(self, epub: EPUB) -> bool:
+        filename = FileName.MIMETYPE
+        # content = FileContents.MIMETYPE
+        with epub.keep_open():
+            self.epub_info = epub.info()
+            mmt_i = epub.source.getinfo(filename)
+            if mmt_i is None:
+                self.additional_info = "mimetype file not found"
+                return False
+            if mmt_i.compress_type not in (ZIP_STORED, None):
+                self.additional_info = "mimetype file is compressed"
+                return False
+            # actual_content = epub.source.read_text(mmt_i)
+            # if actual_content != content:
+            #     self.additional_info = f"mimetype contents are ({actual_content!s}) instead of ({content!s})"
+            #     return False
+        return True
 
 
-def verify_serene_panda_encryption(epub: EPUB) -> bool:
-    strict_font = epub.source.getinfo(FileName.SP_FONT)
-    return strict_font is not None
+class SerenePanda(EpubVerification):
+    def __init__(self, strict: bool = False) -> None:
+        self.strict = strict
+        self.skip = EpubSkipReason.SERENE_PANDA_FONT
+        self.additional_info = ""
+        self.epub_info = None
+
+    def verify(self, epub: EPUB) -> bool:
+        strict_filename = FileName.SP_FONT
+        filename = FileName.SP_FONT_LOWER_ENDSWITH
+        with epub.keep_open():
+            self.epub_info = epub.info()
+            fonts = epub.resources.by_role(EpubRole.FONT)
+
+            if self.strict and len(fonts) != 1:
+                return False
+
+            for font in fonts:
+                if self.strict:
+                    if font.filename != strict_filename:
+                        self.additional_info = f"font filename - {font.filename}, not {strict_filename}"
+                        return False
+                else:
+                    if filename not in font.filename.lower():
+                        self.additional_info = f"font filename - {font.filename}, does not contain {filename}"
+                        return False
+
+        return True
 
 
-def _parse_xml_stream(epub: EPUB, name: str) -> None:
-    """Parse one source entry as XML; raises XMLSyntaxError on invalid content."""
-    with epub.source.open_stream(name) as stream:
-        etree.parse(stream, _xml_parser)
+class ValidXMLChapters(EpubVerification):
+    def __init__(self, count: int = 10) -> None:
+        self.count = count
+        self.skip = EpubSkipReason.INVALID_XML_CHAPTERS
+        self.additional_info = ""
+        self.epub_info = None
+
+    def verify(self, epub: EPUB) -> bool:
+        with epub.keep_open():
+            self.epub_info = epub.info()
+            chapters = epub.resources.by_role(EpubRole.HTML)
+            total_chapters = len(chapters)
+            count = min(self.count, total_chapters)
+            sample_chapters = random.sample(chapters.items, count)
+            failures = []
+
+            for chapter in sample_chapters:
+                try:
+                    etree.parse(chapter.content, _xml_parser)
+                except etree.XMLSyntaxError as error:
+                    failures.append(f"{chapter.filename!r}: {error}")
+
+            if failures:
+                self.additional_info = f"{len(failures)}/{count} of {total_chapters}\n" + "\n".join(failures)
+                return False
+
+        return True
 
 
-def verify_chapter_xml(epub: EPUB) -> bool:
-    """Confirm that ONE chapter of this EPUB is well-formed XML.
+class HasNoGiantGifs(EpubVerification):
+    def __init__(self, threshold_mb: int = 5) -> None:
+        self.threshold_mb = threshold_mb
+        self.skip = EpubSkipReason.BIG_GIFS
+        self.additional_info = ""
+        self.epub_info = None
 
-    Fast spot-check: a single randomly chosen chapter is parsed - much cheaper
-    than verifying everything. Just `verify_chapters_xml(epub, count=1)`.
+    def verify(self, epub: EPUB) -> bool:
+        offenders = []
 
-    Returns:
-        True if the chapter parses as XML.
+        with epub.keep_open():
+            self.epub_info = epub.info()
+            for gif in epub.resources.by_media_type(MediaType.IMAGE_GIF):
+                file_size_mb = gif.info.file_size / (1024 * 1024)
+                if file_size_mb > self.threshold_mb:
+                    offenders.append(f"{gif.filename!s}: {file_size_mb:.2f} MB")
 
-    Raises:
-        ValueError: If the chapter does not parse (with the parser's message),
-            or if the EPUB contains no chapter entries at all.
-    """
-    return verify_chapters_xml(epub, count=1)
+        if offenders:
+            self.additional_info = f"{len(offenders)} offenders found:\n" + "\n".join(offenders)
+            return False
 
+        return True
 
-def verify_chapters_xml(epub: EPUB, count: int | None = None) -> bool:
-    """Confirm that chapters of this EPUB are well-formed XML.
+class OPFPath(EpubVerification):
+    def __init__(self, expected_path: str = "content.opf") -> None:
+        self.expected_path = expected_path
+        self.skip = EpubSkipReason.NON_DEFAULT_OPF
+        self.additional_info = ""
+        self.epub_info = None
 
-    Source-only and fast: one pass over the archive, one zip handle, chapters
-    detected by suffix (.xhtml/.html/.htm), entries parsed with a shared
-    parser. Well-formedness only, no DTD/schema validation: void elements must
-    be self-closed, tags balanced, a single root element - what epub readers
-    and epubcheck require from XHTML content documents. All failures are
-    collected - one broken chapter does not hide the rest.
+    def verify(self, epub: EPUB) -> bool:
+        with epub.keep_open():
+            self.epub_info = epub.info()
+            for f in epub.resources.by_role(EpubRole.OPF):
+                if f.filename != FileName.DEFAULT_OPF:
+                    return False
+        return True
 
-    Args:
-        count: verify this many randomly chosen chapters; None (default)
-            verifies all. Counts larger than the available chapters verify all.
-
-    Returns:
-        True if all (or sampled) chapters parse as XML.
-
-    Raises:
-        ValueError: If any verified chapter fails (listing every offending
-            entry with its parser message), or if `count` is requested but the
-            EPUB contains no chapter entries at all.
-    """
-    failures: list[str] = []
-    with epub.source.open():  # one zip handle for the whole sweep
-        chapters = [name for name in epub.source.namelist() if name.lower().endswith(CHAPTER_SUFFIXES)]
-
-        if count is not None:
-            if not chapters:
-                message = f"{epub}: no chapter entries found"
-                logger.error(message)
-                raise ValueError(message)
-            chapters = random.sample(chapters, min(count, len(chapters)))
-
-        for name in chapters:
-            try:
-                _parse_xml_stream(epub, name)
-            except etree.XMLSyntaxError as error:
-                failures.append(f"  {name!r}: {error}")
-                logger.error(f"{name!r} is not well-formed XML: {error}")
-
-    if failures:
-        message = f"{epub}: {len(failures)} chapter(s) are not well-formed XML:\n" + "\n".join(failures)
-        logger.error(message)
-        raise ValueError(message)
-    return True
-
-
-def verify_no_giant_gifs(epub: EPUB, size_limit: int = ANIMATION_SIZE_LIMIT) -> bool:
-    """Confirm that no GIF in this EPUB exceeds `size_limit`.
-
-    Source-only and instant: ZIP entries carry the uncompressed size in their
-    headers, so no content is read at all. Deviates from the other verifiers by
-    contract: returns False instead of raising when giant gifs are found (the
-    caller decides whether to run the conversion recipe).
-
-    Returns:
-        True if every GIF entry is at or below `size_limit`, False otherwise
-        (each offender logged).
-    """
-    offenders = [
-        info.filename
-        for info in epub.source.infolist()
-        if info.filename.lower().endswith(".gif") and info.file_size > size_limit
-    ]
-    if offenders:
-        for name in offenders:
-            logger.error(f"{name!r} exceeds the animation size limit ({size_limit} bytes)")
-        return False
-    return True

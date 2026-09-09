@@ -100,25 +100,25 @@ class ResourceIndex:
     """
 
     def __init__(self) -> None:
-        self._items: list[Resource] = []
+        self.items: list[Resource] = []
         self._by_path: dict[str, Resource] = {}
 
     def __repr__(self) -> str:
-        return f"ResourceIndex({len(self._items)})"
+        return f"ResourceIndex({len(self.items)})"
 
     def __iter__(self):
-        return iter(self._items)
+        return iter(self.items)
 
     def __len__(self) -> int:
-        return len(self._items)
+        return len(self.items)
 
     def __getitem__(self, item):
-        return self._items[item]
+        return self.items[item]
 
     def __contains__(self, item: Resource | str) -> bool:
         if isinstance(item, str):
             return item in self._by_path
-        return item in self._items
+        return item in self.items
 
     @classmethod
     def from_infolist(cls, infolist: list[ZipInfo], stream: Callable[[ZipInfo], BinaryIO]) -> ResourceIndex:
@@ -134,7 +134,7 @@ class ResourceIndex:
 
     def add(self, resource) -> None:
         """Add a resource to the index."""
-        self._items.append(resource)
+        self.items.append(resource)
         self._by_path[resource.info.filename] = resource
 
     def rename(self, resource: Resource, old_filename: str) -> None:
@@ -145,7 +145,7 @@ class ResourceIndex:
 
     def remove(self, resource: Resource) -> None:
         """Remove a resource from the index."""
-        self._items.remove(resource)
+        self.items.remove(resource)
         self._by_path.pop(resource.info.filename, None)
         resource.is_deleted = True
 
@@ -154,23 +154,23 @@ class ResourceIndex:
         return self._by_path.get(path)
 
     def by_media_type(self, media_type: MediaType) -> ResourceIndex:
-        return ResourceIndex.from_resource_list([r for r in self._items if r.media_type is media_type])
+        return ResourceIndex.from_resource_list([r for r in self.items if r.media_type is media_type])
 
     def by_role(self, role: EpubRole) -> ResourceIndex:
-        return ResourceIndex.from_resource_list([r for r in self._items if r.role is role])
+        return ResourceIndex.from_resource_list([r for r in self.items if r.role is role])
 
     def iter(self, sort_by_role: bool = True) -> Generator[Resource, None, None]:
         if sort_by_role:
             for role in EpubRole:
                 yield from self.by_role(role)
         else:
-            yield from self._items
+            yield from self.items
 
     def stats(self):
         return IndexInfo(
-            count=len(self._items),
-            total_size=sum(i.info.file_size for i in self._items),
-            compress_size=sum(i.info.compress_size for i in self._items),
+            count=len(self.items),
+            total_size=sum(i.info.file_size for i in self.items),
+            compress_size=sum(i.info.compress_size for i in self.items),
         )
 
 

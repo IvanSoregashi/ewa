@@ -10,7 +10,7 @@ from pathlib import Path
 
 from epub.config import settings
 from epub.recipe_analytics import record_analytics
-from epub.recipe_epub import EpubOptimizationResult, _fully_process_encrypted_panda
+from epub.recipe_epub import EpubOperationResult, _fully_process_encrypted_panda
 from ewa.ui import print_success
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ def fully_process_encrypted_pandas(
     directory: Path,
     max_workers: int | None = None,
     flush_size: int = 8,
-) -> list[EpubOptimizationResult]:
+) -> list[EpubOperationResult]:
     """Process every epub under `directory` (recursively) in a process pool.
 
     max_workers: None = cpu count, 0 = synchronous (no pool, current process).
@@ -30,8 +30,8 @@ def fully_process_encrypted_pandas(
     skipped.
     """
     paths = sorted(path for path in directory.rglob("*.epub"))
-    results: list[EpubOptimizationResult] = []
-    buffer: list[EpubOptimizationResult] = []
+    results: list[EpubOperationResult] = []
+    buffer: list[EpubOperationResult] = []
     flush_end_time = time.time()
 
     def flush() -> None:

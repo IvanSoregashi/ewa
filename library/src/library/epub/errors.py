@@ -13,6 +13,10 @@ class EpubSkipReason(IntEnum):
     INCORRECT_DIRECTORY = 3
     NON_DEFAULT_OPF = 4
     UNMATCHED_LINKS = 5
+    MIMETYPE_VERIFICATION = 6
+    SERENE_PANDA_FONT = 7
+    INVALID_XML_CHAPTERS = 8
+    BIG_GIFS = 9
 
 
 class EpubErrorReason(IntEnum):

@@ -4,19 +4,20 @@ import time
 from pathlib import Path
 
 from epub.config import settings
-from epub.results import EpubOptimizationResult
+from epub.results import EpubOperationResult
 from library.epub.epub import EPUB, EpubInfo
 from library.epub.errors import EpubSkipReason, EpubErrorReason
 from library.epub.media_type import EpubRole, FileName, MediaType
 from library.epub import recipe_image, recipe_html, recipe_htmls
 from epub import recipe_analytics, recipe_css, recipe_package
+from library.epub.verification import OPFPath, ValidXMLChapters, SerenePanda
 
 logger = logging.getLogger(__name__)
 sp_dictionary_path: Path = settings.serene_panda_dir / "translator.json"
 sp_dictionary = str.maketrans(json.loads(sp_dictionary_path.read_text(encoding="utf-8")))
 
 
-def fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
+def fully_process_encrypted_panda(path: str) -> EpubOperationResult:
     start = time.time()
     result = _fully_process_encrypted_panda(path)
     print(f"ELAPSED _fully_process_encrypted_panda: {time.time() - start:.2f} s")
@@ -26,7 +27,7 @@ def fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
     return result
 
 
-def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
+def _fully_process_encrypted_panda(path: str) -> EpubOperationResult:
     """
 
     1. Check EPUB eligibility
@@ -48,7 +49,7 @@ def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
     if not current_path.is_relative_to(settings.encrypted_epub_dir):
         logger.warning(f"SKIP {str(current_path)!s} FILE NOT FROM {str(settings.encrypted_epub_dir)!s}")
         # EPUB STAYS IN PLACE
-        return EpubOptimizationResult(
+        return EpubOperationResult(
             skip=EpubSkipReason.INCORRECT_DIRECTORY,
             original_epub=EpubInfo.failed(current_path),
         )
@@ -58,7 +59,7 @@ def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
     if destination_path.exists():
         logger.warning(f"SKIP {str(current_path)!s} SINCE {str(destination_path)!s} EXISTS")
         # EPUB STAYS IN PLACE
-        return EpubOptimizationResult(
+        return EpubOperationResult(
             skip=EpubSkipReason.DESTINATION_EXISTS,
             original_epub=EpubInfo.failed(current_path),
         )
@@ -67,22 +68,12 @@ def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
         with EPUB(current_path).keep_open() as epub:
             original_info = epub.info()
             # recipe_package.relocate_package(epub)
-            for f in epub.resources.by_role(EpubRole.OPF):
-                if f.filename != FileName.DEFAULT_OPF:
-                    # EPUB STAYS IN PLACE
-                    return EpubOptimizationResult(
-                        skip=EpubSkipReason.NON_DEFAULT_OPF,
-                        original_epub=original_info,
-                    )
+
+            for v in (OPFPath(),SerenePanda()):
+                if not v.verify(epub):
+                    return v.skipped()
 
             fonts = [f for f in epub.resources.by_role(EpubRole.FONT) if "serenepanda" in f.filename.lower()]
-            if len(fonts) != 1 or fonts[0].filename != FileName.SP_FONT:
-                # EPUB STAYS IN PLACE
-                return EpubOptimizationResult(
-                    skip=EpubSkipReason.NOT_IMPLEMENTED,
-                    original_epub=original_info,
-                )
-
             font = fonts[0]
             epub.resources.remove(font)
             epub.core.package.manifest.remove_item(path=font.filename)
@@ -114,7 +105,7 @@ def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
                 if unmatched:
                     string = json.dumps(unmatched, indent=4)
                     logger.error(f"{epub} LINKS NOT REPLACED:\n{string}")
-                    return EpubOptimizationResult(
+                    return EpubOperationResult(
                         skip=EpubSkipReason.UNMATCHED_LINKS,
                         original_epub=original_info,
                     )
@@ -131,7 +122,7 @@ def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
     except Exception as e:
         logger.exception(f"EPUB FAIL {path}, error: {e}")
         destination_path.unlink(missing_ok=True)  # remove an unfinished epub, if one was written
-        return EpubOptimizationResult(
+        return EpubOperationResult(
             error=EpubErrorReason.UNKNOWN,
             original_epub=EpubInfo.failed(current_path),
         )
@@ -141,7 +132,7 @@ def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
     except Exception as e:
         logger.error(f"EPUB RESULT FAIL {path}, error: {e}")
         destination_path.unlink(missing_ok=True)  # remove the corrupt result
-        return EpubOptimizationResult(
+        return EpubOperationResult(
             error=EpubErrorReason.INCORRECT_RESULT,
             original_epub=EpubInfo.failed(current_path),
         )
@@ -162,7 +153,7 @@ def _fully_process_encrypted_panda(path: str) -> EpubOptimizationResult:
 
     destination_path.unlink(missing_ok=True)
 
-    return EpubOptimizationResult(
+    return EpubOperationResult(
         success=True,
         original_epub=original_info,
         new_epub=new_info,

@@ -27,6 +27,7 @@ class EPUB:
 
         self._resources: ResourceIndex | None = None
         self._core: EpubCore | None = None
+        self._info: EpubInfo | None = None
 
         if not self.path.exists():
             # TODO: None for creating new epub? or pass in the not yet existing path
@@ -136,25 +137,37 @@ class EPUB:
         else:
             self.package_into(destination)
 
-    def info(self):
-        with self.keep_open():
-            total = self.resources.stats()
-            images = self.resources.by_role(EpubRole.IMAGE).stats()
-            htmls = self.resources.by_role(EpubRole.HTML).stats()
-            fonts = self.resources.by_role(EpubRole.FONT).stats()
+    def info(self, read_data: bool = True):
+        if self._info is None:
+            with self.keep_open():
+                total = self.resources.stats()
+                images = self.resources.by_role(EpubRole.IMAGE).stats()
+                htmls = self.resources.by_role(EpubRole.HTML).stats()
+                fonts = self.resources.by_role(EpubRole.FONT).stats()
 
-            package = self.core.package
-            return EpubInfo(
-                path=self.path,
-                path_size=self.path.stat().st_size,
-                total=total,
-                images=images,
-                htmls=htmls,
-                fonts=fonts,
-                identifier=package.metadata.uuid_id_or_all_identifiers,
-                title=package.metadata.title,
-                author=package.metadata.aut_or_all_creators,
-            )
+                if read_data:
+                    package = self.core.package
+                    identifier = package.metadata.uuid_id_or_all_identifiers
+                    title = package.metadata.title
+                    author = package.metadata.aut_or_all_creators
+                else:
+                    identifier = None
+                    title = None
+                    author = None
+
+                self._info = EpubInfo(
+                    path=self.path,
+                    path_size=self.path.stat().st_size,
+                    total=total,
+                    images=images,
+                    htmls=htmls,
+                    fonts=fonts,
+                    identifier=identifier,
+                    title=title,
+                    author=author,
+                )
+
+        return self._info
 
 
 @dataclass(kw_only=True)

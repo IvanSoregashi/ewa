@@ -2,7 +2,7 @@ from typing import Any
 
 from sqlmodel import SQLModel, Field
 
-from epub.results import EpubOptimizationResult
+from epub.results import EpubOperationResult
 from library.asserts import require
 from library.epub.resources import IndexInfo
 from library.database.sqlite_model_table import SQLiteModelTable
@@ -160,7 +160,7 @@ class SkippedEpubModel(SQLModel, table=True):
     chapters_count: int | None = None
 
     @classmethod
-    def from_result(cls, result: "EpubOptimizationResult") -> "SkippedEpubModel":
+    def from_result(cls, result: "EpubOperationResult") -> "SkippedEpubModel":
         info = result.original_epub
         return cls(
             skip_reason=int(result.skip),
@@ -183,7 +183,7 @@ class ErrorEpubModel(SQLModel, table=True):
     filesize: int
 
     @classmethod
-    def from_result(cls, result: "EpubOptimizationResult") -> "ErrorEpubModel":
+    def from_result(cls, result: "EpubOperationResult") -> "ErrorEpubModel":
         info = result.original_epub
         return cls(error=int(result.error), filepath=str(info.path or ""), filesize=info.path_size)
 
@@ -219,7 +219,7 @@ class SuccessfulEpubModel(SQLModel, table=True):
     new_chapters_count: int
 
     @classmethod
-    def from_result(cls, result: "EpubOptimizationResult") -> "SuccessfulEpubModel":
+    def from_result(cls, result: "EpubOperationResult") -> "SuccessfulEpubModel":
         o = require(result.original_epub)
         n = require(result.new_epub)
         return cls(

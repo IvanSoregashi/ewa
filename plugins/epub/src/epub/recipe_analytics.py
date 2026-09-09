@@ -1,4 +1,4 @@
-from epub.results import EpubOptimizationResult
+from epub.results import EpubOperationResult
 from epub.tables import (
     SkippedImageModel,
     ErrorImageModel,
@@ -15,7 +15,7 @@ from epub.tables import (
 )
 
 
-def record_analytics(results: list[EpubOptimizationResult], db_url: str) -> None:
+def record_analytics(results: list[EpubOperationResult], db_url: str) -> None:
     """Persist a batch of epub outcomes: one bulk insert per table. Image rows
     are recorded only for successfully processed books, attributed to their
     successful_epubs row."""

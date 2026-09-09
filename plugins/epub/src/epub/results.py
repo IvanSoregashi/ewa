@@ -30,7 +30,7 @@ def percent_of(size_of: int, size_to: int) -> str:
 
 
 @dataclass(kw_only=True)
-class EpubOptimizationResult(OperationResult):
+class EpubOperationResult(OperationResult):
     original_epub: EpubInfo
     new_epub: EpubInfo | None = None
     image_results: list[ImageOptimizationResult] = field(default_factory=list)
