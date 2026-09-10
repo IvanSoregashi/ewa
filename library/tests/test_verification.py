@@ -1,4 +1,4 @@
-"""Tests for library.epub.verification chapter XML checks.
+"""Tests for library.epub.verification EPUB verification classes.
 
 Synthetic epub built inline (same pattern as plugins/epub test_recipe_package),
 no repo fixtures. Sampling tests use uniformly valid/broken books so outcomes
@@ -7,11 +7,10 @@ are deterministic regardless of which chapters random.sample picks."""
 import zipfile
 from pathlib import Path
 
-import pytest
-
 from library.epub.epub import EPUB
+from library.epub.errors import EpubSkipReason
 from library.epub.media_type import FileName
-from library.epub.verification import verify_chapter_xml, verify_chapters_xml, verify_no_giant_gifs
+from library.epub.verification import HasNoGiantGifs, ValidXMLChapters
 
 VALID_CHAPTER = """<?xml version="1.0" encoding="utf-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -51,61 +50,66 @@ def build_epub(path: Path, chapters: dict[str, str]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# verify_chapter_xml - spot check of one random chapter
+# ValidXMLChapters - spot check of one chapter (count=1)
 # ---------------------------------------------------------------------------
 
 
-def test_verify_chapter_xml_accepts_wellformed_xhtml(tmp_path: Path):
+def test_valid_xml_chapters_accepts_wellformed_xhtml(tmp_path: Path):
     path = tmp_path / "book.epub"
     build_epub(path, {"OEBPS/text/chapter.xhtml": VALID_CHAPTER})
 
-    assert verify_chapter_xml(EPUB(path)) is True
+    verification = ValidXMLChapters(count=1)
+    assert verification.verify(EPUB(path)) is True
+    assert verification.additional_info == ""
+    assert verification.epub_info is not None
 
 
-def test_verify_chapter_xml_rejects_broken_chapter(tmp_path: Path):
+def test_valid_xml_chapters_rejects_broken_chapter(tmp_path: Path):
     """Exactly the artifact lxml's HTML serializer produces: <br> without the
     self-closing slash - well-formed HTML, invalid XML."""
     path = tmp_path / "book.epub"
     build_epub(path, {"OEBPS/text/chapter.xhtml": BROKEN_CHAPTER})
 
-    with pytest.raises(ValueError) as excinfo:
-        verify_chapter_xml(EPUB(path))
+    verification = ValidXMLChapters(count=1)
+    assert verification.verify(EPUB(path)) is False
+    assert verification.skip == EpubSkipReason.INVALID_XML_CHAPTERS
+    assert verification.epub_info is not None
+    assert "chapter.xhtml" in verification.additional_info
 
-    message = str(excinfo.value)
-    assert "not well-formed XML" in message
-    assert "chapter.xhtml" in message
 
-
-def test_verify_chapter_xml_rejects_empty_chapter(tmp_path: Path):
+def test_valid_xml_chapters_rejects_empty_chapter(tmp_path: Path):
     path = tmp_path / "book.epub"
     build_epub(path, {"OEBPS/text/chapter.xhtml": ""})
 
-    with pytest.raises(ValueError, match="not well-formed XML"):
-        verify_chapter_xml(EPUB(path))
+    verification = ValidXMLChapters(count=1)
+    assert verification.verify(EPUB(path)) is False
+    assert "chapter.xhtml" in verification.additional_info
 
 
-def test_verify_chapter_xml_without_chapters_raises(tmp_path: Path):
+def test_valid_xml_chapters_without_chapters_passes_vacuously(tmp_path: Path):
+    """No chapters means nothing to sample, so there are no failures.
+    (The old verify_chapters_xml(count=...) function raised ValueError here.)"""
     path = tmp_path / "book.epub"
     build_epub(path, {})
 
-    with pytest.raises(ValueError, match="no chapter entries"):
-        verify_chapter_xml(EPUB(path))
+    verification = ValidXMLChapters(count=1)
+    assert verification.verify(EPUB(path)) is True
 
 
 # ---------------------------------------------------------------------------
-# verify_chapters_xml - count-sampled or all chapters
+# ValidXMLChapters - count-sampled or all chapters
 # ---------------------------------------------------------------------------
 
 
-def test_verify_chapters_xml_all_valid(tmp_path: Path):
+def test_valid_xml_chapters_all_valid(tmp_path: Path):
     path = tmp_path / "book.epub"
     build_epub(path, {f"OEBPS/text/ch{i}.xhtml": VALID_CHAPTER for i in range(3)})
 
-    assert verify_chapters_xml(EPUB(path)) is True  # None (default) = all
+    assert ValidXMLChapters().verify(EPUB(path)) is True  # default count covers all 3
 
 
-def test_verify_chapters_xml_collects_all_failures(tmp_path: Path):
-    """One broken chapter must not hide another: the error lists every
+def test_valid_xml_chapters_collects_all_failures(tmp_path: Path):
+    """One broken chapter must not hide another: additional_info lists every
     offending filename."""
     path = tmp_path / "book.epub"
     build_epub(
@@ -117,60 +121,67 @@ def test_verify_chapters_xml_collects_all_failures(tmp_path: Path):
         },
     )
 
-    with pytest.raises(ValueError) as excinfo:
-        verify_chapters_xml(EPUB(path))
+    verification = ValidXMLChapters()
+    assert verification.verify(EPUB(path)) is False
 
-    message = str(excinfo.value)
-    assert "2 chapter(s)" in message
-    assert "bad1.xhtml" in message
-    assert "bad2.xhtml" in message
-    assert "good.xhtml" not in message
+    assert "2/3 of 3" in verification.additional_info
+    assert "bad1.xhtml" in verification.additional_info
+    assert "bad2.xhtml" in verification.additional_info
+    assert "good.xhtml" not in verification.additional_info
 
 
-def test_verify_chapters_xml_checks_sample_size(tmp_path: Path):
+def test_valid_xml_chapters_checks_sample_size(tmp_path: Path):
     """count=N verifies N random chapters; counts beyond the available
     chapters verify all."""
     path = tmp_path / "book.epub"
     build_epub(path, {f"OEBPS/text/bad{i}.xhtml": BROKEN_CHAPTER for i in range(3)})
-    epub = EPUB(path)
 
-    with pytest.raises(ValueError, match="2 chapter\(s\)"):
-        verify_chapters_xml(epub, count=2)
+    verification = ValidXMLChapters(count=2)
+    assert verification.verify(EPUB(path)) is False
+    assert "2/2 of 3" in verification.additional_info
 
-    with pytest.raises(ValueError, match="3 chapter\(s\)"):  # count > available: all checked
-        verify_chapters_xml(epub, count=10)
+    verification = ValidXMLChapters(count=10)  # count > available: all checked
+    assert verification.verify(EPUB(path)) is False
+    assert "3/3 of 3" in verification.additional_info
 
 
-def test_verify_chapters_xml_ignores_non_chapter_resources(tmp_path: Path):
-    """Chapter detection is by suffix; broken non-chapter entries must not
+def test_valid_xml_chapters_ignores_non_chapter_resources(tmp_path: Path):
+    """Chapter detection is by EPUB role; broken non-chapter entries must not
     fail the verification."""
     path = tmp_path / "book.epub"
     build_epub(path, {"OEBPS/text/chapter.xhtml": VALID_CHAPTER})
     with zipfile.ZipFile(path, "a") as z:
         z.writestr("OEBPS/text/not_a_chapter.txt", "<this is not xml at all")
 
-    assert verify_chapters_xml(EPUB(path)) is True
+    assert ValidXMLChapters().verify(EPUB(path)) is True
 
 
 # ---------------------------------------------------------------------------
-# verify_no_giant_gifs
+# HasNoGiantGifs
 # ---------------------------------------------------------------------------
 
 
-def test_verify_no_giant_gifs_detects_oversized(tmp_path: Path):
+def test_has_no_giant_gifs_detects_oversized(tmp_path: Path):
     path = tmp_path / "book.epub"
     build_epub(path, {"OEBPS/text/chapter.xhtml": VALID_CHAPTER})
     with zipfile.ZipFile(path, "a") as z:
         z.writestr("OEBPS/images/big.gif", b"\x00" * (5 * 1024 * 1024 + 1))
         z.writestr("OEBPS/images/small.gif", b"\x00" * 1024)
 
-    assert verify_no_giant_gifs(EPUB(path)) is False
+    verification = HasNoGiantGifs()
+    assert verification.verify(EPUB(path)) is False
+    assert verification.skip == EpubSkipReason.BIG_GIFS
+    assert verification.epub_info is not None
+    assert "big.gif" in verification.additional_info
+    assert "small.gif" not in verification.additional_info
 
 
-def test_verify_no_giant_gifs_passes_when_all_small(tmp_path: Path):
+def test_has_no_giant_gifs_passes_when_all_small(tmp_path: Path):
     path = tmp_path / "book.epub"
     build_epub(path, {"OEBPS/text/chapter.xhtml": VALID_CHAPTER})
     with zipfile.ZipFile(path, "a") as z:
         z.writestr("OEBPS/images/small.gif", b"\x00" * 1024)
 
-    assert verify_no_giant_gifs(EPUB(path)) is True
+    verification = HasNoGiantGifs()
+    assert verification.verify(EPUB(path)) is True
+    assert verification.additional_info == ""

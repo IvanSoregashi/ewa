@@ -214,7 +214,7 @@ XHTML_CHAPTER = """<?xml version="1.0" encoding="utf-8"?>
 
 def test_replace_links_output_stays_valid_xml():
     """Void elements stay self-closed, the XML declaration and namespaces
-    survive: the output passes verify_chapter_xml."""
+    survive: the output passes ValidXMLChapters."""
     resource = html_resource(XHTML_CHAPTER)
     table = {"OEBPS/text/old_target.xhtml": "OEBPS/text/new_target.xhtml"}
 

@@ -1,3 +1,4 @@
+import io
 import logging
 import random
 from enum import StrEnum
@@ -103,7 +104,7 @@ class ValidXMLChapters(EpubVerification):
 
             for chapter in sample_chapters:
                 try:
-                    etree.parse(chapter.content, _xml_parser)
+                    etree.parse(io.BytesIO(chapter.content), _xml_parser)
                 except etree.XMLSyntaxError as error:
                     failures.append(f"{chapter.filename!r}: {error}")
 
