@@ -137,7 +137,7 @@ def posix_relative_href(anchor: str, absolute_href: str) -> str:
     """Get a relative link, from two absolute hrefs.
 
     Args:
-        anchor: absolute path to the file containing the link (str).
+        anchor: absolute path to the file that would contain the link (str).
         absolute_href: absolute link to the attachment file (str).
 
     Returns:

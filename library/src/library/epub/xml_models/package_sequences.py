@@ -28,6 +28,12 @@ class Manifest(BaseXmlModel, tag="manifest", ns=NamespacePrefix.OPF, nsmap=OPF_N
         elif path is not None:
             self.items = [i for i in self.items if i.href != path]
 
+    def has_path(self, path: str) -> bool:
+        for i in self.items:
+            if i.href == path:
+                return True
+        return False
+
 
 class SpineItemRef(BaseXmlModel, tag="itemref", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP):
     idref: str = attr()

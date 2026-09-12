@@ -7,11 +7,9 @@ from zipfile import ZIP_STORED
 from lxml import etree
 
 from library.epub.epub import EPUB
-from library.epub.errors import EpubSkipReason, EpubErrorReason
+from library.epub.errors import EpubSkipReason
 from library.epub.protocols import EpubVerification
-from library.epub.xml_literals import FileContents
 from library.epub.media_type import FileName, EpubRole, MediaType
-from library.image.constants import ANIMATION_SIZE_LIMIT
 
 logger = logging.getLogger("verification")
 
@@ -23,7 +21,7 @@ class EpubSpecification(StrEnum):
     EPUB_MIMETYPE = "EPUB_MIMETYPE"
     EPUB_CONTAINER = "EPUB_CONTAINER"
     SERENE_PANDA_ENCRYPTED = "SERENE_PANDA_ENCRYPTED"
-    SERENE_PANDA_UNENCRYPTED = "SERENE_PANDA_UNENCRYPTED"
+    SERENE_PANDA_DECRYPTED = "SERENE_PANDA_DECRYPTED"
     ASIA_NOVEL = "ASIA_NOVEL"
     CALIBRE = "CALIBRE"
     WEB_TO_EPUB = "WEB_TO_EPUB"
@@ -138,6 +136,7 @@ class HasNoGiantGifs(EpubVerification):
 
         return True
 
+
 class OPFPath(EpubVerification):
     def __init__(self, expected_path: str = "content.opf") -> None:
         self.expected_path = expected_path
@@ -152,4 +151,3 @@ class OPFPath(EpubVerification):
                 if f.filename != FileName.DEFAULT_OPF:
                     return False
         return True
-
