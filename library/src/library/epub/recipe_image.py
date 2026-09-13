@@ -3,7 +3,7 @@ import logging
 from pathlib import PurePosixPath
 
 from library.asserts import require
-from library.epub.resources import Resource
+from library.epub.resources import Resource, ResourceIndex
 from PIL import Image
 
 from library.image.constants import ImageMode, ImageFormat
@@ -27,7 +27,10 @@ def get_image_info_with_extrema(resource: Resource) -> ImageInfo:
     return image_info
 
 
-def perform_image_optimization(resource: Resource) -> ImageOptimizationResult:
+def perform_image_optimization(
+    resource: Resource, *, resources: ResourceIndex | None = None
+) -> ImageOptimizationResult:
+    """Optimize bytes; supply the owning index to keep renames indexed."""
     buffer = io.BytesIO()
     try:
         percent_comp = int((resource.info.compress_size / resource.info.file_size) * 100)
@@ -61,9 +64,12 @@ def perform_image_optimization(resource: Resource) -> ImageOptimizationResult:
             result.skip = ImageSkipReason.WORSE_CONVERSION
             return result
 
-        resource.content = buffer.getvalue()
         if new_image_info.format is ImageFormat.JPEG and result.original_image.format is ImageFormat.PNG:
             result.new_image.path = str(PurePosixPath(resource.filename).with_suffix(".jpg"))
-            resource.filename = new_image_info.path
+            if resources is not None:
+                resources.rename(resource, new_image_info.path)
+            else:
+                resource.filename = new_image_info.path
+        resource.content = buffer.getvalue()
 
     return result

@@ -64,13 +64,12 @@ def convert_giant_gifs(epub: EPUB, size_limit: int = ANIMATION_SIZE_LIMIT) -> di
             continue
 
         old_path = resource.filename
-        result = perform_image_optimization(resource)
+        result = perform_image_optimization(resource, resources=epub.resources)
         if not result.success:
             logger.warning(f"{resource} conversion failed ({result.skip or result.error}), keeping gif")
             continue
 
         new_path = resource.filename  # renamed to .mp4 by perform_image_optimization
-        epub.resources.rename(resource, old_path)  # re-key the index (filename changed in place)
         replace_manifest_links(epub, {old_path: new_path})
         poster_path = _add_poster_resource(epub, video_manifest, new_path, poster_bytes)
 

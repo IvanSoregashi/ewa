@@ -1,8 +1,7 @@
 from library.asserts import require
 from library.epub.epub import EPUB
 from library.epub.media_type import FileName
-from library.epub.utils_href import posix_absolute_href, posix_relative_href
-from library.epub.xml_literals import FileTemplate
+from library.epub.utils_href import posix_relative_href
 
 
 def relocate_package(epub: EPUB, target_package_path: str = FileName.DEFAULT_OPF) -> bool:
@@ -12,31 +11,7 @@ def relocate_package(epub: EPUB, target_package_path: str = FileName.DEFAULT_OPF
     Content documents do not move, so nothing else needs fixing. Returns True
     if the opf was relocated.
     """
-    package = epub.core.package
-    package_resource = epub.core.package_resource
-    current_package_path = package_resource.info.filename
-
-    if current_package_path == target_package_path:
-        return False
-
-    for item in package.manifest.items:
-        absolute = posix_absolute_href(current_package_path, item.href)
-        item.href = posix_relative_href(target_package_path, absolute)
-
-    if package.guide is not None:
-        for reference in package.guide.references:
-            absolute = posix_absolute_href(current_package_path, reference.href)
-            reference.href = posix_relative_href(target_package_path, absolute)
-
-    package_resource.filename = target_package_path
-    epub.package.flush()
-    epub.resources.rename(package_resource, current_package_path)
-
-    # container must follow: it still points at the old opf location
-    container_resource = require(epub.resources.by_path(FileName.CONTAINER), FileName.CONTAINER)
-    container_resource.content = FileTemplate.CONTAINER.format(opf_path=target_package_path).encode("utf-8")
-    epub.core._manifest = None
-    return True
+    return epub.package.relocate(target_package_path)
 
 
 def replace_links(epub: EPUB, replace_dict: dict[str, str]) -> None:

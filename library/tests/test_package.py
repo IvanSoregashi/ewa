@@ -6,23 +6,26 @@ import pytest
 from library.epub.epub import EPUB
 
 
-OPF = b'''<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+OPF = b"""<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
     <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
       <dc:title>Original</dc:title>
     </metadata>
     <manifest><item id="chapter" href="text/chapter.xhtml" media-type="application/xhtml+xml"/></manifest>
     <spine><itemref idref="chapter"/></spine>
-</package>'''
+</package>"""
 
 
 def make_epub(tmp_path, *, package_bytes=OPF, container_path="OEBPS/content.opf", extra_opf=False):
     path = tmp_path / "input.epub"
     with ZipFile(path, "w") as archive:
         archive.writestr("mimetype", b"application/epub+zip")
-        archive.writestr("META-INF/container.xml", f'''<container
+        archive.writestr(
+            "META-INF/container.xml",
+            f'''<container
           xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
           <rootfiles><rootfile full-path="{container_path}" media-type="application/oebps-package+xml"/></rootfiles>
-        </container>''')
+        </container>''',
+        )
         archive.writestr("OEBPS/content.opf", package_bytes)
         archive.writestr("OEBPS/text/chapter.xhtml", b"<html/>")
         if extra_opf:
@@ -63,7 +66,7 @@ def test_export_serializes_loaded_document_only(tmp_path, inspect_document):
 def test_package_binding_and_flush_do_not_parse_unopened_document(tmp_path):
     epub = make_epub(tmp_path, package_bytes=b"unparseable OPF")
     assert epub.package.resource.filename == "OEBPS/content.opf"
-    assert not epub.package.flush()
+    assert epub.package.flush()  # Only the discovered container has been parsed.
     output = io.BytesIO()
     epub.package_into(output)
     with ZipFile(output) as archive:
@@ -99,3 +102,63 @@ def test_resolution_uses_current_resource_location(tmp_path):
     # itself must use the current resource location, not an old copied path.
     package.resource.filename = "content.opf"
     assert package.resolve_href("text/chapter.xhtml") == "text/chapter.xhtml"
+
+
+def test_discovery_retains_container_and_relocation_survives_export(tmp_path):
+    from library.epub.package import EpubPackage
+    from library.epub.xml_models.package_sequences import Guide
+
+    epub = make_epub(tmp_path)
+    package = epub.package
+    assert EpubPackage.from_resources(epub.resources).resource is package.resource
+    assert package.container_resource is epub.resources.by_path("META-INF/container.xml")
+    assert package.container.opf_path == "OEBPS/content.opf"
+    package.document.guide = Guide()
+    package.document.guide.add_reference(type="text", href="text/chapter.xhtml#start")
+    old_manifest = epub.core.manifest
+    assert package.relocate("package/book.opf")
+    assert epub.resources.by_path("OEBPS/content.opf") is None
+    assert epub.resources.by_path("package/book.opf") is package.resource
+    assert package.container.opf_path == "package/book.opf"
+    assert package.document.guide.references[0].href == "../OEBPS/text/chapter.xhtml#start"
+    assert epub.core.manifest is not old_manifest
+    assert epub.core.manifest.by_path("../OEBPS/text/chapter.xhtml") is not None
+    assert not package.relocate("package/book.opf")
+    output = tmp_path / "relocated.epub"
+    epub.package_into(output)
+    reopened = EPUB(output).package
+    assert reopened.resource.filename == "package/book.opf"
+    assert reopened.resource_for_href(reopened.document.manifest.items[0].href).content == b"<html/>"
+
+
+def test_relocation_collision_preserves_documents(tmp_path):
+    epub = make_epub(tmp_path, extra_opf=True)
+    package = epub.package
+    before = package.document.to_xml_bytes(), package.container.to_xml_bytes()
+    with pytest.raises(ValueError, match="already exists"):
+        package.relocate("unused.opf")
+    assert package.resource.filename == "OEBPS/content.opf"
+    assert (package.document.to_xml_bytes(), package.container.to_xml_bytes()) == before
+    assert epub.resources.by_path("OEBPS/content.opf") is package.resource
+
+
+def test_containerless_discovery_does_not_create_container(tmp_path):
+    from library.epub.package import EpubPackage
+    from library.epub.resources import Resource, ResourceIndex
+    from zipfile import ZipInfo
+
+    resource = Resource(ZipInfo("book.opf"), lambda info: io.BytesIO(OPF))
+    package = EpubPackage.from_resources(ResourceIndex.from_resource_list([resource]))
+    assert package.container is None
+    with pytest.raises(ValueError, match="container"):
+        package.relocate("moved.opf")
+    assert resource.filename == "book.opf"
+
+
+def test_relocation_leaves_remote_hrefs_unchanged(tmp_path):
+    package = make_epub(tmp_path).package
+    remote = package.document.manifest.add_item(
+        id="remote", href="https://example.com/audio.mp3", media_type="audio/mpeg"
+    )
+    package.relocate("book.opf")
+    assert remote.href == "https://example.com/audio.mp3"

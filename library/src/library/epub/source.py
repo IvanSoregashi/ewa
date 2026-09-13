@@ -53,6 +53,7 @@ class SourceProtocol(Protocol):
         overwritten. Use extract_all to preserve the source directory layout.
         """
         ...
+
     def extract_all(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None) -> None: ...
 
 

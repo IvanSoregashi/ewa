@@ -1,6 +1,7 @@
 import io
 import logging
 from contextlib import contextmanager
+from copy import copy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, BinaryIO, Generator
@@ -19,7 +20,8 @@ logger = logging.getLogger("resource")
 
 class Resource:
     def __init__(self, info: ZipInfo, stream_bytes: Callable[[ZipInfo], BinaryIO]) -> None:
-        self.info = info
+        self._source_info = copy(info)
+        self.info = copy(info)
         self.stream_bytes = stream_bytes
 
         self.media_type, self.role = type_and_role_from_filename(self.info.filename)
@@ -51,7 +53,7 @@ class Resource:
 
     @contextmanager
     def stream(self) -> Generator[BinaryIO, None, None]:
-        streamable = io.BytesIO(self._content) if self._content is not None else self.stream_bytes(self.info)
+        streamable = io.BytesIO(self._content) if self._content is not None else self.stream_bytes(self._source_info)
         with streamable as stream:
             yield stream
 
@@ -137,11 +139,23 @@ class ResourceIndex:
         self.items.append(resource)
         self._by_path[resource.info.filename] = resource
 
-    def rename(self, resource: Resource, old_filename: str) -> None:
-        """Re-key a resource that was renamed in place (info.filename mutated
-        by the filename setter): the index still maps the old path."""
-        self._by_path.pop(old_filename, None)
-        self._by_path[resource.info.filename] = resource
+    def rename(self, resource: Resource, new_filename: str) -> None:
+        """Rename an owned resource and update its lookup together.
+
+        Does not move source files or rewrite references in EPUB documents.
+        """
+        old_filename = resource.filename
+        if resource not in self.items or self._by_path.get(old_filename) is not resource:
+            raise ValueError("Resource is not indexed under its current filename")
+        if not new_filename:
+            raise ValueError("Resource filename must not be empty")
+        if new_filename == old_filename:
+            return
+        if new_filename in self._by_path:
+            raise ValueError(f"Resource already exists at {new_filename!r}")
+        resource.filename = new_filename
+        del self._by_path[old_filename]
+        self._by_path[new_filename] = resource
 
     def remove(self, resource: Resource) -> None:
         """Remove a resource from the index."""

@@ -59,9 +59,7 @@ class EpubManifest:
         return manifest
 
     @classmethod
-    def from_manifest_list(
-        cls, manifests: list[EpubManifestItem], package: EpubPackage
-    ) -> EpubManifest:
+    def from_manifest_list(cls, manifests: list[EpubManifestItem], package: EpubPackage) -> EpubManifest:
         manifest = cls(package)
         for manifest_item in manifests:
             manifest.add(manifest_item)

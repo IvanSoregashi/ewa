@@ -82,7 +82,7 @@ def _fully_process_encrypted_panda(path: str) -> EpubOperationResult:
                 recipe_css.de_panda_css_resource(css_resource)
 
             image_optimization_results = [
-                recipe_image.perform_image_optimization(image_resource)
+                recipe_image.perform_image_optimization(image_resource, resources=epub.resources)
                 for image_resource in epub.resources.by_role(EpubRole.IMAGE)
                 if image_resource.media_type is not MediaType.IMAGE_SVG
             ]

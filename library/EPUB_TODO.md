@@ -5,7 +5,8 @@
 - [x] Fix Source exception cleanup: a failed ZIP session must close and reset its handle, and subsequent reads must work.
 - [x] Fix single-file ZIP extraction: match DirectorySource for existing-directory and exact-filename destinations, preserve timestamps, and avoid duplicated member paths. Add synthetic regression tests.
 - [x] Prototype a package entity associating the OPF resource with its parsed document. EpubPackage exposes document, local href resolution and flush; EPUB export flushes document edits. Review before expanding the design.
-- [ ] Decide where container discovery and updates belong when introducing the package entity; package versus EPUB ownership is still open.
+- [x] Put discovery in EpubPackage.from_resources. Keep the container resource and its XML model on the package; package.relocate updates the OPF hrefs, resource index, and container reference together.
+- [x] Make ResourceIndex.rename(resource, new_filename) rename and re-key together, rejecting collisions. Preserve original source ZipInfo separately from current output metadata so reads survive renames.
 - [ ] Justify any package facades and a separate EpubManifest through useful editing methods. Avoid wrappers that merely shorten attribute access.
 - [ ] Settle resource deletion and collection ownership on one consistent model. Review the implementation before adopting wider ResourceIndex API changes; membership versus is_deleted is currently redundant.
 - [ ] Address manifest index consistency and synchronization during add/remove/edit, together with the ownership decision. Decide how filtered collections behave.
@@ -33,7 +34,7 @@ The core/content distinction is application-defined, not a partition imposed by 
 
 ## Package prototype choices awaiting review
 
-- Container discovery remains on EPUB; EpubPackage is given its OPF resource. Container relocation remains coordinated by the existing recipe.
+- EpubPackage.from_resources discovers the OPF/container; the constructor also accepts already-selected resources. The relocation recipe delegates to package.relocate. Container-less single-OPF inputs can be discovered, but relocation requires a container.
 - EpubCore temporarily forwards package access for existing callers; its NCX and manifest behavior is otherwise retained until the next design step.
-- Export serializes any loaded OPF document directly, without snapshots or formatting-preservation flags. Unopened documents are left alone. Once parsed, edit document rather than independently replacing its resource bytes.
+- Export serializes loaded OPF and container documents directly, without snapshots or formatting-preservation flags. Unopened documents are left alone. Once parsed, edit the document rather than independently replacing its resource bytes.
 - No extra metadata/spine facades or new deletion semantics have been introduced.

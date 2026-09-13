@@ -22,6 +22,7 @@ class EpubCore:
         self._ncx_document: NCXDocument | None = None
 
         self._manifest: EpubManifest | None = None
+        self._manifest_path: str | None = None
 
     def __repr__(self):
         return f"EpubCore({len(self.resources)})"
@@ -51,6 +52,7 @@ class EpubCore:
 
     @property
     def manifest(self) -> EpubManifest:
-        if self._manifest is None:
+        if self._manifest is None or self._manifest_path != self.package_resource.filename:
             self._manifest = EpubManifest.from_package(self.epub_package)
+            self._manifest_path = self.package_resource.filename
         return require(self._manifest, f"{self} manifest")

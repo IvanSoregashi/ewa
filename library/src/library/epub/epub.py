@@ -11,12 +11,11 @@ from zipfile import is_zipfile
 from library.asserts import require
 from library.epub.epub_core import EpubCore
 from library.epub.errors import EpubSpecificationError, EpubError
-from library.epub.media_type import EpubRole, FileName
+from library.epub.media_type import EpubRole
 from library.epub.package import EpubPackage
 from library.epub.resources import ResourceIndex, IndexInfo
 from library.epub.sink import EpubZipSink
 from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
-from library.epub.xml_models.container_model import ContainerDocument
 from library.utils import verify_destination
 
 logger = logging.getLogger("epub")
@@ -73,22 +72,9 @@ class EPUB:
 
     @property
     def package(self) -> EpubPackage:
-        """Locate the OPF via the container, then bind it to a package object."""
+        """Lazily discover the package from this EPUB's resources."""
         if self._package is None:
-            container_resource = self.resources.by_path(FileName.CONTAINER)
-            if container_resource is not None:
-                container = ContainerDocument.from_xml_bytes(container_resource.content)
-                if len(container.opf_paths) != 1:
-                    raise NotImplementedError("Expected a single package document in the container")
-                path = require(container.opf_path, "container's opf_path")
-                resource = require(self.resources.by_path(path), f"package resource {path!r}")
-            else:
-                # Preserve support for unpacked/incomplete inputs without a container.
-                candidates = self.resources.by_role(EpubRole.OPF)
-                if len(candidates) != 1:
-                    raise ValueError("Cannot locate a unique OPF without container.xml")
-                resource = candidates[0]
-            self._package = EpubPackage(resource, self.resources)
+            self._package = EpubPackage.from_resources(self.resources)
         return self._package
 
     @property
