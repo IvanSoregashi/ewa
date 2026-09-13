@@ -39,6 +39,6 @@ def test_manifest_resolves_relative_to_package(tmp_path, package_path, href, arc
 
     # A selection must retain the base used to resolve subsequently loaded items.
     for selection in (manifest.by_media_type(MediaType.IMAGE_JPEG), manifest.by_role(EpubRole.IMAGE)):
-        assert selection.package_path == package_path
+        assert selection.package is epub.package
         selection.add_opf_item(ManifestItem(id="another", href=href, media_type="image/jpeg"))
         assert selection.by_id("another").resource is entry.resource

@@ -4,7 +4,7 @@
 
 - [x] Fix Source exception cleanup: a failed ZIP session must close and reset its handle, and subsequent reads must work.
 - [x] Fix single-file ZIP extraction: match DirectorySource for existing-directory and exact-filename destinations, preserve timestamps, and avoid duplicated member paths. Add synthetic regression tests.
-- [ ] Prototype a package entity associating the OPF resource with its parsed document. Review concrete code before expanding the design.
+- [x] Prototype a package entity associating the OPF resource with its parsed document. EpubPackage exposes document, local href resolution and flush; EPUB export flushes document edits. Review before expanding the design.
 - [ ] Decide where container discovery and updates belong when introducing the package entity; package versus EPUB ownership is still open.
 - [ ] Justify any package facades and a separate EpubManifest through useful editing methods. Avoid wrappers that merely shorten attribute access.
 - [ ] Settle resource deletion and collection ownership on one consistent model. Review the implementation before adopting wider ResourceIndex API changes; membership versus is_deleted is currently redundant.
@@ -29,4 +29,11 @@ The core/content distinction is application-defined, not a partition imposed by 
 
 ## Already accepted
 
-- [x] Resolve local manifest hrefs relative to the OPF location. The current package_path argument fixes lookup correctness; its architectural replacement will be evaluated with the package prototype.
+- [x] Resolve local manifest hrefs relative to the OPF location. The package prototype replaces the copied package_path argument with an EpubPackage reference.
+
+## Package prototype choices awaiting review
+
+- Container discovery remains on EPUB; EpubPackage is given its OPF resource. Container relocation remains coordinated by the existing recipe.
+- EpubCore temporarily forwards package access for existing callers; its NCX and manifest behavior is otherwise retained until the next design step.
+- Export serializes any loaded OPF document directly, without snapshots or formatting-preservation flags. Unopened documents are left alone. Once parsed, edit document rather than independently replacing its resource bytes.
+- No extra metadata/spine facades or new deletion semantics have been introduced.

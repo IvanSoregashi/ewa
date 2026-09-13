@@ -29,8 +29,8 @@ def relocate_package(epub: EPUB, target_package_path: str = FileName.DEFAULT_OPF
             reference.href = posix_relative_href(target_package_path, absolute)
 
     package_resource.filename = target_package_path
-    package_resource.content = package.to_xml_bytes()
-    epub.core._package_document = None
+    epub.package.flush()
+    epub.resources.rename(package_resource, current_package_path)
 
     # container must follow: it still points at the old opf location
     container_resource = require(epub.resources.by_path(FileName.CONTAINER), FileName.CONTAINER)
