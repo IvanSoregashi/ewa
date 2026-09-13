@@ -45,7 +45,14 @@ class SourceProtocol(Protocol):
     @contextmanager
     def open_stream(self, path: str | ZipInfo | Path | ZipPath) -> Iterator[BinaryIO]: ...
 
-    def extract(self, destination: str | Path, member: str | ZipInfo) -> str: ...
+    def extract(self, destination: str | Path, member: str | ZipInfo) -> str:
+        """Copy one file to an exact filename or into an existing directory.
+
+        A directory destination receives the member's basename. Otherwise the
+        destination is a filename whose parent must exist. Existing files are
+        overwritten. Use extract_all to preserve the source directory layout.
+        """
+        ...
     def extract_all(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None) -> None: ...
 
 
@@ -205,9 +212,11 @@ class ZipFileSource(SourceProtocol):
             with ZipFile(self.root) as zip_file:
                 logger.debug(f"{self} opening")
                 self._zip_file = zip_file
-                yield self
-                logger.debug(f"{self} closing")
-                self._zip_file = None
+                try:
+                    yield self
+                finally:
+                    self._zip_file = None
+                    logger.debug(f"{self} closing")
         else:
             yield self
 
@@ -219,22 +228,22 @@ class ZipFileSource(SourceProtocol):
                 yield stream
 
     def extract(self, destination: str | Path, member: str | ZipInfo) -> str:
-        """Extract a single element from source.
+        """Copy one file, using its basename for an existing directory destination.
 
-        Args:
-            destination: destination filename (str | Path) or destination directory (must exist) (Path).
-            member: member to extract to (str | ZipInfo).
+        Otherwise destination is an exact filename whose parent must exist.
+        Existing files are overwritten, matching DirectorySource.extract.
         """
         destination: Path = Path(destination)
         with self.open():
-            info = require(self.getinfo(member), f"{self}.getinfo({member!r})")
+            info = self._require_file_info(member)
             if destination.is_dir():
-                destination = destination / info.filename
+                destination = destination / Path(info.filename).name
             logger.info(f"{self} extract({destination!r}, {info.filename!r})")
-            result = self.zip_file.extract(member=info, path=destination)
+            with self.zip_file.open(info, "r") as source_stream, destination.open("wb") as destination_stream:
+                shutil.copyfileobj(source_stream, destination_stream)
             apply_zipinfo_timestamp_to_file(info, destination)  # preserving mtime
 
-            return result
+            return str(destination)
 
     def extract_all(self, destination: str | Path, exclude_members: Iterable[str | ZipInfo] | None = None) -> None:
         """Extract all data from source.
