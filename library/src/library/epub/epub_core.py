@@ -65,5 +65,7 @@ class EpubCore:
     @property
     def manifest(self) -> EpubManifest:
         if self._manifest is None:
-            self._manifest = EpubManifest.from_package(self.package, self.resources)
+            self._manifest = EpubManifest.from_package(
+                self.package, self.resources, package_path=self.package_resource.filename
+            )
         return require(self._manifest, f"{self} manifest")

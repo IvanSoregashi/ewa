@@ -1,6 +1,7 @@
 from library.asserts import require
 from library.epub.media_type import MediaType, EpubRole
 from library.epub.resources import ResourceIndex, Resource
+from library.epub.utils_href import posix_absolute_href
 from library.epub.xml_models.package_document import PackageDocument
 from library.epub.xml_models.package_sequences import ManifestItem
 
@@ -22,8 +23,9 @@ class EpubManifestItem:
 
 
 class EpubManifest:
-    def __init__(self, resources: ResourceIndex) -> None:
+    def __init__(self, resources: ResourceIndex, *, package_path: str) -> None:
         self.all_resources = resources
+        self.package_path = package_path
 
         self._items: list[EpubManifestItem] = []
         self._by_path: dict[str, EpubManifestItem] = {}
@@ -51,21 +53,29 @@ class EpubManifest:
         return ResourceIndex.from_resource_list([m.resource for m in self._items])
 
     @classmethod
-    def from_package(cls, package: PackageDocument, resources: ResourceIndex) -> EpubManifest:
-        manifest = EpubManifest(resources)
+    def from_package(
+        cls, package: PackageDocument, resources: ResourceIndex, *, package_path: str
+    ) -> EpubManifest:
+        manifest = cls(resources, package_path=package_path)
         for opf_manifest_item in package.manifest.items:
             manifest.add_opf_item(opf_manifest_item)
         return manifest
 
     @classmethod
-    def from_manifest_list(cls, manifests: list[EpubManifestItem], resources: ResourceIndex) -> EpubManifest:
-        manifest = EpubManifest(resources)
+    def from_manifest_list(
+        cls, manifests: list[EpubManifestItem], resources: ResourceIndex, *, package_path: str
+    ) -> EpubManifest:
+        manifest = cls(resources, package_path=package_path)
         for manifest_item in manifests:
             manifest.add(manifest_item)
         return manifest
 
     def add_opf_item(self, opf_manifest_item: ManifestItem) -> None:
-        resource = require(self.all_resources.by_path(opf_manifest_item.href), f"Resource matching {opf_manifest_item}")
+        archive_path = posix_absolute_href(self.package_path, opf_manifest_item.href)
+        resource = require(
+            self.all_resources.by_path(archive_path),
+            f"Resource matching {opf_manifest_item.href!r} relative to {self.package_path!r}: {archive_path!r}",
+        )
         manifest_item = EpubManifestItem(resource=resource, item=opf_manifest_item)
         self.add(manifest_item)
 
@@ -86,6 +96,7 @@ class EpubManifest:
         self.remove(require(self.by_id(_id), f"manifest id={_id}"))
 
     def by_path(self, path: str) -> EpubManifestItem | None:
+        """Look up the literal OPF-relative href, not an archive-root path."""
         return self._by_path.get(path)
 
     def by_id(self, _id: str) -> EpubManifestItem | None:
@@ -95,10 +106,12 @@ class EpubManifest:
         return EpubManifest.from_manifest_list(
             manifests=[m for m in self._items if m.media_type is media_type],
             resources=self.all_resources,
+            package_path=self.package_path,
         )
 
     def by_role(self, role: EpubRole) -> EpubManifest:
         return EpubManifest.from_manifest_list(
             manifests=[m for m in self._items if m.role is role],
             resources=self.all_resources,
+            package_path=self.package_path,
         )
