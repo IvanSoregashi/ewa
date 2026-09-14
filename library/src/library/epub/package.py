@@ -22,13 +22,15 @@ class EpubPackage:
         resource: Resource,
         resources: ResourceIndex,
         *,
-        container_resource: Resource | None = None,
+        container_resource: Resource,
+        document: PackageDocument | None = None,
+        container_document: ContainerDocument | None = None,
     ) -> None:
         self.resource = resource
         self.resources = resources
-        self._document: PackageDocument | None = None
+        self._document = document
         self.container_resource = container_resource
-        self._container: ContainerDocument | None = None
+        self._container = container_document
 
     def __repr__(self) -> str:
         return f"EpubPackage({self.resource.filename!r})"
@@ -40,14 +42,16 @@ class EpubPackage:
         return self._document
 
     @property
-    def container(self) -> ContainerDocument | None:
-        if self._container is None and self.container_resource is not None:
+    def container(self) -> ContainerDocument:
+        if self._container is None:
+            if self.container_resource is None:
+                raise ValueError("Container resource is missing")
             self._container = ContainerDocument.from_xml_bytes(self.container_resource.content)
         return self._container
 
     @classmethod
     def from_resources(cls, resources: ResourceIndex) -> EpubPackage:
-        """Discover a single package, preferring the container's explicit reference."""
+        """Discover a single package, creating a missing container for a unique OPF."""
         container_resource = resources.by_path(FileName.CONTAINER)
         container = None
         if container_resource is not None:
@@ -57,13 +61,15 @@ class EpubPackage:
             path = require(container.opf_path, "container's opf_path")
             resource = require(resources.by_path(path), f"package resource {path!r}")
         else:
-            # Retain support for incomplete inputs with one OPF and no container.
+            # Repair only an absent container, after unambiguous OPF discovery.
             candidates = resources.by_role(EpubRole.OPF)
             if len(candidates) != 1:
                 raise ValueError("Cannot locate a unique OPF without container.xml")
             resource = candidates[0]
-        package = cls(resource, resources, container_resource=container_resource)
-        package._container = container
+            container = ContainerDocument.standard(resource.filename)
+            container_resource = Resource.from_bytes(FileName.CONTAINER, container.to_xml_bytes())
+            resources.add(container_resource)
+        package = cls(resource, resources, container_resource=container_resource, container_document=container)
         return package
 
     def resolve_href(self, href: str) -> str:
@@ -86,7 +92,7 @@ class EpubPackage:
         """Move the OPF in the output inventory, updating local hrefs and container.
 
         Content resources stay in place. A container is required for relocation;
-        discovering a container-less input does not implicitly create one.
+        from_resources creates one when discovering a unique container-less OPF.
         """
         old_path = self.resource.filename
         if old_path == new_path:

@@ -142,16 +142,44 @@ def test_relocation_collision_preserves_documents(tmp_path):
     assert epub.resources.by_path("OEBPS/content.opf") is package.resource
 
 
-def test_containerless_discovery_does_not_create_container(tmp_path):
+@pytest.mark.parametrize("relocate", [False, True])
+def test_missing_container_created_and_exported(tmp_path, relocate):
+    from library.epub.package import EpubPackage
+
+    path = tmp_path / "without-container.epub"
+    with ZipFile(path, "w") as archive:
+        archive.writestr("mimetype", b"application/epub+zip")
+        archive.writestr("OEBPS/book.opf", OPF)
+        archive.writestr("OEBPS/text/chapter.xhtml", b"<html/>")
+    epub = EPUB(path)
+    package = epub.package
+    container_resource = epub.resources.by_path("META-INF/container.xml")
+    assert package.container_resource is container_resource
+    assert package.container.opf_path == "OEBPS/book.opf"
+    assert EpubPackage.from_resources(epub.resources).container_resource is container_resource
+    assert len(epub.resources) == 4
+    if relocate:
+        assert package.relocate("book.opf")
+    output = tmp_path / "repaired.epub"
+    epub.package_into(output)
+    reopened = EPUB(output).package
+    assert reopened.container.opf_path == package.resource.filename
+    assert reopened.resource_for_href(reopened.document.manifest.items[0].href).content == b"<html/>"
+    with ZipFile(output) as archive:
+        assert archive.namelist().count("META-INF/container.xml") == 1
+    assert "META-INF/container.xml" not in epub.source.namelist()
+
+
+@pytest.mark.parametrize("opf_count", [0, 2])
+def test_missing_container_not_created_without_unique_opf(opf_count):
     from library.epub.package import EpubPackage
     from library.epub.resources import Resource, ResourceIndex
 
-    resource = Resource.from_bytes("book.opf", OPF)
-    package = EpubPackage.from_resources(ResourceIndex.from_resource_list([resource]))
-    assert package.container is None
-    with pytest.raises(ValueError, match="container"):
-        package.relocate("moved.opf")
-    assert resource.filename == "book.opf"
+    resources = ResourceIndex.from_resource_list([Resource.from_bytes(f"book{i}.opf", OPF) for i in range(opf_count)])
+    with pytest.raises(ValueError, match="unique OPF"):
+        EpubPackage.from_resources(resources)
+    assert len(resources) == opf_count
+    assert resources.by_path("META-INF/container.xml") is None
 
 
 @pytest.mark.parametrize(
