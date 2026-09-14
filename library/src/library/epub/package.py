@@ -1,8 +1,7 @@
-from urllib.parse import urlsplit
-
 from library.asserts import require
 from library.epub.media_type import EpubRole, FileName
 from library.epub.resources import Resource, ResourceIndex
+from library.epub.package_urls import archive_path, local_target, path_url, rebase_href
 from library.epub.utils_href import posix_absolute_href, posix_relative_href
 from library.epub.xml_models.package_document import PackageDocument
 from library.epub.xml_models.container_model import ContainerDocument
@@ -58,7 +57,10 @@ class EpubPackage:
             container = ContainerDocument.from_xml_bytes(container_resource.content)
             if len(container.opf_paths) != 1:
                 raise NotImplementedError("Expected a single package document in the container")
-            path = require(container.opf_path, "container's opf_path")
+            href = require(container.opf_path, "container's opf_path")
+            path, suffix = require(local_target("", href), "local container package URL")
+            if suffix:
+                raise ValueError("Container package URL must not contain a query or fragment")
             resource = require(resources.by_path(path), f"package resource {path!r}")
         else:
             # Repair only an absent container, after unambiguous OPF discovery.
@@ -66,7 +68,7 @@ class EpubPackage:
             if len(candidates) != 1:
                 raise ValueError("Cannot locate a unique OPF without container.xml")
             resource = candidates[0]
-            container = ContainerDocument.standard(resource.filename)
+            container = ContainerDocument.standard(path_url(resource.filename))
             container_resource = Resource.from_bytes(FileName.CONTAINER, container.to_xml_bytes())
             resources.add(container_resource)
         package = cls(resource, resources, container_resource=container_resource, container_document=container)
@@ -86,7 +88,8 @@ class EpubPackage:
 
     def resource_for_href(self, href: str) -> Resource | None:
         """Look up a local manifest href; missing resources remain inspectable."""
-        return self.resources.by_path(self.resolve_href(href))
+        target = local_target(self.resource.filename, href)
+        return self.resources.by_path(target[0]) if target is not None else None
 
     def relocate(self, new_path: str) -> bool:
         """Move the OPF in the output inventory, updating local hrefs and container.
@@ -94,26 +97,29 @@ class EpubPackage:
         Content resources stay in place. A container is required for relocation;
         from_resources creates one when discovering a unique container-less OPF.
         """
+        new_path = archive_path(new_path)
         old_path = self.resource.filename
         if old_path == new_path:
             return False
         container = require(self.container, "container document")
         container_resource = require(self.container_resource, "container resource")
-        rootfiles = [root for root in container.rootfiles if root.full_path == old_path]
+        rootfiles = [root for root in container.rootfiles if local_target("", root.full_path) == (old_path, "")]
         if not rootfiles:
             raise ValueError(f"Container does not reference {old_path!r}")
+        for resource in self.resources:
+            if resource is not self.resource and (
+                resource.filename.rstrip("/") == new_path
+                or resource.filename.startswith(new_path + "/")
+                or new_path.startswith(resource.filename.rstrip("/") + "/")
+                and not resource.info.is_dir()
+            ):
+                raise ValueError(f"Resource already exists at or conflicts with {new_path!r}")
         document = self.document
         references = list(document.manifest.items)
         if document.guide is not None:
             references.extend(document.guide.references)
 
-        def rebased(href: str) -> str:
-            parsed = urlsplit(href)
-            if parsed.scheme or parsed.netloc:
-                return href
-            return posix_relative_href(new_path, posix_absolute_href(old_path, href))
-
-        hrefs = [rebased(reference.href) for reference in references]
+        hrefs = [rebase_href(old_path, new_path, reference.href) for reference in references]
         # Prepare serialization before modifying the live objects or the index.
         updated_document = document.model_copy(deep=True)
         updated_references = list(updated_document.manifest.items)
@@ -123,8 +129,8 @@ class EpubPackage:
             reference.href = href
         updated_container = container.model_copy(deep=True)
         for root in updated_container.rootfiles:
-            if root.full_path == old_path:
-                root.full_path = new_path
+            if local_target("", root.full_path) == (old_path, ""):
+                root.full_path = path_url(new_path)
         opf_bytes = updated_document.to_xml_bytes()
         container_bytes = updated_container.to_xml_bytes()
 
@@ -132,7 +138,7 @@ class EpubPackage:
         for reference, href in zip(references, hrefs):
             reference.href = href
         for root in rootfiles:
-            root.full_path = new_path
+            root.full_path = path_url(new_path)
         self.resource.content = opf_bytes
         container_resource.content = container_bytes
         return True

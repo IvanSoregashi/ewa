@@ -8,7 +8,7 @@
 - [x] Put discovery in EpubPackage.from_resources. Keep the container resource and its XML model on the package; package.relocate updates the OPF hrefs, resource index, and container reference together.
 - [x] Make ResourceIndex.rename(resource, new_filename) rename and re-key together, rejecting collisions. Preserve original source ZipInfo separately from current output metadata so reads survive renames.
 - [x] When a unique OPF exists without META-INF/container.xml, create a standard container document and resource, add it to the inventory, and bind it to the package. Verify relocation and export/reopen; replace the current missing-container rejection test.
-- [ ] Define and test valid archive destination paths and URL handling for relocation (normalization, encoded paths, queries, and fragments) before treating it as general EPUB reference rewriting.
+- [x] Define and test valid archive destination paths and URL handling for relocation (normalization, encoded paths, queries, and fragments) before treating it as general EPUB reference rewriting.
 - [ ] Justify any package facades and a separate EpubManifest through useful editing methods. Avoid wrappers that merely shorten attribute access.
 - [ ] Settle resource deletion and collection ownership on one consistent model. Review the implementation before adopting wider ResourceIndex API changes; membership versus is_deleted is currently redundant.
 - [ ] Address manifest index consistency and synchronization during add/remove/edit, together with the ownership decision. Decide how filtered collections behave.
@@ -42,3 +42,5 @@ Use `uv run ruff format` on changed Python files. The repository has pre-existin
 - EpubCore temporarily forwards package access for existing callers; its NCX and manifest behavior is otherwise retained until the next design step.
 - Export serializes loaded OPF and container documents directly, without snapshots or formatting-preservation flags. Unopened documents are left alone. Once parsed, edit the document rather than independently replacing its resource bytes.
 - No extra metadata/spine facades or new deletion semantics have been introduced.
+
+Relocation accepts normalized archive-relative file paths; it rejects absolute/escaping paths and file/directory collisions. Local URL paths use strict UTF-8 percent decoding, preserve query/fragment suffixes, and reject encoded separators or malformed escapes. Remote URLs pass through. This is the supported local-path contract, not a full WHATWG URL implementation.
