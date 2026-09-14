@@ -29,7 +29,7 @@ class Resource:
         """Create a resource from bytes, without a backing source."""
         self.info = copy(info)
         self._source_info: ZipInfo = copy(info)
-        assert content or stream_bytes, f"{self} content or streaming function must be provided"
+        assert content is not None or stream_bytes is not None, f"{self} content or streaming function must be provided"
         self._content: bytes | None = content
         self.stream_bytes: Callable[[ZipInfo], BinaryIO] | None = stream_bytes
 
