@@ -13,7 +13,6 @@ On top of that this recipe:
 import io
 import logging
 from pathlib import PurePosixPath
-from zipfile import ZipInfo
 
 from PIL import Image
 
@@ -91,10 +90,7 @@ def convert_giant_gifs(epub: EPUB, size_limit: int = ANIMATION_SIZE_LIMIT) -> di
 def _add_poster_resource(epub: EPUB, video_manifest, mp4_path: str, poster_bytes: bytes) -> str:
     """Add the poster as a resource and a manifest item (same basename as the mp4)."""
     poster_path = str(PurePosixPath(mp4_path).with_suffix(".jpg"))
-    info = ZipInfo(poster_path)
-    info.file_size = len(poster_bytes)
-    poster = Resource(info=info, stream_bytes=lambda i: io.BytesIO(poster_bytes))
-    poster.content = poster_bytes
+    poster = Resource.from_bytes(poster_path, poster_bytes)
     epub.resources.add(poster)
 
     epub.core.package.manifest.add_item(

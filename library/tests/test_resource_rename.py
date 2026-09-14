@@ -33,7 +33,7 @@ def test_rename_before_read_preserves_source_and_exports_new_name(tmp_path, sour
 
 
 def make_resource(name):
-    return Resource(ZipInfo(name), lambda info: io.BytesIO(b"data"))
+    return Resource.from_bytes(name, b"data")
 
 
 def test_rename_collision_and_foreign_resource_leave_index_unchanged():
@@ -61,7 +61,7 @@ def test_output_metadata_does_not_mutate_original_zipinfo():
         observed.append(original.filename)
         return io.BytesIO(b"original")
 
-    resource = Resource(info, read)
+    resource = Resource(info, stream_bytes=read)
     index = ResourceIndex.from_resource_list([resource])
     index.rename(resource, "changed.txt")
     assert info.filename == "original.txt"

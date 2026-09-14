@@ -145,9 +145,8 @@ def test_relocation_collision_preserves_documents(tmp_path):
 def test_containerless_discovery_does_not_create_container(tmp_path):
     from library.epub.package import EpubPackage
     from library.epub.resources import Resource, ResourceIndex
-    from zipfile import ZipInfo
 
-    resource = Resource(ZipInfo("book.opf"), lambda info: io.BytesIO(OPF))
+    resource = Resource.from_bytes("book.opf", OPF)
     package = EpubPackage.from_resources(ResourceIndex.from_resource_list([resource]))
     assert package.container is None
     with pytest.raises(ValueError, match="container"):
@@ -155,10 +154,89 @@ def test_containerless_discovery_does_not_create_container(tmp_path):
     assert resource.filename == "book.opf"
 
 
-def test_relocation_leaves_remote_hrefs_unchanged(tmp_path):
+@pytest.mark.parametrize(
+    "href", ["https://example.com/audio.mp3", "//example.com/audio.mp3", "data:audio/mpeg;base64,AA=="]
+)
+def test_relocation_leaves_remote_hrefs_unchanged(tmp_path, href):
     package = make_epub(tmp_path).package
-    remote = package.document.manifest.add_item(
-        id="remote", href="https://example.com/audio.mp3", media_type="audio/mpeg"
-    )
+    remote = package.document.manifest.add_item(id="remote", href=href, media_type="audio/mpeg")
     package.relocate("book.opf")
-    assert remote.href == "https://example.com/audio.mp3"
+    assert remote.href == href
+
+
+def test_repeated_relocation_keeps_targets_and_content(tmp_path):
+    from library.epub.xml_models.package_sequences import Guide
+
+    epub = make_epub(tmp_path)
+    package = epub.package
+    chapter = epub.resources.by_path("OEBPS/text/chapter.xhtml")
+    package.document.guide = Guide()
+    package.document.guide.add_reference(type="text", href="text/chapter.xhtml#start")
+    item = package.document.manifest.items[0]
+    guide = package.document.guide.references[0]
+    original_paths = set(epub.source.namelist())
+
+    for new_path, expected_href in [
+        ("content.opf", "OEBPS/text/chapter.xhtml"),
+        ("deep/package/book.opf", "../../OEBPS/text/chapter.xhtml"),
+        ("OEBPS/content.opf", "text/chapter.xhtml"),
+    ]:
+        old_path = package.resource.filename
+        assert package.relocate(new_path)
+        assert epub.resources.by_path(old_path) is None
+        assert epub.resources.by_path(new_path) is package.resource
+        assert item.href == expected_href
+        assert guide.href == expected_href + "#start"
+        assert package.resource_for_href(item.href) is chapter
+        assert package.container.opf_path == new_path
+
+        output = tmp_path / (new_path.replace("/", "_") + ".epub")
+        epub.package_into(output)
+        reopened = EPUB(output).package
+        assert reopened.resource.filename == new_path
+        assert reopened.document.guide.references[0].href == guide.href
+        assert reopened.document.spine.itemrefs[0].idref == "chapter"
+        assert reopened.document.metadata.title == "Original"
+        with ZipFile(output) as archive:
+            expected_paths = (original_paths - {"OEBPS/content.opf"}) | {new_path}
+            assert len(archive.namelist()) == len(expected_paths)
+            assert set(archive.namelist()) == expected_paths
+            assert archive.read("OEBPS/text/chapter.xhtml") == b"<html/>"
+
+
+def relocation_state(epub):
+    package = epub.package
+    return (
+        package.resource.filename,
+        package.document.to_xml_bytes(),
+        package.container.to_xml_bytes(),
+        package.resource.content,
+        package.container_resource.content,
+        [(resource.filename, epub.resources.by_path(resource.filename)) for resource in epub.resources],
+    )
+
+
+@pytest.mark.parametrize("document_name", ["document", "container"])
+def test_failed_relocation_serialization_leaves_state_unchanged(tmp_path, monkeypatch, document_name):
+    epub = make_epub(tmp_path)
+    before = relocation_state(epub)
+
+    def fail_serialization(*args, **kwargs):
+        raise RuntimeError("serialization failed")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(type(getattr(epub.package, document_name)), "to_xml_bytes", fail_serialization)
+        with pytest.raises(RuntimeError, match="serialization failed"):
+            epub.package.relocate("moved.opf")
+    assert relocation_state(epub) == before
+    assert epub.resources.by_path("moved.opf") is None
+
+
+def test_relocation_rejects_mismatched_container_without_changes(tmp_path):
+    epub = make_epub(tmp_path)
+    epub.package.container.rootfiles[0].full_path = "different.opf"
+    before = relocation_state(epub)
+    with pytest.raises(ValueError, match="does not reference"):
+        epub.package.relocate("moved.opf")
+    assert relocation_state(epub) == before
+    assert epub.resources.by_path("moved.opf") is None

@@ -7,6 +7,8 @@
 - [x] Prototype a package entity associating the OPF resource with its parsed document. EpubPackage exposes document, local href resolution and flush; EPUB export flushes document edits. Review before expanding the design.
 - [x] Put discovery in EpubPackage.from_resources. Keep the container resource and its XML model on the package; package.relocate updates the OPF hrefs, resource index, and container reference together.
 - [x] Make ResourceIndex.rename(resource, new_filename) rename and re-key together, rejecting collisions. Preserve original source ZipInfo separately from current output metadata so reads survive renames.
+- [ ] When a unique OPF exists without META-INF/container.xml, create a standard container document and resource, add it to the inventory, and bind it to the package. Verify relocation and export/reopen; replace the current missing-container rejection test.
+- [ ] Define and test valid archive destination paths and URL handling for relocation (normalization, encoded paths, queries, and fragments) before treating it as general EPUB reference rewriting.
 - [ ] Justify any package facades and a separate EpubManifest through useful editing methods. Avoid wrappers that merely shorten attribute access.
 - [ ] Settle resource deletion and collection ownership on one consistent model. Review the implementation before adopting wider ResourceIndex API changes; membership versus is_deleted is currently redundant.
 - [ ] Address manifest index consistency and synchronization during add/remove/edit, together with the ownership decision. Decide how filtered collections behave.
@@ -21,6 +23,8 @@
 - [ ] Revisit navigation design separately: spine, NCX, guide/tours, and eventual EPUB 3 NAV support. No combined navigation API or reading-order/TOC class structure has been accepted yet.
 
 The core/content distinction is application-defined, not a partition imposed by the EPUB specification. A NAV document may belong to the core even when it appears in the spine.
+
+Use `uv run ruff format` on changed Python files. The repository has pre-existing Ruff/ty findings; assess checks against the affected scope.
 
 ## Explicitly deferred
 

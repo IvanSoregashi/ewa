@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from copy import copy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, BinaryIO, Generator
+from typing import Callable, BinaryIO, Generator, Self
 from zipfile import ZipInfo
 
 from hashlib import md5
@@ -13,21 +13,29 @@ from library.asserts import require
 from library.database.constants import SQLITE_MAX_INT
 
 from library.epub.media_type import type_and_role_from_filename, EpubRole, MediaType
-from library.epub.utils_zip import apply_zipinfo_timestamp_to_file
+from library.epub.utils_zip import apply_zipinfo_timestamp_to_file, zip_info_now
 
 logger = logging.getLogger("resource")
 
 
 class Resource:
-    def __init__(self, info: ZipInfo, stream_bytes: Callable[[ZipInfo], BinaryIO]) -> None:
-        self._source_info = copy(info)
+    def __init__(
+        self,
+        info: ZipInfo,
+        *,
+        content: bytes | None = None,
+        stream_bytes: Callable[[ZipInfo], BinaryIO] | None = None,
+    ) -> None:
+        """Create a resource from bytes, without a backing source."""
         self.info = copy(info)
-        self.stream_bytes = stream_bytes
+        self._source_info: ZipInfo = copy(info)
+        assert content or stream_bytes, f"{self} content or streaming function must be provided"
+        self._content: bytes | None = content
+        self.stream_bytes: Callable[[ZipInfo], BinaryIO] | None = stream_bytes
 
         self.media_type, self.role = type_and_role_from_filename(self.info.filename)
         # logger.debug(f"{self} MediaType({self.media_type}) EpubRole({self.role})")
 
-        self._content: bytes | None = None
         self._hex_hash: str | None = None
 
         self.is_deleted: bool = False
@@ -36,11 +44,18 @@ class Resource:
         return f"Resource({self.info.filename!r})"
 
     @classmethod
-    def from_filesystem_path(cls, path: Path):
+    def from_bytes(cls, filename: str, content: bytes) -> Self:
+        info = ZipInfo(filename, date_time=zip_info_now())
+        info.file_size = len(content)
+        return cls(info, content=content)
+
+    @classmethod
+    def from_filesystem_path(cls, path: Path) -> Self:
         if not path.exists():
             raise ValueError(f"{path} does not exist, cannot create LazyLoadFile")
+        path = path.absolute()
         info = ZipInfo.from_file(path, strict_timestamps=False)
-        return cls(info=info, stream_bytes=lambda i: path.absolute().open("rb"))
+        return cls(info=info, stream_bytes=lambda i: path.open("rb"))
 
     def write_to_filesystem(self, path: Path) -> Resource:
         if path.exists():

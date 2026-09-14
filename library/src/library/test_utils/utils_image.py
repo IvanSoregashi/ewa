@@ -62,13 +62,6 @@ class CountingReader:
         self.close()
 
 
-def make_resource(data: bytes, filename: str) -> Resource:
-    """Plain resource over in-memory bytes."""
-    info = ZipInfo(filename)
-    info.file_size = len(data)
-    return Resource(info=info, stream_bytes=lambda i: BytesIO(data))
-
-
 def counted_resource(data: bytes, filename: str) -> tuple[Resource, Callable[[], int]]:
     """Resource whose stream accounting is aggregated across every stream() call."""
     info = ZipInfo(filename)
