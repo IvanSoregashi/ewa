@@ -1,13 +1,11 @@
 from copy import copy
 from typing import BinaryIO
-from zipfile import ZipFile, ZIP_DEFLATED, ZipInfo, ZIP_STORED
+from zipfile import ZipFile, ZIP_DEFLATED, ZIP_STORED
 from pathlib import Path
 
 from library.asserts import require
 from library.epub.media_type import STORE_AS_IS, FileName
 from library.epub.resources import Resource
-from library.epub.utils_zip import zip_info_now
-from library.epub.xml_literals import FileTemplate
 import logging
 
 logger = logging.getLogger(__name__)

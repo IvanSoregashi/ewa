@@ -12,7 +12,7 @@
 - [x] Justify any package facades and a separate EpubManifest through useful editing methods. Avoid wrappers that merely shorten attribute access.
 - [x] Settle resource deletion and collection ownership on one consistent model. Review the implementation before adopting wider ResourceIndex API changes; membership versus is_deleted is currently redundant.
 - [x] Address manifest index consistency and synchronization during add/remove/edit, together with the ownership decision. Decide how filtered collections behave.
-- [ ] Retire the current EpubCore while restructuring package handling. Preserve the requirement for a future core abstraction, either as a parallel API or a separate class on the same Source/Resources foundation.
+- [x] Retire the current EpubCore while restructuring package handling. Preserve the requirement for a future core abstraction, either as a parallel API or a separate class on the same Source/Resources foundation.
 
 ## Design constraints and future work
 
@@ -39,9 +39,9 @@ Use `uv run ruff format` on changed Python files. The repository has pre-existin
 ## Package prototype choices awaiting review
 
 - EpubPackage.from_resources discovers the OPF/container; the constructor also accepts already-selected resources. The relocation recipe delegates to package.relocate. Discovery creates a standard container for a unique OPF when the container is absent; existing invalid containers are not silently replaced.
-- EpubCore temporarily forwards package access for existing callers; its NCX and manifest behavior is otherwise retained until the next design step.
+- EpubCore is retired; callers use epub.package. NCXDocument remains available for parsing NCX resources directly, pending the separate navigation design.
 - Export serializes loaded OPF and container documents directly, without snapshots or formatting-preservation flags. Unopened documents are left alone. Once parsed, edit the document rather than independently replacing its resource bytes.
-- No extra metadata/spine facades or new deletion semantics have been introduced.
+- Metadata and spine remain on PackageDocument; resource deletion follows the ownership rules below.
 
 Relocation accepts normalized archive-relative file paths; it rejects absolute/escaping paths and file/directory collisions. Local URL paths use strict UTF-8 percent decoding, preserve query/fragment suffixes, and reject encoded separators or malformed escapes. Remote URLs pass through. This is the supported local-path contract, not a full WHATWG URL implementation.
 

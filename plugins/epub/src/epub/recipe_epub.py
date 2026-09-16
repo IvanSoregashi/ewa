@@ -114,7 +114,6 @@ def _fully_process_encrypted_panda(path: str) -> EpubOperationResult:
 
             if replacement_dict:
                 recipe_package.replace_links(epub, replacement_dict)
-            epub.core.package_resource.content = epub.core.package.to_xml_bytes()
 
             epub.package_into(destination_path, sort_by_role=True)
 

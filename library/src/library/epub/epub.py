@@ -9,11 +9,10 @@ from typing import BinaryIO, Self
 from zipfile import is_zipfile
 
 from library.asserts import require
-from library.epub.epub_core import EpubCore
 from library.epub.errors import EpubSpecificationError, EpubError
 from library.epub.media_type import EpubRole
 from library.epub.package import EpubPackage
-from library.epub.resources import ResourceIndex, ResourceSelection, IndexInfo
+from library.epub.resources import ResourceIndex, IndexInfo
 from library.epub.sink import EpubZipSink
 from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
 from library.utils import verify_destination
@@ -28,7 +27,6 @@ class EPUB:
 
         self._resources: ResourceIndex | None = None
         self._package: EpubPackage | None = None
-        self._core: EpubCore | None = None
         self._info: EpubInfo | None = None
 
         if not self.path.exists():
@@ -70,13 +68,6 @@ class EPUB:
         if self._package is None:
             self._package = EpubPackage.from_resources(self.resources)
         return self._package
-
-    @property
-    def core(self) -> EpubCore:
-        """Lazily initialize and return the EpubCore for this EPUB."""
-        if self._core is None:
-            self._core = EpubCore(self.package)
-        return require(self._core, f"{self}._core")
 
     def extract_to(self, dest_dir: str | Path | None = None) -> EPUB:
         if dest_dir is None:

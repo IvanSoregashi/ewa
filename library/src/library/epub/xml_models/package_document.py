@@ -22,9 +22,17 @@ class PackageDocument(XMLDocumentModel, tag="package", ns="", nsmap=OPF_NSMAP, s
 
     @property
     def ids(self) -> set[str]:
-        """Collect IDs from the current parsed model, including every OPF section.
+        """Return the set of element IDs currently present in the parsed OPF.
 
-        Recomputed so direct edits are visible; this is not duplicate-ID validation.
+        Includes the package itself, metadata, manifest items, spine entries,
+        and other modeled sections. For example, "cover" in document.ids checks
+        whether that ID is already occupied before adding a declaration.
+
+        Walks the existing models without serializing XML. Each access builds a
+        fresh set so direct edits are reflected; changing the returned set does
+        not change the document. Duplicate IDs collapse into one set entry,
+        so this checks existence, not uniqueness or validity. Attributes not
+        represented by the parsed models and IDs in NCX/NAV are not included.
         """
 
         def collect(model: BaseXmlModel):

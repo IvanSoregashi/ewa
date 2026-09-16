@@ -76,9 +76,9 @@ def test_replace_links_updates_href_and_media_type(tmp_path: Path):
     assert image.media_type == "image/jpeg"
 
     replace_links(epub, {"OEBPS/images/pic.png": "OEBPS/images/pic.jpg"})
-    epub.core.package_resource.content = epub.core.package.to_xml_bytes()
+    epub.package.flush()
 
-    opf = epub.core.package_resource.content.decode()
+    opf = epub.package.resource.content.decode()
     assert 'href="OEBPS/images/pic.jpg"' in opf
     assert 'media-type="image/jpeg"' in opf
     assert 'href="OEBPS/images/pic.png"' not in opf
@@ -93,4 +93,4 @@ def test_relocate_is_noop_for_root_opf(tmp_path: Path):
 
     # second call: opf is now at the root
     assert relocate_package(epub) is False
-    assert epub.core.package_resource.info.filename == FileName.DEFAULT_OPF
+    assert epub.package.resource.info.filename == FileName.DEFAULT_OPF

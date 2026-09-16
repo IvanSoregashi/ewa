@@ -76,8 +76,7 @@ def test_package_binding_and_flush_do_not_parse_unopened_document(tmp_path):
 def test_container_selects_package_among_multiple_opfs(tmp_path):
     epub = make_epub(tmp_path, extra_opf=True)
     assert epub.package.document.metadata.title == "Original"
-    assert epub.core.package is epub.package.document
-    assert epub.core.package_resource is epub.package.resource
+    assert epub.package.resource.filename == "OEBPS/content.opf"
 
 
 def test_existing_container_is_not_overridden_by_filename_guess(tmp_path):

@@ -128,10 +128,19 @@ class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_N
         self.add_metadata(tag=DCMetadataType.SUBJECT, text=value, **kwargs)
 
     def referencing(self, ids: set[str]) -> list[Meta]:
-        """Find cover metadata and the transitive closure of refinements to IDs.
+        """Return OPF meta entries that depend on the supplied element IDs.
 
-        Does not mutate the input IDs or metadata. Handles cycles and entries
-        without IDs; only refinements reachable from the supplied IDs are selected.
+        For {"cover-image"}, this includes <meta name="cover"
+        content="cover-image"> and entries with refines="#cover-image".
+        If a matching entry has id="r1", entries refining "#r1" are included
+        too, continuing until no further dependents are found. An entry whose
+        own ID matches is not selected unless it also references a target.
+
+        Resource removal uses this list to reject deletion with dependents or
+        explicitly remove them. The returned objects are the live entries in
+        self.metas; neither metadata nor the supplied set is changed. Cycles
+        terminate, and entries without IDs can still be returned. Other OPF
+        sections and external documents are outside this search.
         """
         targets = set(ids)
         selected: list[Meta] = []
@@ -159,7 +168,16 @@ class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_N
         *,
         item: DCElement | None = None,
     ):
-        """Uniform helper to remove metadata items."""
+        """Remove entries from the metadata collection selected by tag and dc.
+
+        With dc=True, tag selects a Dublin Core collection (including dc_metas).
+        With dc=False, search the OPF meta collection instead. Supplying item
+        removes that exact object, taking precedence over text/id; this safely
+        handles entries without IDs and preserves equal but distinct siblings.
+        Otherwise all supplied text/id criteria must match. Omitting all three
+        selectors removes every entry in the selected collection. Missing
+        matches do nothing; dependent refinements are not removed automatically.
+        """
 
         selected_item = item
 
