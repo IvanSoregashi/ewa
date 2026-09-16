@@ -9,9 +9,9 @@
 - [x] Make ResourceIndex.rename(resource, new_filename) rename and re-key together, rejecting collisions. Preserve original source ZipInfo separately from current output metadata so reads survive renames.
 - [x] When a unique OPF exists without META-INF/container.xml, create a standard container document and resource, add it to the inventory, and bind it to the package. Verify relocation and export/reopen; replace the current missing-container rejection test.
 - [x] Define and test valid archive destination paths and URL handling for relocation (normalization, encoded paths, queries, and fragments) before treating it as general EPUB reference rewriting.
-- [ ] Justify any package facades and a separate EpubManifest through useful editing methods. Avoid wrappers that merely shorten attribute access.
-- [ ] Settle resource deletion and collection ownership on one consistent model. Review the implementation before adopting wider ResourceIndex API changes; membership versus is_deleted is currently redundant.
-- [ ] Address manifest index consistency and synchronization during add/remove/edit, together with the ownership decision. Decide how filtered collections behave.
+- [x] Justify any package facades and a separate EpubManifest through useful editing methods. Avoid wrappers that merely shorten attribute access.
+- [x] Settle resource deletion and collection ownership on one consistent model. Review the implementation before adopting wider ResourceIndex API changes; membership versus is_deleted is currently redundant.
+- [x] Address manifest index consistency and synchronization during add/remove/edit, together with the ownership decision. Decide how filtered collections behave.
 - [ ] Retire the current EpubCore while restructuring package handling. Preserve the requirement for a future core abstraction, either as a parallel API or a separate class on the same Source/Resources foundation.
 
 ## Design constraints and future work
@@ -44,3 +44,10 @@ Use `uv run ruff format` on changed Python files. The repository has pre-existin
 - No extra metadata/spine facades or new deletion semantics have been introduced.
 
 Relocation accepts normalized archive-relative file paths; it rejects absolute/escaping paths and file/directory collisions. Local URL paths use strict UTF-8 percent decoding, preserve query/fragment suffixes, and reject encoded separators or malformed escapes. Remote URLs pass through. This is the supported local-path contract, not a full WHATWG URL implementation.
+
+## Package ownership implementation
+
+- EpubManifest is removed. The package reads the XML manifest directly and coordinates add_resource/remove_resource; no second manifest index is cached.
+- ResourceIndex owns membership; ResourceSelection is an immutable membership snapshot with editable resources. Removed objects can still be held/read, but export uses the owner's current inventory. There is no is_deleted flag.
+- remove_resource rejects OPF dependents unless remove_references=True. Cleanup covers spine, guide, fallback/media-overlay, spine toc, cover metadata and dependent refinements. Content and NCX/NAV links are not inspected or rewritten.
+- [ ] Define book-level deletion/link policy for XHTML, CSS, NCX and NAV before claiming whole-publication safe removal.

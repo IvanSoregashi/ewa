@@ -1,6 +1,5 @@
 import logging
 
-from library.epub.manifest import EpubManifest
 from library.epub.media_type import EpubRole
 from library.epub.package import EpubPackage
 from library.epub.resources import Resource
@@ -12,7 +11,7 @@ logger = logging.getLogger("epub_core")
 
 
 class EpubCore:
-    """Compatibility access to package, manifest and NCX during the package prototype."""
+    """Compatibility access to package and NCX during the package prototype."""
 
     def __init__(self, package: EpubPackage) -> None:
         self.epub_package = package
@@ -20,9 +19,6 @@ class EpubCore:
 
         self._ncx_resource: Resource | None = None
         self._ncx_document: NCXDocument | None = None
-
-        self._manifest: EpubManifest | None = None
-        self._manifest_path: str | None = None
 
     def __repr__(self):
         return f"EpubCore({len(self.resources)})"
@@ -49,10 +45,3 @@ class EpubCore:
         if self._ncx_document is None:
             self._ncx_document = NCXDocument.from_xml_bytes(self.ncx_resource.content)
         return require(self._ncx_document, f"{self} ncx")
-
-    @property
-    def manifest(self) -> EpubManifest:
-        if self._manifest is None or self._manifest_path != self.package_resource.filename:
-            self._manifest = EpubManifest.from_package(self.epub_package)
-            self._manifest_path = self.package_resource.filename
-        return require(self._manifest, f"{self} manifest")

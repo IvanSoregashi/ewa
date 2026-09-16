@@ -1,6 +1,7 @@
 from library.asserts import require
 from library.epub.epub import EPUB
 from library.epub.media_type import FileName
+from library.epub.package_urls import path_url
 from library.epub.utils_href import posix_relative_href
 
 
@@ -21,11 +22,8 @@ def replace_links(epub: EPUB, replace_dict: dict[str, str]) -> None:
     the archive root (standardize_opf_location), where manifest hrefs coincide
     with archive paths. Media-type is refreshed from the renamed resource.
     """
-    manifest = epub.core.manifest
-    opf_path = epub.core.package_resource.filename
     for old_link, new_link in replace_dict.items():
-        relative_old_link = posix_relative_href(opf_path, old_link)
-        relative_new_link = posix_relative_href(opf_path, new_link)
-        manifest_item = require(manifest.by_path(relative_old_link), f"Manifest({relative_old_link})")
-        manifest_item.item.href = relative_new_link
-        manifest_item.item.media_type = manifest_item.resource.media_type.value
+        item = require(epub.package.manifest_item_by_path(old_link), f"Manifest({old_link})")
+        resource = require(epub.resources.by_path(new_link), f"Resource({new_link})")
+        item.href = path_url(posix_relative_href(epub.package.resource.filename, new_link))
+        item.media_type = str(resource.media_type)

@@ -1,6 +1,7 @@
 import io
 import logging
 from contextlib import contextmanager
+from collections.abc import Iterable, Sequence
 from copy import copy
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,8 +38,6 @@ class Resource:
         # logger.debug(f"{self} MediaType({self.media_type}) EpubRole({self.role})")
 
         self._hex_hash: str | None = None
-
-        self.is_deleted: bool = False
 
     def __repr__(self) -> str:
         return f"Resource({self.info.filename!r})"
@@ -109,58 +108,87 @@ class Resource:
         self.media_type, self.role = type_and_role_from_filename(self.info.filename)
 
 
-class ResourceIndex:
-    """Auto-indexed collection of EPUBResource objects.
+class ResourceSelection(Sequence[Resource]):
+    """Read-only membership snapshot; the resources themselves remain editable.
 
-    Provides O(1) lookup by filename and by manifest ID,
-    while maintaining a stable list for iteration.
+    Removal from an owning index does not rewrite previously taken snapshots.
+    Export the owner's current inventory, not an old selection, to reflect removals.
     """
 
-    def __init__(self) -> None:
-        self.items: list[Resource] = []
-        self._by_path: dict[str, Resource] = {}
+    def __init__(self, resources: Iterable[Resource]) -> None:
+        self._items: Sequence[Resource] = tuple(resources)
 
     def __repr__(self) -> str:
-        return f"ResourceIndex({len(self.items)})"
+        return f"{type(self).__name__}({len(self)})"
+
+    @property
+    def items(self) -> tuple[Resource, ...]:
+        return tuple(self._items)
 
     def __iter__(self):
-        return iter(self.items)
+        return iter(self._items)
 
     def __len__(self) -> int:
-        return len(self.items)
+        return len(self._items)
 
     def __getitem__(self, item):
-        return self.items[item]
+        return self._items[item]
 
     def __contains__(self, item: Resource | str) -> bool:
-        if isinstance(item, str):
-            return item in self._by_path
-        return item in self.items
+        return self.by_path(item) is not None if isinstance(item, str) else item in self._items
+
+    def by_path(self, path: str) -> Resource | None:
+        return next((r for r in self._items if r.filename == path), None)
+
+    def by_media_type(self, media_type: MediaType) -> ResourceSelection:
+        return ResourceSelection(r for r in self if r.media_type == media_type)
+
+    def by_role(self, role: EpubRole) -> ResourceSelection:
+        return ResourceSelection(r for r in self if r.role == role)
+
+    def iter(self, sort_by_role: bool = True) -> Generator[Resource, None, None]:
+        if sort_by_role:
+            for role in EpubRole:
+                yield from (r for r in self if r.role == role)
+        else:
+            yield from self
+
+    def stats(self):
+        return IndexInfo(
+            count=len(self),
+            total_size=sum(i.info.file_size for i in self),
+            compress_size=sum(i.info.compress_size for i in self),
+        )
+
+
+class ResourceIndex(ResourceSelection):
+    """Owning resource inventory with unique paths and O(1) path lookup."""
+
+    def __init__(self) -> None:
+        self._items: list[Resource] = []
+        self._by_path: dict[str, Resource] = {}
 
     @classmethod
     def from_infolist(cls, infolist: list[ZipInfo], stream: Callable[[ZipInfo], BinaryIO]) -> ResourceIndex:
-        resource_list = [Resource(info=info, stream_bytes=stream) for info in infolist]
-        return cls.from_resource_list(resource_list)
+        return cls.from_resource_list([Resource(info=info, stream_bytes=stream) for info in infolist])
 
     @classmethod
     def from_resource_list(cls, resource_list: list[Resource]) -> ResourceIndex:
-        new_index = ResourceIndex()
+        result = cls()
         for resource in resource_list:
-            new_index.add(resource)
-        return new_index
+            result.add(resource)
+        return result
 
-    def add(self, resource) -> None:
-        """Add a resource to the index."""
-        self.items.append(resource)
-        self._by_path[resource.info.filename] = resource
+    def add(self, resource: Resource) -> None:
+        if resource.filename in self._by_path or resource in self._items:
+            raise ValueError(f"Resource already indexed: {resource.filename!r}")
+        self._items.append(resource)
+        self._by_path[resource.filename] = resource
 
     def rename(self, resource: Resource, new_filename: str) -> None:
-        """Rename an owned resource and update its lookup together.
-
-        Does not move source files or rewrite references in EPUB documents.
-        """
+        """Rename an owned resource and its lookup; does not rewrite document links."""
         old_filename = resource.filename
-        if resource not in self.items or self._by_path.get(old_filename) is not resource:
+        if resource not in self._items or self._by_path.get(old_filename) is not resource:
             raise ValueError("Resource is not indexed under its current filename")
         if not new_filename:
             raise ValueError("Resource filename must not be empty")
@@ -173,34 +201,14 @@ class ResourceIndex:
         self._by_path[new_filename] = resource
 
     def remove(self, resource: Resource) -> None:
-        """Remove a resource from the index."""
-        self.items.remove(resource)
-        self._by_path.pop(resource.info.filename, None)
-        resource.is_deleted = True
+        """Remove membership only. Package.remove_resource coordinates OPF changes."""
+        if resource not in self._items or self._by_path.get(resource.filename) is not resource:
+            raise ValueError("Resource is not indexed under its current filename")
+        self._items.remove(resource)
+        del self._by_path[resource.filename]
 
     def by_path(self, path: str) -> Resource | None:
-        """Look up a resource by its filename/path."""
         return self._by_path.get(path)
-
-    def by_media_type(self, media_type: MediaType) -> ResourceIndex:
-        return ResourceIndex.from_resource_list([r for r in self.items if r.media_type is media_type])
-
-    def by_role(self, role: EpubRole) -> ResourceIndex:
-        return ResourceIndex.from_resource_list([r for r in self.items if r.role is role])
-
-    def iter(self, sort_by_role: bool = True) -> Generator[Resource, None, None]:
-        if sort_by_role:
-            for role in EpubRole:
-                yield from self.by_role(role)
-        else:
-            yield from self.items
-
-    def stats(self):
-        return IndexInfo(
-            count=len(self.items),
-            total_size=sum(i.info.file_size for i in self.items),
-            compress_size=sum(i.info.compress_size for i in self.items),
-        )
 
 
 @dataclass

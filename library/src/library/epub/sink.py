@@ -30,28 +30,14 @@ class EpubZipSink:
         return require(self._zip_file, f"{self}._zip_file")
 
     def write_resource(self, resource: Resource):
-        # logger.debug(f"{self} Writing resource: {resource}")
-        if resource.is_deleted:
-            return
         info = copy(resource.info)
-        # info.CRC = 0
-        # info.file_size = 0
-        # info.compress_size = 0
+
         if resource.media_type in STORE_AS_IS or resource.filename == FileName.MIMETYPE:
             info.compress_type = ZIP_STORED
         else:
             info.compress_type = ZIP_DEFLATED
+
         self.zip_file.writestr(info, resource.content)
-
-    def _write_mimetype(self):
-        mimetype_bytes = FileTemplate.MIMETYPE.encode("utf-8")
-        mimetype_zipinfo = ZipInfo(filename=FileName.MIMETYPE, date_time=zip_info_now())
-        self.zip_file.writestr(mimetype_zipinfo, mimetype_bytes, compress_type=ZIP_STORED)
-
-    def _write_container(self, opf_path: str = FileName.DEFAULT_OPF):
-        container_bytes = FileTemplate.CONTAINER.format(opf_path=opf_path).encode("utf-8")
-        container_zipinfo = ZipInfo(filename=FileName.CONTAINER, date_time=zip_info_now())
-        self.zip_file.writestr(container_zipinfo, container_bytes)
 
     def __enter__(self) -> "EpubZipSink":
         self._zip_file = ZipFile(self.path, "w", compression=ZIP_DEFLATED)

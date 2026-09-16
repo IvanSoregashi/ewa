@@ -75,8 +75,7 @@ def _fully_process_encrypted_panda(path: str) -> EpubOperationResult:
 
             fonts = [f for f in epub.resources.by_role(EpubRole.FONT) if "serenepanda" in f.filename.lower()]
             font = fonts[0]
-            epub.resources.remove(font)
-            epub.core.package.manifest.remove_item(path=font.filename)
+            epub.package.remove_resource(font)
 
             for css_resource in epub.resources.by_role(EpubRole.STYLE):
                 recipe_css.de_panda_css_resource(css_resource)

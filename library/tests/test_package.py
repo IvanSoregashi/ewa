@@ -115,14 +115,14 @@ def test_discovery_retains_container_and_relocation_survives_export(tmp_path):
     assert package.container.opf_path == "OEBPS/content.opf"
     package.document.guide = Guide()
     package.document.guide.add_reference(type="text", href="text/chapter.xhtml#start")
-    old_manifest = epub.core.manifest
+    original_entry = package.document.manifest.find_item(id="chapter")
     assert package.relocate("package/book.opf")
     assert epub.resources.by_path("OEBPS/content.opf") is None
     assert epub.resources.by_path("package/book.opf") is package.resource
     assert package.container.opf_path == "package/book.opf"
     assert package.document.guide.references[0].href == "../OEBPS/text/chapter.xhtml#start"
-    assert epub.core.manifest is not old_manifest
-    assert epub.core.manifest.by_path("../OEBPS/text/chapter.xhtml") is not None
+    assert package.manifest_item_by_path("OEBPS/text/chapter.xhtml") is original_entry
+    assert original_entry.href == "../OEBPS/text/chapter.xhtml"
     assert not package.relocate("package/book.opf")
     output = tmp_path / "relocated.epub"
     epub.package_into(output)

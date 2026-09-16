@@ -2,21 +2,18 @@
 resources and reports replacement entries that never matched any document.
 """
 
-import os
-
 from library.epub.epub import EPUB
 from library.epub.media_type import EpubRole, MediaType
 from library.epub.protocols import EpubOperation
 from library.epub.recipe_html import replace_links, translate_text
-from library.epub.resources import ResourceIndex
+from library.epub.resources import ResourceSelection
 import logging
 
-from library.epub.utils_href import posix_relative_href
 
 logger = logging.getLogger(__name__)
 
 
-def replace_links_in_htmls(resources: ResourceIndex, replacement_dict: dict[str, str]) -> dict[str, str]:
+def replace_links_in_htmls(resources: ResourceSelection, replacement_dict: dict[str, str]) -> dict[str, str]:
     """Run replace_links on every resource. Returns the replacement entries
     that were never found and replaced in any document (e.g. orphan images
     that no chapter references)."""
@@ -67,10 +64,6 @@ class RemoveResourceAndManifest(EpubOperation):
 
     def perform(self, epub: EPUB):
         resources = epub.resources
-        manifest = epub.core.package.manifest
-        opf_resource = epub.core.package_resource
-        opf_filename = opf_resource.filename
-        opf_dirname = os.path.dirname(opf_filename)
 
         if self.role is not None:
             resources = resources.by_role(self.role)
@@ -79,19 +72,10 @@ class RemoveResourceAndManifest(EpubOperation):
         if self.path is not None:
             resources = [resource for resource in resources if self.path in resource.filename.lower()]
         elif self.exact_path is not None:
-            resources = [resources.by_path(self.exact_path)]
+            resources = [resource for resource in resources if resource.filename == self.exact_path]
 
-        for resource in resources:
-            epub.resources.remove(resource)
-
-            filename = resource.filename
-            if opf_dirname:
-                filename = posix_relative_href(opf_filename, filename)
-
-            if not manifest.has_path(filename):
-                logger.warning(f"{filename}({resource.filename}) not found in manifest")
-
-            manifest.remove_item(path=filename)
+        for resource in list(resources):
+            epub.package.remove_resource(resource)
 
         if self.flush:
-            opf_resource.content = epub.core.package.to_xml_bytes()
+            epub.package.flush()

@@ -84,7 +84,7 @@ def log_links(epub: EPUB) -> dict[str, int]:
                 else:
                     path, _ = target
                     target_resource = epub.resources.by_path(path)
-                    if target_resource is None or target_resource.is_deleted or target_resource.info.is_dir():
+                    if target_resource is None or target_resource.info.is_dir():
                         counts["missing"] += 1
                         logger.warning("%s: %r -> missing file %r", resource.filename, url, path)
                     else:

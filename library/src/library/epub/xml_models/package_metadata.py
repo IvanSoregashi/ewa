@@ -127,12 +127,45 @@ class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_N
                 return
         self.add_metadata(tag=DCMetadataType.SUBJECT, text=value, **kwargs)
 
+    def referencing(self, ids: set[str]) -> list[Meta]:
+        """Find cover metadata and the transitive closure of refinements to IDs.
+
+        Does not mutate the input IDs or metadata. Handles cycles and entries
+        without IDs; only refinements reachable from the supplied IDs are selected.
+        """
+        targets = set(ids)
+        selected: list[Meta] = []
+        pending = list(self.metas)
+        while True:
+            additions = [
+                meta
+                for meta in pending
+                if (meta.name == "cover" and meta.content in targets)
+                or (meta.refines is not None and meta.refines.startswith("#") and meta.refines[1:] in targets)
+            ]
+            if not additions:
+                return selected
+            selected.extend(additions)
+            targets.update(meta.id for meta in additions if meta.id)
+            added = {id(meta) for meta in additions}
+            pending = [meta for meta in pending if id(meta) not in added]
+
     def remove_metadata(
-        self, tag: DCMetadataType | MetadataType, text: str | None = None, id: str | None = None, dc: bool = True
+        self,
+        tag: DCMetadataType | MetadataType,
+        text: str | None = None,
+        id: str | None = None,
+        dc: bool = True,
+        *,
+        item: DCElement | None = None,
     ):
         """Uniform helper to remove metadata items."""
 
+        selected_item = item
+
         def should_remove(item) -> bool:
+            if selected_item is not None:
+                return item is selected_item
             if text is None and id is None:
                 return True
             match_text = (text is None) or (getattr(item, "text", None) == text)
@@ -140,7 +173,7 @@ class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_N
             return match_text and match_id
 
         if dc:
-            attr_name = f"{tag}s"
+            attr_name = f"{tag}s" if tag != DCMetadataType.META else "dc_metas"
             if hasattr(self, attr_name):
                 current = getattr(self, attr_name)
                 setattr(self, attr_name, [x for x in current if not should_remove(x)])

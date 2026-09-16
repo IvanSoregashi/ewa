@@ -21,7 +21,6 @@ from library.epub.media_type import EpubRole, MediaType
 from library.epub.recipe_html import VideoTagInfo, replace_gifs_with_videos
 from library.epub.recipe_image import perform_image_optimization
 from library.epub.resources import Resource
-from library.epub.utils_href import posix_relative_href
 from library.image.constants import ANIMATION_SIZE_LIMIT
 from library.image.optimize_gif import generate_poster
 
@@ -38,8 +37,6 @@ def convert_giant_gifs(epub: EPUB, size_limit: int = ANIMATION_SIZE_LIMIT) -> di
     {old gif archive path: VideoTagInfo}.
     """
     table: dict[str, VideoTagInfo] = {}
-    manifest = epub.core.manifest
-    opf_path = epub.core.package_resource.filename
 
     for resource in list(epub.resources):
         if resource.media_type is not MediaType.IMAGE_GIF or resource.info.file_size <= size_limit:
@@ -51,7 +48,7 @@ def convert_giant_gifs(epub: EPUB, size_limit: int = ANIMATION_SIZE_LIMIT) -> di
                 continue
             width, height = image.size
 
-        video_manifest = manifest.by_path(posix_relative_href(opf_path, resource.filename))
+        video_manifest = epub.package.manifest_item_by_path(resource.filename)
         if video_manifest is None:
             logger.warning(f"{resource} has no manifest item, keeping gif")
             continue
@@ -82,8 +79,7 @@ def convert_giant_gifs(epub: EPUB, size_limit: int = ANIMATION_SIZE_LIMIT) -> di
         logger.info(f"{old_path} converted to {new_path} + poster")
 
     if table:
-        epub.core.package_resource.content = epub.core.package.to_xml_bytes()
-        epub.core._manifest = None
+        epub.package.flush()
     return table
 
 
@@ -91,11 +87,9 @@ def _add_poster_resource(epub: EPUB, video_manifest, mp4_path: str, poster_bytes
     """Add the poster as a resource and a manifest item (same basename as the mp4)."""
     poster_path = str(PurePosixPath(mp4_path).with_suffix(".jpg"))
     poster = Resource.from_bytes(poster_path, poster_bytes)
-    epub.resources.add(poster)
-
-    epub.core.package.manifest.add_item(
-        id=f"{video_manifest.item.id}-poster",
-        href=posix_relative_href(epub.core.package_resource.filename, poster_path),
+    epub.package.add_resource(
+        poster,
+        item_id=f"{video_manifest.id}-poster",
         media_type=MediaType.IMAGE_JPEG.value,
     )
     return poster_path

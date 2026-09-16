@@ -4,7 +4,6 @@ import pytest
 
 from library.epub.epub import EPUB
 from library.epub.media_type import EpubRole, MediaType
-from library.epub.xml_models.package_sequences import ManifestItem
 
 
 @pytest.mark.parametrize(
@@ -29,16 +28,13 @@ def test_manifest_resolves_relative_to_package(tmp_path, package_path, href, arc
         archive.writestr(archive_path, b"image bytes")
 
     epub = EPUB(path)
-    manifest = epub.core.manifest
-    entry = manifest.by_id("picture")
+    package = epub.package
+    entry = package.document.manifest.find_item(id="picture")
     assert entry is not None
-    assert entry.resource is epub.resources.by_path(archive_path)
-    assert entry.resource.content == b"image bytes"
-    assert entry.item.href == href
-    assert manifest.by_path(href) is entry
-
-    # A selection must retain the base used to resolve subsequently loaded items.
-    for selection in (manifest.by_media_type(MediaType.IMAGE_JPEG), manifest.by_role(EpubRole.IMAGE)):
-        assert selection.package is epub.package
-        selection.add_opf_item(ManifestItem(id="another", href=href, media_type="image/jpeg"))
-        assert selection.by_id("another").resource is entry.resource
+    resource = package.resource_for_href(entry.href)
+    assert resource is epub.resources.by_path(archive_path)
+    assert resource.content == b"image bytes"
+    assert entry.href == href
+    assert package.manifest_item_by_path(archive_path) is entry
+    assert tuple(package.manifest_resources.by_media_type(MediaType.IMAGE_JPEG)) == (resource,)
+    assert tuple(package.manifest_resources.by_role(EpubRole.IMAGE)) == (resource,)

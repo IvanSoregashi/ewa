@@ -13,7 +13,7 @@ from library.epub.epub_core import EpubCore
 from library.epub.errors import EpubSpecificationError, EpubError
 from library.epub.media_type import EpubRole
 from library.epub.package import EpubPackage
-from library.epub.resources import ResourceIndex, IndexInfo
+from library.epub.resources import ResourceIndex, ResourceSelection, IndexInfo
 from library.epub.sink import EpubZipSink
 from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
 from library.utils import verify_destination
@@ -64,12 +64,6 @@ class EPUB:
                 )
         return require(self._resources, f"{self}._resources")
 
-    def get_resources(self, manifest_only: bool = False) -> ResourceIndex:
-        if manifest_only:
-            return self.core.manifest.manifest_resources
-        else:
-            return self.resources
-
     @property
     def package(self) -> EpubPackage:
         """Lazily discover the package from this EPUB's resources."""
@@ -96,7 +90,6 @@ class EPUB:
     def package_into(
         self,
         destination: str | Path | io.BytesIO,
-        manifest_only: bool = False,
         sort_by_role: bool = True,
     ) -> None:
         """Package the current state into a new epub archive.
@@ -112,10 +105,10 @@ class EPUB:
             if isinstance(destination, (str, Path)):
                 resolved_path = verify_destination(destination, self.path.name)
                 buffer = io.BytesIO()
-                self.package_into_buffer(buffer=buffer, manifest_only=manifest_only, sort_by_role=sort_by_role)
+                self.package_into_buffer(buffer=buffer, sort_by_role=sort_by_role)
                 resolved_path.write_bytes(buffer.getvalue())
             else:
-                self.package_into_buffer(buffer=destination, manifest_only=manifest_only, sort_by_role=sort_by_role)
+                self.package_into_buffer(buffer=destination, sort_by_role=sort_by_role)
         except Exception as e:
             logger.error(f"package_into: failed to compress into EPUB: {e}")
             raise e
@@ -123,10 +116,9 @@ class EPUB:
     def package_into_buffer(
         self,
         buffer: BinaryIO,
-        manifest_only: bool = False,
         sort_by_role: bool = True,
     ) -> None:
-        resources = self.get_resources(manifest_only=manifest_only).iter(sort_by_role=sort_by_role)
+        resources = self.resources.iter(sort_by_role=sort_by_role)
         if self._package is not None:
             self._package.flush()
         with EpubZipSink(buffer) as sink:
