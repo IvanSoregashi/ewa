@@ -6,7 +6,9 @@ not general EPUB validity. Findings leave skip decisions to the calling recipe.
 
 from enum import StrEnum
 from library.epub.epub import EPUB
-from library.epub.protocols import EpubVerification, VerificationResult
+from library.epub.protocols import VerificationResult
+from epub.protocols import EpubVerification
+from epub.errors import EpubSkipReason
 from library.epub.media_type import FileName, EpubRole, MediaType
 
 
@@ -29,6 +31,8 @@ class SerenePanda(EpubVerification):
     Requires at least one font. Strict mode requires exactly one font at the
     canonical path; relaxed mode requires every font name to contain the known
     SerenePanda filename. This identifies a candidate book, not valid encryption."""
+
+    skip_reason = EpubSkipReason.SERENE_PANDA_FONT
 
     def __init__(self, strict: bool = False) -> None:
         self.strict = strict
@@ -64,6 +68,8 @@ class HasNoGiantGifs(EpubVerification):
 
     Equality passes. Reports every oversized GIF without decoding image pixels."""
 
+    skip_reason = EpubSkipReason.BIG_GIFS
+
     def __init__(self, threshold_mb: int = 5) -> None:
         self.threshold_mb = threshold_mb
 
@@ -87,6 +93,8 @@ class OPFPath(EpubVerification):
 
     Uses container-based package discovery, so unrelated OPF files do not affect
     the result. Discovery errors propagate instead of passing an empty scan."""
+
+    skip_reason = EpubSkipReason.NON_DEFAULT_OPF
 
     def __init__(self, expected_path: str = "content.opf") -> None:
         self.expected_path = expected_path

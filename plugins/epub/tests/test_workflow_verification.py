@@ -2,6 +2,7 @@ import zipfile
 from pathlib import Path
 from library.epub.epub import EPUB
 from library.epub.media_type import FileName
+from epub.errors import EpubSkipReason
 from epub.verification import HasNoGiantGifs, OPFPath, SerenePanda
 from library.epub.protocols import VerificationResult
 from library.epub.resources import Resource
@@ -84,6 +85,7 @@ def test_configured_checks_chain_and_short_circuit(tmp_path):
         result = check.verify(epub)
         if not result.passed:
             break
+    assert check.skip_reason == EpubSkipReason.SERENE_PANDA_FONT
     assert "font not found" in result.details
     assert reached == []
     assert not OPFPath().verify(epub).passed
@@ -100,3 +102,12 @@ def test_font_check_modes_and_reuse(tmp_path):
     epub.resources.add(Resource.from_bytes("other.ttf", b"font"))
     assert not check.verify(epub).passed
     assert not SerenePanda().verify(epub).passed
+
+
+def test_default_skip_reasons_can_be_overridden_per_instance():
+    assert OPFPath().skip_reason == EpubSkipReason.NON_DEFAULT_OPF
+    assert HasNoGiantGifs().skip_reason == EpubSkipReason.BIG_GIFS
+    check = SerenePanda()
+    check.skip_reason = EpubSkipReason.NOT_IMPLEMENTED
+    assert check.skip_reason == EpubSkipReason.NOT_IMPLEMENTED
+    assert SerenePanda().skip_reason == EpubSkipReason.SERENE_PANDA_FONT

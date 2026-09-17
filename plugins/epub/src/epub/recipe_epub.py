@@ -70,15 +70,13 @@ def _fully_process_encrypted_panda(path: str) -> EpubOperationResult:
             original_info = epub.info()
             # recipe_package.relocate_package(epub)
 
-            checks = (
-                (OPFPath(), EpubSkipReason.NON_DEFAULT_OPF),
-                (SerenePanda(), EpubSkipReason.SERENE_PANDA_FONT),
-            )
-            for verification, skip_reason in checks:
+            for verification in (OPFPath(), SerenePanda()):
                 finding = verification.verify(epub)
                 if not finding.passed:
                     logger.warning("SKIP %s: %s", current_path, finding.details)
-                    return EpubOperationResult(skip=skip_reason, original_epub=original_info, details=finding.details)
+                    return EpubOperationResult(
+                        skip=verification.skip_reason, original_epub=original_info, details=finding.details
+                    )
 
             fonts = [f for f in epub.resources.by_role(EpubRole.FONT) if "serenepanda" in f.filename.lower()]
             font = fonts[0]
