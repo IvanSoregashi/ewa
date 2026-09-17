@@ -9,7 +9,7 @@ from ewa.ui import print_success, print_error
 from library.analytics import OperationResult
 from library.asserts import require
 from library.epub.epub import EpubInfo
-from library.epub.errors import EpubSkipReason, EpubErrorReason
+from epub.errors import EpubSkipReason, EpubErrorReason
 from library.epub.resources import IndexInfo
 from library.image.models import ImageOptimizationResult
 
@@ -32,6 +32,7 @@ def percent_of(size_of: int, size_to: int) -> str:
 @dataclass(kw_only=True)
 class EpubOperationResult(OperationResult):
     original_epub: EpubInfo
+    details: str = ""
     new_epub: EpubInfo | None = None
     image_results: list[ImageOptimizationResult] = field(default_factory=list)
 
@@ -46,6 +47,8 @@ class EpubOperationResult(OperationResult):
         if self.error:
             report += f"\nOPERATION RESULT: ERROR {EpubErrorReason(self.error).name}"
 
+        if self.details:
+            report += f"\n{self.details}"
         print_success(report)
 
         if self.success:

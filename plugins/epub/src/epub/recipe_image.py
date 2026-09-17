@@ -1,30 +1,19 @@
+"""Apply image optimization and minimum-saving policy to EPUB resources.
+
+Updates bytes and optional inventory paths; the caller coordinates document links.
+"""
+
 import io
 import logging
 from pathlib import PurePosixPath
-
+from PIL import Image
 from library.asserts import require
 from library.epub.resources import Resource, ResourceIndex
-from PIL import Image
-
-from library.image.constants import ImageMode, ImageFormat
+from library.image.constants import ImageFormat
 from library.image.models import ImageErrorReason, ImageInfo, ImageOptimizationResult, ImageSkipReason
 from library.image.optimization import optimization_machine
 
 logger = logging.getLogger(__name__)
-
-
-def get_image_info(resource: Resource) -> ImageInfo:
-    with resource.stream() as stream:
-        with Image.open(stream) as image:
-            return ImageInfo.from_image(image, resource.info.file_size)
-
-
-def get_image_info_with_extrema(resource: Resource) -> ImageInfo:
-    image_info = get_image_info(resource)
-    if image_info.mode is ImageMode.RGBA:
-        with Image.open(io.BytesIO(resource.content)) as image:
-            image_info.extrema = image.getextrema()
-    return image_info
 
 
 def perform_image_optimization(

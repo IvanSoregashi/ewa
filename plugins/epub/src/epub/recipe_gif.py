@@ -18,8 +18,8 @@ from PIL import Image
 
 from library.epub.epub import EPUB
 from library.epub.media_type import EpubRole, MediaType
-from library.epub.recipe_html import VideoTagInfo, replace_gifs_with_videos
-from library.epub.recipe_image import perform_image_optimization
+from epub.recipe_html import VideoTagInfo, replace_gifs_with_videos
+from epub.recipe_image import perform_image_optimization
 from library.epub.resources import Resource
 from library.image.constants import ANIMATION_SIZE_LIMIT
 from library.image.optimize_gif import generate_poster

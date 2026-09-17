@@ -1,30 +1,37 @@
+from dataclasses import dataclass
 from typing import Protocol
 
-from epub.results import EpubOperationResult
-from library.analytics import OperationResult
-from library.epub.epub import EPUB, EpubInfo
+from library.epub.epub import EPUB
 from library.epub.resources import Resource
 
 
+@dataclass(frozen=True)
+class VerificationResult:
+    """Findings from one verification call, independent of the verifier instance.
+
+    passed says whether the checked condition holds; details explains failures
+    or qualifies the check's coverage. A failed check is an expected finding,
+    while unexpected execution errors propagate as exceptions. The caller
+    decides whether to skip, warn, or repair and owns any book-level analytics.
+    Inspect .passed explicitly; this object is not a boolean.
+    """
+
+    passed: bool
+    details: str = ""
+
+
 class EpubVerification(Protocol):
-    warning: str
-    skip: int
-    additional_info: str
-    epub_info: EpubInfo
+    """Common interface for chaining configured checks over an EPUB.
 
-    def verify(self, epub: EPUB) -> bool: ...
+    Implementations return fresh findings and retain no per-book result state.
+    Checks inspect the book without editing it; lazy reads/parsing may populate
+    caches. They do not collect EpubInfo or decide the recipe's skip policy.
+    """
 
-    def skipped(self) -> EpubOperationResult:
-        return EpubOperationResult(skip=self.skip, original_epub=self.epub_info)
+    def verify(self, epub: EPUB) -> VerificationResult: ...
 
 
 class ResourceVerification(Protocol):
-    def verify(self, resource: Resource) -> bool: ...
+    """The same verification contract applied to a single resource."""
 
-
-class EpubOperation(Protocol):
-    def perform(self, epub: EPUB): ...
-
-
-class ResourceOperation(Protocol):
-    def perform(self, resource: Resource) -> OperationResult: ...
+    def verify(self, resource: Resource) -> VerificationResult: ...

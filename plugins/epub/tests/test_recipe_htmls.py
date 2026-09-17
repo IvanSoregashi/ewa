@@ -1,7 +1,7 @@
 """Tests for epub.recipe_htmls: book-level link replacement and the unmatched
 report. Synthetic resources, no fixtures."""
 
-from library.epub.recipe_htmls import replace_links_in_htmls
+from epub.recipe_htmls import replace_links_in_htmls
 from library.epub.resources import ResourceIndex
 
 

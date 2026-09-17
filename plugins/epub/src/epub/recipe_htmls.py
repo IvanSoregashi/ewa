@@ -4,8 +4,8 @@ resources and reports replacement entries that never matched any document.
 
 from library.epub.epub import EPUB
 from library.epub.media_type import EpubRole, MediaType
-from library.epub.protocols import EpubOperation
-from library.epub.recipe_html import replace_links, translate_text
+from epub.protocols import EpubOperation
+from library.epub.html_editing import replace_links, translate_text
 from library.epub.resources import ResourceSelection
 import logging
 

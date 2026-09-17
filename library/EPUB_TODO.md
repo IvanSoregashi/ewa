@@ -51,3 +51,7 @@ Relocation accepts normalized archive-relative file paths; it rejects absolute/e
 - ResourceIndex owns membership; ResourceSelection is an immutable membership snapshot with editable resources. Removed objects can still be held/read, but export uses the owner's current inventory. There is no is_deleted flag.
 - remove_resource rejects OPF dependents unless remove_references=True. Cleanup covers spine, guide, fallback/media-overlay, spine toc, cover metadata and dependent refinements. Content and NCX/NAV links are not inspected or rewritten.
 - [ ] Define book-level deletion/link policy for XHTML, CSS, NCX and NAV before claiming whole-publication safe removal.
+
+## Recipe ownership
+
+- [x] Move EPUB workflow recipes, operation protocols, eligibility policies, and persisted outcome codes into the EPUB plugin. Keep resource editing, image inspection, and general verification in the library. Tests follow the same boundary.

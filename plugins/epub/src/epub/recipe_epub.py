@@ -6,11 +6,12 @@ from pathlib import Path
 from epub.config import settings
 from epub.results import EpubOperationResult
 from library.epub.epub import EPUB, EpubInfo
-from library.epub.errors import EpubSkipReason, EpubErrorReason
+from epub.errors import EpubSkipReason, EpubErrorReason
 from library.epub.media_type import EpubRole, MediaType
-from library.epub import recipe_image, recipe_html, recipe_htmls
+from epub import recipe_image, recipe_htmls
+from library.epub import html_editing
 from epub import recipe_analytics, recipe_css, recipe_package
-from library.epub.verification import OPFPath, SerenePanda
+from epub.verification import OPFPath, SerenePanda
 
 logger = logging.getLogger(__name__)
 sp_dictionary_path: Path = settings.serene_panda_dir / "translator.json"
@@ -69,9 +70,15 @@ def _fully_process_encrypted_panda(path: str) -> EpubOperationResult:
             original_info = epub.info()
             # recipe_package.relocate_package(epub)
 
-            for v in (OPFPath(), SerenePanda()):
-                if not v.verify(epub):
-                    return v.skipped()
+            checks = (
+                (OPFPath(), EpubSkipReason.NON_DEFAULT_OPF),
+                (SerenePanda(), EpubSkipReason.SERENE_PANDA_FONT),
+            )
+            for verification, skip_reason in checks:
+                finding = verification.verify(epub)
+                if not finding.passed:
+                    logger.warning("SKIP %s: %s", current_path, finding.details)
+                    return EpubOperationResult(skip=skip_reason, original_epub=original_info, details=finding.details)
 
             fonts = [f for f in epub.resources.by_role(EpubRole.FONT) if "serenepanda" in f.filename.lower()]
             font = fonts[0]
@@ -110,7 +117,7 @@ def _fully_process_encrypted_panda(path: str) -> EpubOperationResult:
                     )
 
             for html_resource in htmls:
-                recipe_html.translate_text(html_resource, sp_dictionary)
+                html_editing.translate_text(html_resource, sp_dictionary)
 
             if replacement_dict:
                 recipe_package.replace_links(epub, replacement_dict)
@@ -166,7 +173,6 @@ def image_stats(path: str) -> None:
         for image_resource in epub.resources.by_role(EpubRole.IMAGE):
             filesize = int(image_resource.info.file_size / 1024)
             percent_comp = int((image_resource.info.compress_size / image_resource.info.file_size) * 100)
-            # image_info = recipe_image.get_image_info(image_resource)
             images.setdefault(filesize, []).append(percent_comp)
 
     for size, list_percent in sorted(images.items()):
