@@ -4,6 +4,10 @@ and persisted by the analytics recipes."""
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlmodel import SQLModel
+
+from epub.protocols import VerificationResult
+
 from ewa.cli.print_table import print_table_from_dicts
 from ewa.ui import print_success, print_error
 from library.analytics import OperationResult
@@ -31,10 +35,20 @@ def percent_of(size_of: int, size_to: int) -> str:
 
 @dataclass(kw_only=True)
 class EpubOperationResult(OperationResult):
+    """Book outcome without live resources, shared by legacy and context recipes.
+
+    findings retains ordered check results even after a later failure; details
+    describes the final outcome. analytics contains unsaved table instances for
+    parent-side persistence. The legacy recorder still handles image_results;
+    it does not yet persist findings or the new analytics list.
+    """
+
     original_epub: EpubInfo
     details: str = ""
     new_epub: EpubInfo | None = None
     image_results: list[ImageOptimizationResult] = field(default_factory=list)
+    findings: list[VerificationResult] = field(default_factory=list)
+    analytics: list[SQLModel] = field(default_factory=list)
 
     def report(self):
         original_epub = self.original_epub

@@ -69,10 +69,10 @@ Implement one numbered step per reviewable change. Each step must keep its affec
 
 ### 2. Introduce a small per-book context
 
-- [ ] Add `ProcessingContext` in the plugin with the live EPUB, original book information, a replacement mapping, and one analytics list accepting SQLModel table instances. No database session, engine, arbitrary shared-state dictionary, or operation-specific result slots.
-- [ ] Document ownership: one context per book, created inside the worker; operations run sequentially; an empty replacement mapping means no work. Do not introduce a separate state distinguishing "not run" from "no replacements" unless a real operation needs it.
-- [ ] Define how the context produces the returned success/skip/error outcome. Return findings and analytics, not the live context/EPUB/source. Preserve useful findings when a later step fails; failure does not roll back EPUB edits.
-- [ ] Test independent contexts, final outcomes, and exclusion of live resources from the returned value. Keep the existing recipe running while this small API is reviewed.
+- [x] Add `ProcessingContext` in the plugin with the live EPUB, original book information, a replacement mapping, and one analytics list accepting SQLModel table instances. No database session, engine, arbitrary shared-state dictionary, or operation-specific result slots.
+- [x] Document ownership: one context per book, created inside the worker; operations run sequentially; an empty replacement mapping means no work. Do not introduce a separate state distinguishing "not run" from "no replacements" unless a real operation needs it.
+- [x] Define how the context produces the returned success/skip/error outcome. Return findings and analytics, not the live context/EPUB/source. Preserve useful findings when a later step fails; failure does not roll back EPUB edits.
+- [x] Test independent contexts, final outcomes, and exclusion of live resources from the returned value. Keep the existing recipe running while this small API is reviewed.
 
 ### 3. Prove the operation interface with simple steps
 
@@ -114,3 +114,12 @@ Implement one numbered step per reviewable change. Each step must keep its affec
 - [ ] Run a small representative set of copied EPUBs, inspect output links and saved analytics, then increase batch size. Keep original books untouched during this validation.
 
 Deferred: automatic operation dependency graphs, generic context extension registries, rollback of in-memory EPUB edits, and converting every low-level library function to a class. None is needed for the proposed context-based recipe.
+
+Step 2 implementation: `epub.processing.ProcessingContext.outcome()` returns the existing
+`EpubOperationResult`, extended with ordered verification findings and unsaved analytics.
+Outcome lists are copied; record objects and book information are shared and must no
+longer be edited after handoff. The recipe and operation/check signatures remain unchanged.
+The legacy recorder does not persist the new fields yet. Synthetic tests cover all three
+outcomes, independent contexts, retained edits/evidence after failure, and a local pickle
+round trip excluding live resources. Actual spawned-worker transport and persistence
+remain steps 4–5 and 8.

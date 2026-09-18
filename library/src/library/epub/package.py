@@ -8,7 +8,7 @@ from library.epub.package_urls import archive_path, local_target, path_url, reba
 from library.epub.utils_href import posix_absolute_href, posix_relative_href
 from library.epub.xml_models.package_document import PackageDocument
 from library.epub.xml_models.container_model import ContainerDocument
-from library.epub.xml_models.package_sequences import ManifestItem
+from library.epub.xml_models.package_sequences import ManifestItem, GuideReference
 
 
 class EpubPackage:
@@ -211,9 +211,9 @@ class EpubPackage:
         itemrefs = [ref for ref in document.spine.itemrefs if ref.idref in removed_ids]
         removed_ids.update(ref.id for ref in itemrefs if ref.id)
 
-        guide = []
+        guide_references = []
         if document.guide is not None:
-            guide = [ref for ref in document.guide.references if self.resource_for_href(ref.href) is resource]
+            guide_references = [ref for ref in document.guide.references if self.resource_for_href(ref.href) is resource]
 
         remaining = [item for item in document.manifest.items if item not in removed]
         dependent_items = [item for item in remaining if item.fallback in removed_ids or item.overlay in removed_ids]
@@ -223,7 +223,7 @@ class EpubPackage:
 
         toc = document.spine.toc in removed_ids
 
-        if not remove_references and (itemrefs or guide or dependent_items or metadata_references or toc):
+        if not remove_references and (itemrefs or guide_references or dependent_items or metadata_references or toc):
             raise ValueError("Resource has OPF references; use remove_references=True to remove them")
 
         self.resources.remove(resource)
@@ -236,7 +236,7 @@ class EpubPackage:
                 document.spine.remove_itemref(itemref=ref)
 
             if document.guide is not None:
-                for ref in guide:
+                for ref in guide_references:
                     document.guide.remove_reference(reference=ref)
 
             for item in dependent_items:
@@ -281,7 +281,7 @@ class EpubPackage:
 
         document = self.document
 
-        references = list(document.manifest.items)
+        references: list[ManifestItem | GuideReference] = list(document.manifest.items)
 
         if document.guide is not None:
             references.extend(document.guide.references)
@@ -289,7 +289,7 @@ class EpubPackage:
         hrefs = [rebase_href(old_path, new_path, reference.href) for reference in references]
         # Prepare serialization before modifying the live objects or the index.
         updated_document = document.model_copy(deep=True)
-        updated_references = list(updated_document.manifest.items)
+        updated_references: list[ManifestItem | GuideReference] = list(updated_document.manifest.items)
 
         if updated_document.guide is not None:
             updated_references.extend(updated_document.guide.references)
