@@ -4,7 +4,7 @@ from library.epub.epub import EPUB
 from library.epub.media_type import FileName
 from epub.errors import EpubSkipReason
 from epub.verification import HasNoGiantGifs, OPFPath, SerenePanda
-from library.epub.protocols import VerificationResult
+from epub.protocols import VerificationResult
 from library.epub.resources import Resource
 
 VALID_CHAPTER = """<?xml version="1.0" encoding="utf-8"?>

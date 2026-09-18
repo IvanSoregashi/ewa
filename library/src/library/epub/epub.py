@@ -1,7 +1,7 @@
 import io
 import logging
 import tempfile
-from collections.abc import Generator, Callable
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,7 +9,7 @@ from typing import BinaryIO, Self
 from zipfile import is_zipfile
 
 from library.asserts import require
-from library.epub.errors import EpubSpecificationError, EpubError
+from library.epub.errors import EpubError
 from library.epub.media_type import EpubRole
 from library.epub.package import EpubPackage
 from library.epub.resources import ResourceIndex, IndexInfo
@@ -43,14 +43,6 @@ class EPUB:
 
     def __repr__(self):
         return f"EPUB({self.path.name!r})"
-
-    def is_specification(self, verificators: list[Callable[[EPUB], bool]]):
-        return all(verificator(self) for verificator in verificators)
-
-    def require_specification(self, verificators: list[Callable[[EPUB], bool]]):
-        for verificator in verificators:
-            if not verificator(self):
-                raise EpubSpecificationError(verificator.__name__)
 
     @property
     def resources(self) -> ResourceIndex:

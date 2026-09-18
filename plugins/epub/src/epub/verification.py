@@ -1,13 +1,16 @@
-"""Workflow eligibility checks with the shared library verification interface.
+"""Configured verification steps for plugin recipes.
 
-These conditions describe this plugin's supported inputs and processing policy,
-not general EPUB validity. Findings leave skip decisions to the calling recipe.
+Checks cover workflow eligibility and selected EPUB/XML conditions; no single
+check establishes full publication validity. Findings leave skip decisions to the calling recipe.
 """
 
+import io
+import random
+from zipfile import ZIP_STORED
+from lxml import etree
 from enum import StrEnum
 from library.epub.epub import EPUB
-from library.epub.protocols import VerificationResult
-from epub.protocols import EpubVerification
+from epub.protocols import EpubVerification, VerificationResult
 from epub.errors import EpubSkipReason
 from library.epub.media_type import FileName, EpubRole, MediaType
 
@@ -104,4 +107,53 @@ class OPFPath(EpubVerification):
             actual_path = epub.package.resource.filename
             if actual_path != self.expected_path:
                 return VerificationResult(False, f"Package path {actual_path!r}, expected {self.expected_path!r}")
+        return VerificationResult(True)
+
+
+class MimetypeVerification(EpubVerification):
+    """Check that the source contains an uncompressed mimetype entry.
+
+    Checks source archive metadata, not edited output bytes or mimetype contents."""
+
+    skip_reason = EpubSkipReason.MIMETYPE_VERIFICATION
+
+    def verify(self, epub: EPUB) -> VerificationResult:
+        filename = FileName.MIMETYPE
+        with epub.keep_open():
+            mmt_i = epub.source.getinfo(filename)
+            if mmt_i is None:
+                return VerificationResult(False, "mimetype file not found")
+            if mmt_i.compress_type not in (ZIP_STORED, None):
+                return VerificationResult(False, "mimetype file is compressed")
+        return VerificationResult(True)
+
+
+class ValidXMLChapters(EpubVerification):
+    """Parse up to count randomly sampled HTML-role resources as XML.
+
+    Reports every malformed document in the sample. Passing a sample does not
+    validate unsampled chapters or EPUB semantics; an empty selection passes."""
+
+    skip_reason = EpubSkipReason.INVALID_XML_CHAPTERS
+
+    def __init__(self, count: int = 10) -> None:
+        self.count = count
+
+    def verify(self, epub: EPUB) -> VerificationResult:
+        with epub.keep_open():
+            chapters = epub.resources.by_role(EpubRole.HTML)
+            total_chapters = len(chapters)
+            count = min(self.count, total_chapters)
+            sample_chapters = random.sample(chapters.items, count)
+            failures = []
+
+            for chapter in sample_chapters:
+                try:
+                    etree.parse(io.BytesIO(chapter.content), etree.XMLParser(huge_tree=True))
+                except etree.XMLSyntaxError as error:
+                    failures.append(f"{chapter.filename!r}: {error}")
+
+            if failures:
+                return VerificationResult(False, f"{len(failures)}/{count} of {total_chapters}\n" + "\n".join(failures))
+
         return VerificationResult(True)

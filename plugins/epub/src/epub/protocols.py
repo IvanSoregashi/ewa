@@ -1,26 +1,51 @@
-"""Uniform perform interfaces for the plugin's chainable workflow operations.
+"""Uniform interfaces for configured plugin checks and operations.
 
-General verification contracts remain in library.epub.protocols so checks can
-be shared by the library and plugin without a reverse dependency.
+Checks retain configuration and a default skip reason, while each call returns
+fresh findings. Recipes choose how to handle those findings. The common library
+provides editing/parsing functions and does not depend on these workflow types.
 """
 
+from dataclasses import dataclass
 from typing import Protocol
 from epub.errors import EpubSkipReason
-from library.epub.protocols import EpubVerification as LibraryEpubVerification
 from library.analytics import OperationResult
 from library.epub.epub import EPUB
 from library.epub.resources import Resource
 
 
-class EpubVerification(LibraryEpubVerification, Protocol):
-    """A library-compatible check with a default batch skip reason.
+@dataclass(frozen=True)
+class VerificationResult:
+    """Findings from one verification call, independent of the verifier instance.
 
-    skip_reason is configuration, independent of the current book's findings.
-    Recipes can use it when verification fails or choose another response,
-    such as warning or repairing. Per-call details remain in VerificationResult.
+    passed says whether the checked condition holds; details explains failures
+    or qualifies the check's coverage. A failed check is an expected finding,
+    while unexpected execution errors propagate as exceptions. The caller
+    decides whether to skip, warn, or repair and owns any book-level analytics.
+    Inspect .passed explicitly; this object is not a boolean.
+    """
+
+    passed: bool
+    details: str = ""
+
+
+class EpubVerification(Protocol):
+    """A reusable check with a default batch skip reason.
+
+    verify inspects a book and returns findings without storing per-book state.
+    skip_reason is stable configuration; a recipe may skip, warn, or repair on
+    failure. Checks do not collect book analytics or persist database records.
+    Lazy reads/parsing may populate caches; checks do not edit book content.
     """
 
     skip_reason: EpubSkipReason
+
+    def verify(self, epub: EPUB) -> VerificationResult: ...
+
+
+class ResourceVerification(Protocol):
+    """The same verification contract applied to a single resource."""
+
+    def verify(self, resource: Resource) -> VerificationResult: ...
 
 
 class EpubOperation(Protocol):

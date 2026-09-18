@@ -62,10 +62,10 @@ Implement one numbered step per reviewable change. Each step must keep its affec
 
 ### 1. Finish the library/plugin boundary
 
-- [ ] Move the remaining configured verification classes (`MimetypeVerification`, `ValidXMLChapters`) into the plugin, together with their tests. Keep reusable parsing/editing functions in the library; any verification logic retained there must have a function interface.
-- [ ] Consolidate verification protocols and `VerificationResult` in the plugin. Remove the duplicate library/plugin protocol inheritance. Keep each check's default `skip_reason` and its fresh per-call findings. Preserve existing persisted numeric reason values.
-- [ ] Inspect `EPUB.is_specification` / `require_specification` and their callers for overlap; resolve obsolete verification entry points within this step without creating replacement abstractions.
-- [ ] Verify that library code and tests do not import the plugin and that checks still work in a simple ordered loop.
+- [x] Move the remaining configured verification classes (`MimetypeVerification`, `ValidXMLChapters`) into the plugin, together with their tests. Keep reusable parsing/editing functions in the library; any verification logic retained there must have a function interface.
+- [x] Consolidate verification protocols and `VerificationResult` in the plugin. Remove the duplicate library/plugin protocol inheritance. Keep each check's default `skip_reason` and its fresh per-call findings. Preserve existing persisted numeric reason values.
+- [x] Inspect `EPUB.is_specification` / `require_specification` and their callers for overlap; resolve obsolete verification entry points within this step without creating replacement abstractions.
+- [x] Verify that library code and tests do not import the plugin and that checks still work in a simple ordered loop.
 
 ### 2. Introduce a small per-book context
 
