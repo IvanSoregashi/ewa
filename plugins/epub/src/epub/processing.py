@@ -1,4 +1,5 @@
 """Per-book working state for sequential plugin recipes."""
+
 from library.asserts import require
 
 from dataclasses import dataclass, field
