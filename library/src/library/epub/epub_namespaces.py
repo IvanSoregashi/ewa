@@ -23,7 +23,7 @@ class NamespacePrefix(StrEnum):
     CONTAINER = "container"
 
 
-OPF_NSMAP = {
+OPF_NSMAP: dict[str, str] = {
     "": XMLNamespace.OPF,
     NamespacePrefix.OPF: XMLNamespace.OPF,
     NamespacePrefix.DC: XMLNamespace.DC,
@@ -31,18 +31,18 @@ OPF_NSMAP = {
     NamespacePrefix.XML: XMLNamespace.XML,
 }
 
-NCX_NSMAP = {
+NCX_NSMAP: dict[str, str] = {
     "": XMLNamespace.NCX,
     NamespacePrefix.XML: XMLNamespace.XML,
 }
 
-NAV_NSMAP = {
+NAV_NSMAP: dict[str, str] = {
     "": XMLNamespace.XHTML,
     NamespacePrefix.EPUB: XMLNamespace.EPUB,
     NamespacePrefix.XML: XMLNamespace.XML,
 }
 
-CONTAINER_NSMAP = {
+CONTAINER_NSMAP: dict[str, str] = {
     "": XMLNamespace.CONTAINER,
     NamespacePrefix.CONTAINER: XMLNamespace.CONTAINER,
 }

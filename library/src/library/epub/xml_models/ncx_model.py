@@ -1,3 +1,4 @@
+from pydantic_xml.element import SearchMode
 from pydantic_xml import BaseXmlModel, attr, element
 from library.xml.document_pydantic import XMLDocumentModel
 from library.epub.epub_namespaces import NamespacePrefix, NCX_NSMAP
@@ -135,7 +136,7 @@ class NavList(BaseXmlModel, tag="navList", nsmap=NCX_NSMAP):
             self.nav_targets = [t for t in self.nav_targets if t.id != id]
 
 
-class NCXDocument(XMLDocumentModel, tag=NamespacePrefix.NCX, nsmap=NCX_NSMAP, search_mode="unordered"):
+class NCXDocument(XMLDocumentModel, tag=NamespacePrefix.NCX, nsmap=NCX_NSMAP, search_mode=SearchMode.UNORDERED):
     version: str | None = attr(default=None)
     xml_lang: str | None = attr(name="lang", ns=NamespacePrefix.XML, default=None)
     dir: str | None = attr(default=None)

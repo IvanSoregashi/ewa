@@ -20,8 +20,12 @@ def test_add_resource_updates_archive_and_manifest_on_export(tmp_path):
     output = tmp_path / "added.epub"
     epub.package_into(output)
     reopened = EPUB(output).package
-    assert reopened.document.manifest.find_item(id="cover").properties == "cover-image"
-    assert reopened.resource_for_href(item.href).content == b"image"
+    cover = reopened.document.manifest.find_item(id="cover")
+    assert cover is not None
+    assert cover.properties == "cover-image"
+    resource = reopened.resource_for_href(item.href)
+    assert resource is not None
+    assert resource.content == b"image"
 
 
 def test_duplicate_ids_paths_and_foreign_ownership_rejected_without_changes(tmp_path):
@@ -89,7 +93,9 @@ def test_remove_rejects_opf_references_then_cleans_them_explicitly(tmp_path):
     epub.package_into(output)
     reopened = EPUB(output).package
     assert reopened.document.manifest.find_item(id="chapter-again") is not None
-    assert reopened.resource_for_href("text/chapter.xhtml").content == b"<html/>"
+    resource = reopened.resource_for_href("text/chapter.xhtml")
+    assert resource is not None
+    assert resource.content == b"<html/>"
 
 
 def test_plain_remove_is_reflected_in_export(tmp_path):

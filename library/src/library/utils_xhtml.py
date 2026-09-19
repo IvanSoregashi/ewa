@@ -1,6 +1,6 @@
 from lxml import html, etree
 from lxml.html import HtmlElement
-from bs4 import BeautifulSoup, NavigableString
+from bs4 import BeautifulSoup, NavigableString, Tag
 import json
 import logging
 
@@ -64,7 +64,7 @@ def is_empty_calibre_tag(tag) -> bool:
     return not text or text == "\xa0"
 
 
-def cleanup_calibre_formatting(soup: BeautifulSoup) -> BeautifulSoup:
+def cleanup_calibre_formatting(soup: BeautifulSoup) -> str:
     old_body = require(soup.body)
     old_text = set(old_body.get_text().strip().split())
 
@@ -85,9 +85,10 @@ def cleanup_calibre_formatting(soup: BeautifulSoup) -> BeautifulSoup:
                 continue
             if current_paragraph is None:
                 current_paragraph = soup.new_tag("p")
-            current_paragraph.append(NavigableString(text))
+            require(current_paragraph).append(NavigableString(text))
             continue
 
+        assert isinstance(node, Tag)
         if node.name == "p":
             if is_empty_calibre_tag(node):
                 flush_paragraph()
@@ -108,7 +109,7 @@ def cleanup_calibre_formatting(soup: BeautifulSoup) -> BeautifulSoup:
         if node.name in ("b", "i", "span", "em", "strong", "a", "u", "sub", "sup"):
             if current_paragraph is None:
                 current_paragraph = soup.new_tag("p")
-            current_paragraph.append(node)
+            require(current_paragraph).append(node)
             continue
 
         flush_paragraph()
@@ -140,9 +141,8 @@ def _get_text_content(elem) -> str:
 def cleanup_calibre_formatting_lxml(content: bytes) -> bytes:
     doc = html.document_fromstring(content)
     body = require(doc.body)
-    old_text = set(_get_text_content(body).strip().split())
 
-    new_body = etree.Element("body")
+    new_body = html.Element("body")
     current_paragraph = None
 
     def flush_paragraph():
@@ -158,7 +158,7 @@ def cleanup_calibre_formatting_lxml(content: bytes) -> bytes:
         if not text:
             return
         flush_paragraph()
-        new_p = etree.Element("p")
+        new_p = html.Element("p")
         new_p.text = text
         new_body.append(new_p)
         new_body.tail = "\n"
@@ -198,7 +198,7 @@ def cleanup_calibre_formatting_lxml(content: bytes) -> bytes:
         if node.tag in ("b", "i", "span", "em", "strong", "a", "u", "sub", "sup"):
             if current_paragraph is None:
                 current_paragraph = etree.SubElement(new_body, "p")
-            current_paragraph.append(node)
+            require(current_paragraph).append(node)
             if node.tail:
                 add_text(node.tail)
                 node.tail = None
@@ -213,10 +213,8 @@ def cleanup_calibre_formatting_lxml(content: bytes) -> bytes:
 
     flush_paragraph()
 
-    new_text = set(_get_text_content(new_body).strip().split())
-    # assert old_text == new_text, f"Text changed: old={old_text - new_text}, new={new_text - old_text}"
-
-    body.getparent().replace(body, new_body)
+    parent: etree._Element = require(body.getparent())
+    parent.replace(body, new_body)
     return html.tostring(doc, pretty_print=True, encoding="utf-8")
 
 

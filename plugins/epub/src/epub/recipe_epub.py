@@ -5,6 +5,7 @@ from pathlib import Path
 
 from epub.config import settings
 from epub.results import EpubOperationResult
+from library.asserts import require
 from library.epub.epub import EPUB, EpubInfo
 from epub.errors import EpubSkipReason, EpubErrorReason
 from library.epub.media_type import EpubRole, MediaType
@@ -94,7 +95,7 @@ def _fully_process_encrypted_panda(path: str) -> EpubOperationResult:
             replacement_dict = {}
             for result in image_optimization_results:
                 if result.success and result.new_image and result.new_image.path:
-                    old_path = result.original_image.path
+                    old_path = require(result.original_image.path)
                     new_path = result.new_image.path
                     if new_path in replacement_dict.values():
                         new_path += ".jpg"

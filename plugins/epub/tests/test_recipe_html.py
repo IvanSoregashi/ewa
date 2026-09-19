@@ -1,6 +1,10 @@
 from io import BytesIO
 from zipfile import ZipInfo
 
+from lxml import etree
+from library.epub.resources import Resource
+from epub.recipe_html import VideoTagInfo, replace_gifs_with_videos
+
 GIF_CHAPTER = """<?xml version="1.0" encoding="utf-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head><title>Chapter</title></head>
@@ -11,10 +15,6 @@ GIF_CHAPTER = """<?xml version="1.0" encoding="utf-8"?>
     <p>after</p>
   </body>
 </html>"""
-
-from lxml import etree
-from library.epub.resources import Resource
-from epub.recipe_html import VideoTagInfo, replace_gifs_with_videos
 
 
 def html_resource(markup: str, filename: str = "OEBPS/text/chapter.xhtml") -> Resource:

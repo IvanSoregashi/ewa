@@ -18,6 +18,7 @@ def test_rename_before_read_preserves_source_and_exports_new_name(tmp_path, sour
         (path / "old.txt").write_bytes(b"original bytes")
     epub = EPUB(path)
     resource = epub.resources.by_path("old.txt")
+    assert resource is not None
     epub.resources.rename(resource, "new.txt")
     assert epub.resources.by_path("old.txt") is None
     assert epub.resources.by_path("new.txt") is resource

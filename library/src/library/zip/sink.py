@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 from copy import copy
 from pathlib import Path
-from typing import BinaryIO, Self
+from typing import BinaryIO, IO, Self
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from library.asserts import require
@@ -33,7 +33,7 @@ class ZipSink:
             for chunk in chunks:
                 destination.write(chunk)
 
-    def write_stream(self, member: str | ZipInfo, stream: BinaryIO, *, chunk_size: int = 65536) -> None:
+    def write_stream(self, member: str | ZipInfo, stream: IO[bytes], *, chunk_size: int = 65536) -> None:
         """Copy from the stream's current position without seeking or closing it."""
         if chunk_size <= 0:
             raise ValueError("chunk_size must be positive")

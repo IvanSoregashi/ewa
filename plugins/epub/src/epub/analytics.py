@@ -22,7 +22,7 @@ def plot_format_mode_percentage(df: pd.DataFrame, save_path: str | None = None, 
     percentages = (counts / len(df) * 100).round(1)
 
     fig, ax = plt.subplots(figsize=(10, 8))
-    bars = ax.barh(percentages.index, percentages.values, color=sns.color_palette("husl", len(percentages)))
+    bars = ax.barh(percentages.index, percentages.to_numpy(), color=sns.color_palette("husl", len(percentages)))
     ax.set_xlabel("Percentage (%)")
     ax.set_title("Distribution of Format + Mode")
     ax.bar_label(bars, fmt="%.1f%%")
@@ -99,7 +99,7 @@ def plot_format_distribution(df: pd.DataFrame, save_path: str | None = None):
 
     fig, ax = plt.subplots(figsize=(8, 8))
     colors = sns.color_palette("Set2", len(counts))
-    wedges, texts, autotexts = ax.pie(counts, labels=counts.index, autopct="%1.1f%%", colors=colors, startangle=90)
+    ax.pie(counts, labels=counts.index.tolist(), autopct="%1.1f%%", colors=colors, startangle=90)
     ax.set_title("Format Distribution")
 
     if save_path:
@@ -113,7 +113,7 @@ def plot_mode_distribution(df: pd.DataFrame, save_path: str | None = None):
 
     fig, ax = plt.subplots(figsize=(8, 8))
     colors = sns.color_palette("Set3", len(counts))
-    wedges, texts, autotexts = ax.pie(counts, labels=counts.index, autopct="%1.1f%%", colors=colors, startangle=90)
+    ax.pie(counts, labels=counts.index.tolist(), autopct="%1.1f%%", colors=colors, startangle=90)
     ax.set_title("Mode Distribution")
 
     if save_path:
@@ -195,7 +195,7 @@ def plot_animated_vs_static(df: pd.DataFrame, save_path: str | None = None):
 
     fig, ax = plt.subplots(figsize=(6, 6))
     colors = ["#66b3ff", "#ff9999"]
-    wedges, texts, autotexts = ax.pie(counts, labels=counts.index, autopct="%1.1f%%", colors=colors, startangle=90)
+    ax.pie(counts, labels=counts.index.tolist(), autopct="%1.1f%%", colors=colors, startangle=90)
     ax.set_title("Animated vs Static Images")
 
     if save_path:

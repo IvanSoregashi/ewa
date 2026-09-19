@@ -10,7 +10,9 @@ from library.xml.utils import etree_from_bytes, fix_invalid_ampersands, fix_name
 def test_parses_valid_xml():
     root = etree_from_bytes(b"<root><a>text</a></root>")
     assert root.tag == "root"
-    assert root.find("a").text == "text"
+    element = root.find("a")
+    assert element is not None
+    assert element.text == "text"
 
 
 def test_default_profile_strips_comments_and_blank_text():
@@ -27,17 +29,23 @@ def test_custom_parser_profile_is_honored():
 
 def test_heals_raw_ampersands():
     root = etree_from_bytes(b"<root><p>AT&T and sons</p></root>")
-    assert root.find("p").text == "AT&T and sons"
+    element = root.find("p")
+    assert element is not None
+    assert element.text == "AT&T and sons"
 
 
 def test_heals_named_entities():
     root = etree_from_bytes(b"<root><p>caf&eacute;&nbsp;au lait</p></root>")
-    assert root.find("p").text == "caf\xe9\xa0au lait"
+    element = root.find("p")
+    assert element is not None
+    assert element.text == "caf\xe9\xa0au lait"
 
 
 def test_valid_xml_entities_untouched():
     root = etree_from_bytes(b"<root><p>a &amp; b &lt; c &quot;d&quot; &apos;e&apos;</p></root>")
-    assert root.find("p").text == "a & b < c \"d\" 'e'"
+    element = root.find("p")
+    assert element is not None
+    assert element.text == "a & b < c \"d\" 'e'"
 
 
 def test_combination_heals_across_retries():

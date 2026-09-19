@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 from library.utils_xhtml import cleanup_calibre_formatting, cleanup_calibre_formatting_lxml
 
@@ -73,7 +73,7 @@ def has_empty_calibre_tags(soup: BeautifulSoup) -> bool:
     if not soup.body:
         return False
     for p in soup.body.find_all("p"):
-        classes = p.get("class", [])
+        classes = p.get_attribute_list("class")
         if any("calibre" in c for c in classes):
             text = p.get_text().strip()
             if not text or text == "\xa0":
@@ -85,7 +85,7 @@ def has_naked_text(soup: BeautifulSoup) -> bool:
     if not soup.body:
         return False
     for child in soup.body.children:
-        if child.name is None:
+        if not isinstance(child, Tag):
             text = child.strip() if isinstance(child, str) else ""
             if text and not _is_whitespace_only(text):
                 return True

@@ -1,3 +1,4 @@
+from pydantic_xml.element import SearchMode
 from pydantic_xml import BaseXmlModel, attr, element
 
 from library.epub.metadata import DCMetadataType, MetadataType
@@ -48,7 +49,7 @@ class Meta(DCElement, tag=MetadataType.META, ns=NamespacePrefix.OPF):
     lang: str | None = attr(name="lang", ns=NamespacePrefix.XML, default=None)
 
 
-class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP, search_mode="unordered"):
+class Metadata(BaseXmlModel, tag="metadata", ns=NamespacePrefix.OPF, nsmap=OPF_NSMAP, search_mode=SearchMode.UNORDERED):
     titles: list[DCTitle] = element(tag=DCMetadataType.TITLE, default=[])
     creators: list[DCCreator] = element(tag=DCMetadataType.CREATOR, default=[])
     identifiers: list[DCIdentifier] = element(tag=DCMetadataType.IDENTIFIER, default=[])

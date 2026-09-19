@@ -32,6 +32,7 @@ def test_manifest_resolves_relative_to_package(tmp_path, package_path, href, arc
     entry = package.document.manifest.find_item(id="picture")
     assert entry is not None
     resource = package.resource_for_href(entry.href)
+    assert resource is not None
     assert resource is epub.resources.by_path(archive_path)
     assert resource.content == b"image bytes"
     assert entry.href == href

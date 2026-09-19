@@ -1,11 +1,11 @@
 import io
 import logging
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from collections.abc import Iterable, Sequence
 from copy import copy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, BinaryIO, Generator, Self
+from typing import Callable, IO, Generator, Self
 from zipfile import ZipInfo
 
 from hashlib import md5
@@ -25,14 +25,14 @@ class Resource:
         info: ZipInfo,
         *,
         content: bytes | None = None,
-        stream_bytes: Callable[[ZipInfo], BinaryIO] | None = None,
+        stream_bytes: Callable[[ZipInfo], AbstractContextManager[IO[bytes]]] | None = None,
     ) -> None:
         """Create a resource from bytes, without a backing source."""
         self.info = copy(info)
         self._source_info: ZipInfo = copy(info)
         assert content is not None or stream_bytes is not None, f"{self} content or streaming function must be provided"
         self._content: bytes | None = content
-        self.stream_bytes: Callable[[ZipInfo], BinaryIO] | None = stream_bytes
+        self.stream_bytes = stream_bytes
 
         self.media_type, self.role = type_and_role_from_filename(self.info.filename)
         # logger.debug(f"{self} MediaType({self.media_type}) EpubRole({self.role})")
@@ -66,8 +66,13 @@ class Resource:
         return self.__class__.from_filesystem_path(path)
 
     @contextmanager
-    def stream(self) -> Generator[BinaryIO, None, None]:
-        streamable = io.BytesIO(self._content) if self._content is not None else self.stream_bytes(self._source_info)
+    def stream(self) -> Generator[IO[bytes], None, None]:
+        stream_func = require(self.stream_bytes, "stream_bytes")
+        streamable = (
+            io.BytesIO(self._content)
+            if self._content is not None
+            else stream_func(self._source_info)
+        )
         with streamable as stream:
             yield stream
 
@@ -134,7 +139,7 @@ class ResourceSelection(Sequence[Resource]):
     def __getitem__(self, item):
         return self._items[item]
 
-    def __contains__(self, item: Resource | str) -> bool:
+    def __contains__(self, item: object) -> bool:
         return self.by_path(item) is not None if isinstance(item, str) else item in self._items
 
     def by_path(self, path: str) -> Resource | None:
@@ -169,7 +174,9 @@ class ResourceIndex(ResourceSelection):
         self._by_path: dict[str, Resource] = {}
 
     @classmethod
-    def from_infolist(cls, infolist: list[ZipInfo], stream: Callable[[ZipInfo], BinaryIO]) -> ResourceIndex:
+    def from_infolist(
+        cls, infolist: list[ZipInfo], stream: Callable[[ZipInfo], AbstractContextManager[IO[bytes]]]
+    ) -> ResourceIndex:
         return cls.from_resource_list([Resource(info=info, stream_bytes=stream) for info in infolist])
 
     @classmethod

@@ -177,6 +177,8 @@ def test_extrema_solid_rgba_is_deterministic():
 
     info = get_image_info_with_extrema(resource)
 
+    assert info.extrema is not None
+    assert len(info.extrema) == 4
     red, green, blue, alpha = info.extrema
     assert red == (255, 255)  # solid red fill
     assert green == (0, 0)

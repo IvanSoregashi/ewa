@@ -11,6 +11,7 @@ from epub.errors import EpubErrorReason, EpubSkipReason
 from epub.processing import ProcessingContext
 from epub.results import EpubOperationResult
 from epub.verification import MimetypeVerification, OPFPath, SerenePanda
+from library.asserts import require
 from library.epub.epub import EPUB
 from library.epub.resources import Resource, ResourceIndex
 from library.epub.source import ZipFileSource
@@ -49,35 +50,38 @@ def test_contexts_have_independent_working_state(book_path):
         second.open_epub(book_path)
         first.replacements["cover.png"] = "cover.webp"
         first.analytics.append(ProcessingTestRecord(description="First book edited"))
-        first.epub.resources.by_path("chapter.xhtml").content = b"edited"
+        require(first.epub.resources.by_path("chapter.xhtml")).content = b"edited"
 
         assert second.replacements == {}
         assert second.analytics == []
-        assert b"Original" in second.epub.resources.by_path("chapter.xhtml").content
+        assert b"Original" in require(second.epub.resources.by_path("chapter.xhtml")).content
 
 
 def test_managed_success_keeps_source_open_and_returns_detached_result(book_path, tmp_path):
     with ProcessingContext() as context:
         assert context.result is None
         assert context.open_epub(str(book_path)).verify(MimetypeVerification()).verify(OPFPath()) is context
+        assert isinstance(context.epub.source, ZipFileSource)
         handle = context.epub.source.zip_file
         assert handle.fp is not None
         with context.epub.keep_open():
             assert context.epub.source.zip_file is handle
         assert handle.fp is not None
-        context.epub.resources.by_path("chapter.xhtml").content = b"<html><body>Edited</body></html>"
+        require(context.epub.resources.by_path("chapter.xhtml")).content = b"<html><body>Edited</body></html>"
         destination = tmp_path / "processed.epub"
         context.epub.package_into(destination)
         output = EPUB(destination)
-        assert b"Edited" in output.resources.by_path("chapter.xhtml").content
+        assert b"Edited" in require(output.resources.by_path("chapter.xhtml")).content
         new_info = output.info()
         context.succeed(new_info)
         assert context.result is None  # Cleanup can still fail.
 
     assert handle.fp is None
     assert context.epub.source._zip_file is None
+    assert context.result is not None
     assert context.result.success
     assert context.result.input_path == book_path
+    assert context.result.original_epub is not None
     assert context.result.original_epub.title == "Synthetic book"
     assert context.result.new_epub == new_info
     assert pickle.loads(pickle.dumps(context.result)) == context.result
@@ -91,7 +95,7 @@ def test_outcomes_retain_evidence_and_exclude_live_resources(book_path, tmp_path
     with ProcessingContext() as context:
         context.open_epub(book_path).verify(OPFPath())
         context.analytics.append(record)
-        chapter = context.epub.resources.by_path("chapter.xhtml")
+        chapter = require(context.epub.resources.by_path("chapter.xhtml"))
         chapter.content = b"<html><body>Edited</body></html>"
         context.replacements["cover.png"] = "cover.webp"
         if status == "success":
@@ -105,6 +109,7 @@ def test_outcomes_retain_evidence_and_exclude_live_resources(book_path, tmp_path
             raise ValueError("Later operation failed")
 
     outcome = context.result
+    assert outcome is not None
     assert outcome.success == (status == "success")
     assert outcome.skip == (EpubSkipReason.NOT_IMPLEMENTED if status == "skip" else None)
     assert outcome.error == (EpubErrorReason.UNKNOWN if status == "error" else None)
@@ -151,6 +156,7 @@ def test_setup_failure_returns_reportable_outcome_without_outer_catch(tmp_path, 
         pytest.fail("Setup failure did not stop the block")
 
     outcome = context.result
+    assert outcome is not None
     assert outcome.error == EpubErrorReason.UNKNOWN
     assert not outcome.success
     assert outcome.original_epub is None
@@ -179,6 +185,7 @@ def test_source_open_failure_keeps_input_and_earlier_evidence(book_path, monkeyp
         context.open_epub(book_path)
         pytest.fail("Opening failure did not stop the block")
 
+    assert context.result is not None
     assert context.result.input_path == book_path
     assert context.result.original_epub is None
     assert context.result.error == EpubErrorReason.UNKNOWN
@@ -200,6 +207,7 @@ def test_metadata_failure_closes_acquired_source_without_retry(book_path, monkey
 
     assert len(acquired) == 1
     assert acquired[0].fp is None
+    assert context.result is not None
     assert context.result.original_epub is None
     assert context.result.input_path == book_path
     assert "Metadata read failed" in context.result.details
@@ -216,6 +224,7 @@ def test_check_exception_is_error_instead_of_skip(book_path):
         context.open_epub(book_path).verify(OPFPath()).verify(BrokenCheck())
         pytest.fail("Broken check did not stop the block")
 
+    assert context.result is not None
     assert context.result.error == EpubErrorReason.UNKNOWN
     assert context.result.skip is None
     assert "Cannot inspect chapter" in context.result.details
@@ -226,9 +235,11 @@ def test_missing_completion_is_error(book_path, open_book):
     with ProcessingContext() as context:
         if open_book:
             context.open_epub(book_path).verify(OPFPath())
+    assert context.result is not None
     assert context.result.error == EpubErrorReason.UNKNOWN
     assert "without succeed" in context.result.details
     if open_book:
+        assert isinstance(context.epub.source, ZipFileSource)
         assert context.epub.source._zip_file is None
     else:
         assert context.result.original_epub is None
@@ -267,6 +278,7 @@ def test_failure_after_success_marking_wins(book_path, tmp_path, later_failure):
         if later_failure == "error":
             raise RuntimeError("Post-export failure")
         context.verify(SerenePanda())
+    assert context.result is not None
     assert not context.result.success
     assert context.result.new_epub is None
     assert context.result.error if later_failure == "error" else context.result.skip
@@ -306,6 +318,7 @@ def test_cleanup_failure_preserves_body_error_or_interrupt(book_path, monkeypatc
         assert context.result is None
     else:
         process()
+        assert context.result is not None
         assert context.result.error == EpubErrorReason.UNKNOWN
         assert "Close failed" in context.result.details
         if body_failure is not None:
@@ -325,6 +338,7 @@ def test_book_must_be_open_before_use(book_path, action):
         else:
             context.succeed(info)
         pytest.fail("Used the context without opening a book")
+    assert context.result is not None
     assert context.result.error == EpubErrorReason.UNKNOWN
     assert "open_epub" in context.result.details
     assert context.result.original_epub is None
@@ -333,11 +347,14 @@ def test_book_must_be_open_before_use(book_path, action):
 def test_second_book_cannot_replace_first(book_path, tmp_path):
     with ProcessingContext() as context:
         context.open_epub(book_path)
+        assert isinstance(context.epub.source, ZipFileSource)
         handle = context.epub.source.zip_file
         context.open_epub(tmp_path / "other.epub")
         pytest.fail("A second book was opened")
+    assert context.result is not None
     assert "only open one book" in context.result.details
     assert context.result.input_path == book_path
+    assert context.result.original_epub is not None
     assert context.result.original_epub.path == book_path
     assert handle.fp is None
 

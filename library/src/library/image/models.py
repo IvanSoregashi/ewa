@@ -2,6 +2,7 @@ import zipfile
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
+from typing import Literal
 
 from PIL import Image
 
@@ -14,8 +15,8 @@ class ImageInfo:
     path: str | None = None
     size: tuple[int, int]
     filesize: int
-    format: ImageFormat
-    mode: ImageMode
+    format: ImageFormat | Literal["UNKNOWN"]
+    mode: ImageMode | Literal["UNKNOWN"]
     extrema: tuple[float, float] | tuple[tuple[int, int], ...] | None = None
     is_animated: bool = False
     n_frames: int = 1

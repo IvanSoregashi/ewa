@@ -33,6 +33,7 @@ def test_optimization_resizes_large_jpeg():
     result = perform_image_optimization(resource)
 
     assert result.success is True
+    assert result.new_image is not None
     assert result.skip is None
     assert result.original_image.format is ImageFormat.JPEG
     assert result.new_image.size == (MEDIUM_WIDTH_SIZE[0], 1080)  # 1500 -> 1080 wide, height scaled
@@ -53,6 +54,7 @@ def test_optimization_converts_png_to_jpeg():
     result = perform_image_optimization(resource)
 
     assert result.success is True
+    assert result.new_image is not None
     assert result.original_image.format is ImageFormat.PNG
     assert result.new_image.format is ImageFormat.JPEG
     assert result.new_image.mode is ImageMode.RGB
@@ -75,6 +77,7 @@ def test_optimization_resized_rgba_png_stays_png():
     result = perform_image_optimization(resource)
 
     assert result.success is True
+    assert result.new_image is not None
     assert result.new_image.format is ImageFormat.PNG  # stays png
     assert result.new_image.mode is ImageMode.RGBA
     assert result.new_image.size == (MEDIUM_WIDTH_SIZE[0], 1080)
@@ -95,6 +98,7 @@ def test_optimization_drops_useless_transparency_and_stays_png():
     result = perform_image_optimization(resource)
 
     assert result.success is True
+    assert result.new_image is not None
     assert result.original_image.mode is ImageMode.RGBA
     assert result.new_image.mode is ImageMode.RGB  # useless transparency dropped
     assert result.new_image.format is ImageFormat.PNG  # efficient bpp -> no conversion
@@ -115,6 +119,7 @@ def test_optimization_noisy_opaque_rgba_drops_alpha_and_converts():
     result = perform_image_optimization(resource)
 
     assert result.success is True
+    assert result.new_image is not None
     assert result.original_image.mode is ImageMode.RGBA
     assert result.new_image.mode is ImageMode.RGB  # forced-opaque alpha recognized as useless
     assert result.new_image.format is ImageFormat.JPEG
@@ -148,6 +153,8 @@ def test_rename_png_to_jpg_with_archive_paths(archive_path):
 
     result = perform_image_optimization(resource)
 
+    assert result.new_image is not None
+    assert result.new_image.path is not None
     expected = archive_path.removesuffix(".png") + ".jpg"
     assert result.new_image.format is ImageFormat.JPEG  # ensure the rename branch is taken
 
@@ -167,6 +174,7 @@ def test_rename_keeps_stem_with_multiple_dots():
 
     result = perform_image_optimization(resource)
 
+    assert result.new_image is not None
     assert result.new_image.format is ImageFormat.JPEG
     assert result.new_image.path == "OEBPS/images/pic.final.jpg"
     assert resource.media_type == "image/jpeg"
@@ -180,6 +188,7 @@ def test_no_rename_when_png_stays_png():
     result = perform_image_optimization(resource)
 
     assert result.success is True
+    assert result.new_image is not None
     assert result.new_image.format is ImageFormat.PNG
     assert result.new_image.path is None  # rename branch never ran
     assert resource.filename == "OEBPS/images/solid.png"

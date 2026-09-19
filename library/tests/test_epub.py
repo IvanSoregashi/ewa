@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from library.epub.epub import EPUB
+from library.epub.source import ZipFileSource
 
 ARCHIVE = "C:/Users/Ivan/Projects/ewa/library/tests/samples/source/archive.epub"
 DIRECTORY = "C:/Users/Ivan/Projects/ewa/library/tests/samples/source/directory"
@@ -74,6 +75,8 @@ def test_directory_packaging(destination):
     source2 = epub2.source
     print()
     with source1.open(), source2.open():
+        assert isinstance(source1, ZipFileSource)
+        assert isinstance(source2, ZipFileSource)
         source1.zip_file.printdir()
         source2.zip_file.printdir()
         assert len(source1.infolist()) == len(source2.infolist())

@@ -1,3 +1,4 @@
+from pydantic_xml.element import SearchMode
 from pydantic_xml import BaseXmlModel, attr, element
 
 from library.epub.xml_models.package_metadata import Metadata
@@ -6,7 +7,7 @@ from library.xml.document_pydantic import XMLDocumentModel
 from library.epub.epub_namespaces import OPF_NSMAP, NamespacePrefix
 
 
-class PackageDocument(XMLDocumentModel, tag="package", ns="", nsmap=OPF_NSMAP, search_mode="unordered"):
+class PackageDocument(XMLDocumentModel, tag="package", ns="", nsmap=OPF_NSMAP, search_mode=SearchMode.UNORDERED):
     version: str | None = attr(default=None)
     unique_identifier: str | None = attr(name="unique-identifier", default=None)
     id: str | None = attr(default=None)

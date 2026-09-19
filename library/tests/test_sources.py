@@ -153,6 +153,8 @@ def test_source_extract_some(source, destination, exclude_members):
         for member in members:
             info1 = source.getinfo(member)
             info2 = source2.getinfo(member)
+            assert info1 is not None
+            assert info2 is not None
             assert info1.filename == info2.filename
             assert info1.file_size == info2.file_size
             assert info1.date_time == info2.date_time

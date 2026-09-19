@@ -4,7 +4,7 @@ import shutil
 from collections.abc import Iterable
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Protocol, Self, Iterator, BinaryIO
+from typing import Protocol, Self, Iterator, IO
 from zipfile import ZipInfo, ZipFile, Path as ZipPath, is_zipfile
 
 from library.asserts import require
@@ -29,21 +29,21 @@ def _ensure_not_a_directory(path: str | ZipInfo | Path | ZipPath, message: str =
 
 
 class SourceProtocol(Protocol):
-    def getinfo(self, path: str | Path | ZipPath) -> ZipInfo | None: ...
-    def getpath(self, path: str | Path | ZipPath) -> Path | ZipPath: ...
+    def getinfo(self, path: str | ZipInfo) -> ZipInfo | None: ...
+    def getpath(self, path: str | ZipInfo) -> Path | ZipPath: ...
 
     def infolist(self) -> list[ZipInfo]: ...
-    def pathlist(self) -> list[Path | ZipPath]: ...
+    def pathlist(self) -> list[Path] | list[ZipPath]: ...
     def namelist(self) -> list[str]: ...
 
-    def read_text(self, path: str | ZipInfo | Path | ZipPath) -> str: ...
-    def read_bytes(self, path: str | ZipInfo | Path | ZipPath) -> bytes: ...
+    def read_text(self, path: str | ZipInfo) -> str: ...
+    def read_bytes(self, path: str | ZipInfo) -> bytes: ...
 
     @contextmanager
     def open(self) -> Iterator[Self]: ...
 
     @contextmanager
-    def open_stream(self, path: str | ZipInfo | Path | ZipPath) -> Iterator[BinaryIO]: ...
+    def open_stream(self, path: str | ZipInfo) -> Iterator[IO[bytes]]: ...
 
     def extract(self, destination: str | Path, member: str | ZipInfo) -> str:
         """Copy one file to an exact filename or into an existing directory.
@@ -99,10 +99,10 @@ class DirectorySource(SourceProtocol):
 
     def infolist(self) -> list[ZipInfo]:
         if self.skip_dirs:
-            return [self.getinfo(file) for file in self.root.rglob("*") if not file.is_dir()]
-        return [self.getinfo(file) for file in self.root.rglob("*")]
+            return [require(self.getinfo(file), str(file)) for file in self.root.rglob("*") if not file.is_dir()]
+        return [require(self.getinfo(file), str(file)) for file in self.root.rglob("*")]
 
-    def getpath(self, path: str | Path | ZipPath) -> Path:
+    def getpath(self, path: str | Path | ZipInfo) -> Path:
         return self._to_absolute_path(path)
 
     def pathlist(self) -> list[Path]:
@@ -126,7 +126,7 @@ class DirectorySource(SourceProtocol):
         logger.debug(f"{self} closing")
 
     @contextmanager
-    def open_stream(self, path: str | ZipInfo | Path) -> Iterator[BinaryIO]:
+    def open_stream(self, path: str | ZipInfo | Path) -> Iterator[IO[bytes]]:
         filepath = self._require_file_path(path)
         with filepath.open("rb") as stream:
             yield stream
@@ -140,8 +140,8 @@ class DirectorySource(SourceProtocol):
         logger.info(f"{self} extract_all({repr(destination)}, {exclude_members=})")
         ignore = None
         if exclude_members is not None:
-            exclude_members = [self._to_absolute_path(m) for m in exclude_members]
-            ignore = ignore_absolute_paths(absolute_paths=exclude_members)
+            excluded_paths = [self._to_absolute_path(m) for m in exclude_members]
+            ignore = ignore_absolute_paths(absolute_paths=excluded_paths)
         shutil.copytree(src=self.root, dst=destination, dirs_exist_ok=True, ignore=ignore)
 
 
@@ -222,7 +222,7 @@ class ZipFileSource(SourceProtocol):
             yield self
 
     @contextmanager
-    def open_stream(self, path: str | ZipInfo | ZipPath) -> Iterator[BinaryIO]:
+    def open_stream(self, path: str | ZipInfo | ZipPath) -> Iterator[IO[bytes]]:
         with self.open():
             info = self._require_file_info(path)
             with self.zip_file.open(info, "r") as stream:

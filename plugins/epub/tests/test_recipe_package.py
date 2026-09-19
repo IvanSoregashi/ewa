@@ -41,6 +41,7 @@ def test_relocate_remove_font_sync_package(tmp_path: Path):
     # font removal: manifest item first (manifest needs the resource to build),
     # then the resource itself; the package document is synced into the opf resource
     fonts = epub.resources.by_path("OEBPS/fonts/SerenePanda.ttf")
+    assert fonts is not None
     epub.package.remove_resource(fonts)
 
     out = tmp_path / "out.epub"
@@ -72,6 +73,7 @@ def test_replace_links_updates_href_and_media_type(tmp_path: Path):
     relocate_package(epub)
 
     image = epub.resources.by_path("OEBPS/images/pic.png")
+    assert image is not None
     epub.resources.rename(image, "OEBPS/images/pic.jpg")
     assert image.media_type == "image/jpeg"
 

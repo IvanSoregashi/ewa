@@ -82,7 +82,7 @@ def normalize_path(path: StrPathT) -> StrPathT:
         The normalized path.
     """
     cls = type(path)
-    absolute = os.path.normpath(path)
+    absolute = os.path.normpath(str(path))
     return cls(absolute)
 
 

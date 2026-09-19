@@ -5,7 +5,7 @@ General text and link editing lives in library.epub.html_editing.
 
 from dataclasses import dataclass
 from lxml import etree
-from lxml.html import HtmlElement, document_fromstring
+from lxml.html import document_fromstring
 from library.epub.resources import Resource
 from library.epub.utils_href import posix_absolute_href, posix_relative_href
 
@@ -27,24 +27,26 @@ class VideoTagInfo:
     alt: str = ""
 
 
-def _video_element(img: HtmlElement, info: VideoTagInfo, document_path: str) -> HtmlElement:
+def _video_element(img: etree._Element, info: VideoTagInfo, document_path: str) -> etree._Element:
     """Build the device-validated video tag (Moon+/BOOX) in the img's namespace:
     src + poster + controls + preload, with <source> and <img> children."""
     namespace = etree.QName(img).namespace
     ns = f"{{{namespace}}}" if namespace else ""
     video = etree.Element(f"{ns}video")
-    video.set("src", posix_relative_href(document_path, info.video_path))
-    video.set("poster", posix_relative_href(document_path, info.poster_path))
+    video_href = posix_relative_href(document_path, info.video_path)
+    poster_href = posix_relative_href(document_path, info.poster_path)
+    video.set("src", video_href)
+    video.set("poster", poster_href)
     video.set("controls", "controls")
     video.set("preload", "metadata")
     video.set("width", str(info.width))
     video.set("height", str(info.height))
     video.set("style", "max-width:100%")
     source = etree.SubElement(video, f"{ns}source")
-    source.set("src", video.get("src"))
+    source.set("src", video_href)
     source.set("type", "video/mp4")
     poster = etree.SubElement(video, f"{ns}img")
-    poster.set("src", video.get("poster"))
+    poster.set("src", poster_href)
     poster.set("alt", info.alt)
     return video
 
@@ -61,7 +63,7 @@ def replace_gifs_with_videos(
     Returns the number of replaced images.
     """
     try:
-        html: HtmlElement = etree.fromstring(resource.content, _xml_parser)
+        html: etree._Element = etree.fromstring(resource.content, _xml_parser)
     except etree.XMLSyntaxError:
         html = document_fromstring(resource.content)
 

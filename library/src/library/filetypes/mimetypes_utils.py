@@ -58,7 +58,8 @@ def write_mime_types(data: dict[str, str], file: str | Path | None = None) -> st
 
     padding = max_mimetype_len + 4
 
-    mimetypes = io.StringIO(newline="\n")
+    buffer = io.StringIO(newline="\n")
+    mimetypes = buffer
     try:
         if file is not None:
             mimetypes = Path(file).open(mode="w", encoding="utf-8", newline="\n")
@@ -85,7 +86,7 @@ def write_mime_types(data: dict[str, str], file: str | Path | None = None) -> st
         if file is not None:
             mimetypes.close()
 
-    return mimetypes.getvalue() if file is None else None
+    return buffer.getvalue() if file is None else None
 
 
 @contextmanager

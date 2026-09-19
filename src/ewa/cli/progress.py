@@ -74,7 +74,7 @@ class DisplayProgress(Progress):
 
 def track_batch_queue(
     queue: Queue[T], terminator: object, name: str = "queue", batch_size: int = 1000
-) -> Iterable[tuple[T]]:
+) -> Iterable[tuple[T, ...]]:
     task_name = f"[cyan]Writing {name}"
     processed = 0
     start_time = time.time()

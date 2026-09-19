@@ -46,6 +46,7 @@ def test_declarations_roundtrip_and_existing_removal_api():
     manifest.add_item("a", "a.xhtml", "text/html", fallback="b", overlay="audio")
     parsed = Manifest.from_xml(manifest.to_xml())
     item = parsed.find_item(fallback="b", overlay="audio")
+    assert item is not None
     assert item.id == "a"
     parsed.remove_item(item=item)
     assert parsed.items == []

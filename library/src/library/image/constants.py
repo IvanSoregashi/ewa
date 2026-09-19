@@ -72,7 +72,7 @@ class ImageMode(StrEnum):
     CMYK = "CMYK"
     F = "F"
     HSV = "HSV"
-    I = "I"
+    I = "I"  # noqa: E741 - Pillow's integer-pixel mode name.
     I16 = "I;16"
     I16B = "I;16B"
     I16L = "I;16L"

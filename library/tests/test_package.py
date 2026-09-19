@@ -127,7 +127,9 @@ def test_discovery_retains_container_and_relocation_survives_export(tmp_path):
     epub.package_into(output)
     reopened = EPUB(output).package
     assert reopened.resource.filename == "package/book.opf"
-    assert reopened.resource_for_href(reopened.document.manifest.items[0].href).content == b"<html/>"
+    resource = reopened.resource_for_href(reopened.document.manifest.items[0].href)
+    assert resource is not None
+    assert resource.content == b"<html/>"
 
 
 def test_relocation_collision_preserves_documents(tmp_path):
@@ -163,7 +165,9 @@ def test_missing_container_created_and_exported(tmp_path, relocate):
     epub.package_into(output)
     reopened = EPUB(output).package
     assert reopened.container.opf_path == package.resource.filename
-    assert reopened.resource_for_href(reopened.document.manifest.items[0].href).content == b"<html/>"
+    resource = reopened.resource_for_href(reopened.document.manifest.items[0].href)
+    assert resource is not None
+    assert resource.content == b"<html/>"
     with ZipFile(output) as archive:
         assert archive.namelist().count("META-INF/container.xml") == 1
     assert "META-INF/container.xml" not in epub.source.namelist()
@@ -221,6 +225,7 @@ def test_repeated_relocation_keeps_targets_and_content(tmp_path):
         epub.package_into(output)
         reopened = EPUB(output).package
         assert reopened.resource.filename == new_path
+        assert reopened.document.guide is not None
         assert reopened.document.guide.references[0].href == guide.href
         assert reopened.document.spine.itemrefs[0].idref == "chapter"
         assert reopened.document.metadata.title == "Original"

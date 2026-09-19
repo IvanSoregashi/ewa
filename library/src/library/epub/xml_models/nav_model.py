@@ -1,3 +1,4 @@
+from pydantic_xml.element import SearchMode
 from pydantic_xml import BaseXmlModel, attr, element
 from library.epub.epub_namespaces import NamespacePrefix
 from library.xml.document_pydantic import XMLDocumentModel
@@ -42,7 +43,7 @@ class NavLink(Inline, tag="a"):
     href: str = attr()
 
 
-class NavListItem(CommonAttributes, tag="li", search_mode="unordered"):
+class NavListItem(CommonAttributes, tag="li", search_mode=SearchMode.UNORDERED):
     link: NavLink | None = element(tag="a", default=None)
     span: NavInline | None = element(tag="span", default=None)
     ol: NavList | None = element(tag="ol", default=None)
@@ -77,7 +78,7 @@ NavListItem.model_rebuild()
 NavList.model_rebuild()
 
 
-class NavElement(CommonAttributes, tag="nav", search_mode="unordered"):
+class NavElement(CommonAttributes, tag="nav", search_mode=SearchMode.UNORDERED):
     h1: NavHeading | None = element(tag="h1", default=None)
     h2: NavHeading | None = element(tag="h2", default=None)
     h3: NavHeading | None = element(tag="h3", default=None)  # 1
@@ -108,22 +109,22 @@ class BlockElement(CommonAttributes):
         return self.navs[0] if self.navs else None
 
 
-class Div(BlockElement, tag="div", search_mode="unordered"): ...
+class Div(BlockElement, tag="div", search_mode=SearchMode.UNORDERED): ...
 
 
-class Section(BlockElement, tag="section", search_mode="unordered"): ...
+class Section(BlockElement, tag="section", search_mode=SearchMode.UNORDERED): ...
 
 
-class Article(BlockElement, tag="article", search_mode="unordered"): ...
+class Article(BlockElement, tag="article", search_mode=SearchMode.UNORDERED): ...
 
 
-class Header(BlockElement, tag="header", search_mode="unordered"): ...
+class Header(BlockElement, tag="header", search_mode=SearchMode.UNORDERED): ...
 
 
-class Footer(BlockElement, tag="footer", search_mode="unordered"): ...
+class Footer(BlockElement, tag="footer", search_mode=SearchMode.UNORDERED): ...
 
 
-class Body(BlockElement, tag="body", search_mode="unordered"): ...
+class Body(BlockElement, tag="body", search_mode=SearchMode.UNORDERED): ...
 
 
 BlockElement.model_rebuild()
@@ -152,7 +153,7 @@ class HeadStyle(BaseXmlModel, tag="style", nsmap=NAV_NSMAP):
     text: str | None = None
 
 
-class Head(CommonAttributes, tag="head", search_mode="unordered"):
+class Head(CommonAttributes, tag="head", search_mode=SearchMode.UNORDERED):
     title: str | None = element(tag="title", default=None)
     metas: list[HeadMeta] = element(tag="meta", default=[])
     links: list[HeadLink] = element(tag="link", default=[])

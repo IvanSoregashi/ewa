@@ -40,6 +40,7 @@ dev = [
     "pandas-stubs>=3.0.3.260530",
     "seaborn>=0.13.2",
     "matplotlib>=3.10.9",
+    "types-lxml>=2026.2.16",
 ]
 
 [project.scripts]

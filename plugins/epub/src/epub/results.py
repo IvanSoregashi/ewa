@@ -16,18 +16,24 @@ from library.epub.resources import IndexInfo
 from library.image.models import ImageOptimizationResult
 
 
-def byte_size_to_mb_str(size: int) -> str:
+def byte_size_to_mb_str(size: int | None) -> str:
+    if size is None:
+        return "N/A"
     return f"{size / 1024 / 1024:.2f} MB"
 
 
-def format_sizes(info: IndexInfo) -> str:
+def format_sizes(info: IndexInfo | None) -> str:
+    if info is None:
+        return "N/A"
     string = byte_size_to_mb_str(info.compress_size)
     if info.compress_size != info.total_size:
         string += f" ({byte_size_to_mb_str(info.total_size)})"
     return string
 
 
-def percent_of(size_of: int, size_to: int) -> str:
+def percent_of(size_of: int | None, size_to: int | None) -> str:
+    if size_of is None or size_of == 0 or size_to is None:
+        return "N/A"
     return f"{round(size_to / size_of * 100):>03}%"
 
 
@@ -68,29 +74,32 @@ class EpubOperationResult(OperationResult):
         if self.success:
             original_epub = require(original_epub)
             new_epub = require(self.new_epub)
-            o_size = original_epub.total.compress_size
-            n_size = new_epub.total.compress_size
-            size_reduction = o_size - n_size
+            o_size = original_epub.total.compress_size if original_epub.total is not None else None
+            n_size = new_epub.total.compress_size if new_epub.total is not None else None
+            size_reduction = o_size - n_size if o_size is not None and n_size is not None else None
 
             def make_dict(
                 name: str,
-                original_index_info: IndexInfo,
-                new_index_info: IndexInfo,
+                original_index_info: IndexInfo | None,
+                new_index_info: IndexInfo | None,
             ) -> dict:
-                count = str(original_index_info.count)
-                if new_index_info.count != original_index_info.count:
-                    count += f" -> {new_index_info.count}"
-
-                local_size_reduction = original_index_info.compress_size - new_index_info.compress_size
+                old_count = original_index_info.count if original_index_info is not None else None
+                new_count = new_index_info.count if new_index_info is not None else None
+                count = str(old_count) if old_count is not None else "N/A"
+                if new_count != old_count:
+                    count += f" -> {new_count if new_count is not None else 'N/A'}"
+                old_size = original_index_info.compress_size if original_index_info is not None else None
+                new_size = new_index_info.compress_size if new_index_info is not None else None
+                local_size_reduction = old_size - new_size if old_size is not None and new_size is not None else None
 
                 return {
                     "name": name,
                     "count": count,
                     "original_size": format_sizes(original_index_info),
                     "new_size": format_sizes(new_index_info),
-                    "reduction (%)": percent_of(original_index_info.compress_size, new_index_info.compress_size),
+                    "reduction (%)": percent_of(old_size, new_size),
                     "reduction (MB)": byte_size_to_mb_str(local_size_reduction),
-                    "% of total": f"{percent_of(o_size, original_index_info.compress_size)} -> {percent_of(n_size, new_index_info.compress_size)}",
+                    "% of total": f"{percent_of(o_size, old_size)} -> {percent_of(n_size, new_size)}",
                     "% of total reduction": percent_of(size_reduction, local_size_reduction),
                 }
 
@@ -128,5 +137,7 @@ class EpubOperationResult(OperationResult):
         if self.success:
             original_epub = require(original_epub)
             new_epub = require(self.new_epub)
-            percent = percent_of(original_epub.total.compress_size, new_epub.total.compress_size)
+            old_size = original_epub.total.compress_size if original_epub.total is not None else None
+            new_size = new_epub.total.compress_size if new_epub.total is not None else None
+            percent = percent_of(old_size, new_size)
             print_success(f"{mb_size:>09} REDUCED TO {percent} {ori_path!s}")

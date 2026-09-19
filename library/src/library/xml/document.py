@@ -2,12 +2,11 @@ import logging
 from io import BytesIO
 from os import PathLike
 from pathlib import Path
-from typing import Type, TypeVar
+from typing import Self
 from library.xml.utils import etree_from_bytes
 from lxml import etree
 
 logger = logging.getLogger(__name__)
-T = TypeVar("T")
 
 
 class XMLDocument:
@@ -21,7 +20,7 @@ class XMLDocument:
         skip_empty: bool = False,
         exclude_none: bool = False,
         exclude_unset: bool = False,
-    ) -> etree.Element:
+    ) -> etree._Element:
         logger.error("NotImplemented method `to_xml` of XMLDocument was called.")
         raise NotImplementedError()
 
@@ -36,16 +35,16 @@ class XMLDocument:
         return BytesIO(self.to_xml_bytes())
 
     @classmethod
-    def from_xml_tree(cls: Type[T], root: etree.Element) -> T:
+    def from_xml_tree(cls, root: etree._Element) -> Self:
         logger.error("NotImplemented method `from_xml_tree` of XMLDocument was called.")
         raise NotImplementedError()
 
     @classmethod
-    def from_xml_bytes(cls: Type[T], xml_bytes: bytes) -> T:
+    def from_xml_bytes(cls, xml_bytes: bytes) -> Self:
         root = etree_from_bytes(xml_bytes)
         return cls.from_xml_tree(root=root)
 
     @classmethod
-    def from_path(cls: Type[T], path: str | PathLike) -> T:
+    def from_path(cls, path: str | PathLike) -> Self:
         xml_bytes = Path(path).read_bytes()
         return cls.from_xml_bytes(xml_bytes)

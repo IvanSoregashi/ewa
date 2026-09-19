@@ -85,6 +85,7 @@ def test_configured_checks_chain_and_short_circuit(tmp_path):
         result = check.verify(epub)
         if not result.passed:
             break
+    assert isinstance(check, SerenePanda)
     assert check.skip_reason == EpubSkipReason.SERENE_PANDA_FONT
     assert "font not found" in result.details
     assert reached == []

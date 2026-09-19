@@ -101,7 +101,9 @@ def test_encoded_paths_survive_relocation_export_and_reopen(tmp_path):
     epub.package_into(output)
     reopened = EPUB(output).package
     assert reopened.resource.filename == epub.package.resource.filename
-    assert reopened.resource_for_href(reopened.document.manifest.items[0].href).content == b"chapter"
+    resource = reopened.resource_for_href(reopened.document.manifest.items[0].href)
+    assert resource is not None
+    assert resource.content == b"chapter"
     assert reopened.relocate("content.opf")
 
 

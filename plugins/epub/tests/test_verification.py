@@ -185,7 +185,7 @@ def test_reuse_returns_independent_findings_without_book_analytics(tmp_path, mon
     assert success.passed and success.details == ""
     assert not hasattr(check, "epub_info")
     with pytest.raises(FrozenInstanceError):
-        failure.passed = True
+        failure.passed = True  # ty: ignore[invalid-assignment] - Test frozen dataclass enforcement.
 
 
 def test_mimetype_check_handles_missing_compressed_and_valid(tmp_path):

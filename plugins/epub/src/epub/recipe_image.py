@@ -54,11 +54,12 @@ def perform_image_optimization(
             return result
 
         if new_image_info.format is ImageFormat.JPEG and result.original_image.format is ImageFormat.PNG:
-            result.new_image.path = str(PurePosixPath(resource.filename).with_suffix(".jpg"))
+            new_path = str(PurePosixPath(resource.filename).with_suffix(".jpg"))
+            new_image_info.path = new_path
             if resources is not None:
-                resources.rename(resource, new_image_info.path)
+                resources.rename(resource, new_path)
             else:
-                resource.filename = new_image_info.path
+                resource.filename = new_path
         resource.content = buffer.getvalue()
 
     return result

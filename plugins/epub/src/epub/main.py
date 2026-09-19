@@ -42,12 +42,13 @@ def get_config(key: str = typer.Argument("")):
 def set_config(key: str = typer.Option("", "-k"), value: str = typer.Option("", "-v")):
     try:
         print_success("before change: " + repr(getattr(settings, key, "not-found")))
+        parsed_value: str | bool = value
         match value.lower():
             case "false":
-                value = False
+                parsed_value = False
             case "true":
-                value = True
-        setattr(settings, key, value)
+                parsed_value = True
+        setattr(settings, key, parsed_value)
         print_success("after change: " + repr(getattr(settings, key, "not-found")))
     except Exception as e:
         print_error(str(e))
@@ -92,7 +93,6 @@ def image_log(epub_path: Path = typer.Argument(exists=True)):
 
 @app.command("move-sp")
 def move_serene_panda_encrypted_separately():
-    epub_dir = settings.epub_dir
     start_time = time.time()
     skipped = 0
     moved = 0
@@ -155,9 +155,7 @@ def move_not_epubs():
     destination.mkdir(parents=True, exist_ok=True)
     start_time = time.time()
     moved = 0
-    sync_dir = Path(r"C:\Users\Ivan\Sync\Books")
     dirs = list(epub_dir.rglob("*"))
-    # dirs = list(sync_dir.rglob("*.epub"))
 
     for file in dirs:
         if file.is_dir():

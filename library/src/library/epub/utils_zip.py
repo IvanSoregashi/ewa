@@ -20,7 +20,8 @@ def zip_info_now(date_time: datetime | None = None) -> tuple[int, int, int, int,
 
 def timestamp_from_zipinfo(zipinfo: ZipInfo) -> int:
     """Get timestamp from zipinfo via time.mktime."""
-    return int(time.mktime(zipinfo.date_time + (0, 0, -1)))  # Add dummy values for day of week, etc.
+    year, month, day, hour, minute, second = zipinfo.date_time
+    return int(time.mktime((year, month, day, hour, minute, second, 0, 0, -1)))
 
 
 def timestamp_from_zip_info(zip_info: ZipInfo) -> int:
