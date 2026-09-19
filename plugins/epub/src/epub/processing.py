@@ -75,7 +75,8 @@ class ProcessingContext:
             self._exit_stack.close()
         except Exception as cleanup_error:
             if exc is not None and not isinstance(exc, Exception):
-                return False  # Preserve an interrupt even if cleanup also failed.
+                # preserving KeyboardInterrupt or SystemExit
+                return False
             details = f"Closing EPUB: {cleanup_error!r}"
             if exc is not None:
                 details = f"{exc!r}\n{details}"
@@ -87,6 +88,7 @@ class ProcessingContext:
         elif isinstance(exc, Exception):
             self.result = self.outcome(error=EpubErrorReason.UNKNOWN, details=repr(exc))
         elif exc is not None:
+            # preserving KeyboardInterrupt or SystemExit
             return False
         elif self._new_epub is None:
             self.result = self.outcome(
