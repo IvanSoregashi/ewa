@@ -6,8 +6,8 @@ This document records EPUB design contracts for the reusable library and its wor
 Implementation order and completion status live in [EPUB_TODO.md](EPUB_TODO.md);
 contributor instructions live in [AGENTS.md](../AGENTS.md).
 
-The inventory/package foundation and the per-book context prototype are implemented.
-Automatic context lifetime management and outcomes are agreed next work, not current behavior.
+The inventory/package foundation, per-book context, and automatic lifecycle outcomes are implemented.
+Migrating existing operation/check signatures to accept the context is the next step.
 The processing-run schema, recorder, and full recipe migration remain pending.
 
 ## Responsibilities
@@ -58,7 +58,7 @@ Workflow `recipe_*` modules and verification contracts belong to the plugin.
 
 One context belongs to one book and one recipe call, created inside its worker.
 Operations run sequentially. The context holds the live EPUB, original book information,
-a shared old-path-to-new-path replacement mapping, ordered findings, and one analytics list.
+a shared old-path-to-new-path replacement mapping and one analytics list.
 An empty replacement mapping means no work; no separate “not run” state is needed.
 
 Most operations produce no analytics. Those that do append unsaved SQLModel table instances,
@@ -73,24 +73,25 @@ There is no database session, engine, arbitrary shared-state dictionary, or oper
 - VerificationResult is an immutable `(passed, details)` dataclass, fresh for each call. Check instances retain configuration, not per-book state.
 - Output validation is separate from eligibility: invalid exported output produces an error, not a skip.
 
-### Context lifetime and outcomes: agreed target
+### Context lifetime and outcomes
 
-- The context manager keeps the EPUB open during processing and reliably releases its source scope.
-- A failed check aborts the processing block; returning `False` alone is insufficient. A private control-flow exception is a possible implementation, not a required public API.
-- Ordinary processing failures automatically produce an error outcome with diagnostics. Earlier findings and analytics survive. Failure does not roll back in-memory edits.
-- Interrupts such as KeyboardInterrupt propagate. Opening failures need explicit handling because a failed `__enter__` is not followed by `__exit__`.
-- Success is explicit after export and output validation. Normal block exit alone must not imply success; the exact missing-completion behavior is to be settled with the lifecycle API.
-- Return EpubOperationResult with book information, findings, diagnostics, and analytics. Exclude the context, live EPUB/source/resources, and working replacement mapping.
+- Enter an empty `ProcessingContext`, then call `context.open_epub(path)` inside the block. It constructs the EPUB, keeps its source open, and captures original information before editing. Cleanup is registered before metadata reading; each context opens only one book.
+- `context.verify(check)` consumes the immediate result and aborts the block on failure through a private control-flow exception. The skip outcome retains its reason and details; passed checks are not accumulated in a findings list.
+- Ordinary processing failures automatically produce an error outcome with diagnostics. Earlier analytics survive. Failure does not roll back in-memory edits.
+- Construction, opening, and metadata failures become error outcomes without an outer handler. The outcome retains `input_path`; `original_epub` is `None` if information capture failed. No fallback file reads or invented metadata are needed. Interrupts such as KeyboardInterrupt still propagate.
+- `context.succeed(new_info)` marks verified output; `context.result` is finalized after source cleanup. Later failures override success. Normal exit without completion produces an UNKNOWN error. Use a fresh context for each book and enter it once per recipe call; this is a convention, without a re-entry guard or reset machinery.
+- Return EpubOperationResult with book information, diagnostics, and analytics. Exclude the context, live EPUB/source/resources, and working replacement mapping.
 
 ### Current prototype and migration compatibility
 
-`ProcessingContext.outcome()` currently creates the existing EpubOperationResult manually.
-It copies findings/analytics lists while sharing record objects and book information;
+`ProcessingContext.outcome()` remains a manual outcome builder used by the lifecycle methods.
+It copies the analytics list while sharing record objects and book information;
 those shared objects must no longer be edited after handoff.
 
-The context currently has no context-manager behavior. Existing operation/check signatures
-and the Panda recipe remain on the legacy path. EpubOperationResult retains `image_results`
-for that path. The legacy recorder does not yet persist the new findings, details, or analytics.
+The context's check entry point temporarily calls `check.verify(epub)`. Existing operation/check
+signatures and the Panda recipe remain on the legacy path. EpubOperationResult retains `image_results`
+for that path. The legacy recorder does not yet persist details or the new analytics list.
+It also assumes original book information exists; persistence of setup failures awaits the run schema.
 Local pickle tests do not establish actual Windows process-pool transport.
 
 ## Persistence and compatibility

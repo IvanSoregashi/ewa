@@ -1,7 +1,7 @@
 """Configured verification steps for plugin recipes.
 
 Checks cover workflow eligibility and selected EPUB/XML conditions; no single
-check establishes full publication validity. Findings leave skip decisions to the calling recipe.
+check establishes full publication validity. Failed eligibility checks skip the book.
 """
 
 import io

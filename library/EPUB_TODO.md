@@ -1,7 +1,7 @@
 # EPUB architecture TODO
 
 Work is ordered by dependency and intended execution. Complete one migration step per
-reviewable change while keeping affected callers working. The next step is **3**.
+reviewable change while keeping affected callers working. The next step is **4**.
 Design contracts and open decisions are in [EPUB_SPECIFICATION.md](EPUB_SPECIFICATION.md);
 working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
@@ -28,17 +28,17 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
 ### 2. Introduce a small per-book context
 
-- [x] Add ProcessingContext with live EPUB, original information, replacements, findings, and one unsaved SQLModel analytics list.
+- [x] Add ProcessingContext with live EPUB, original information, replacements, and one unsaved SQLModel analytics list.
 - [x] Document per-book ownership, sequential use, and empty replacements meaning no work.
-- [x] Reuse EpubOperationResult for success/skip/error outcomes retaining findings and analytics without live resources or rollback.
+- [x] Reuse EpubOperationResult for success/skip/error outcomes retaining diagnostics and analytics without live resources or rollback.
 - [x] Test independent contexts, outcomes, and local serialization while keeping the legacy recipe working.
 
 ### 3. Add context lifetime management and automatic outcomes
 
-- [ ] Implement context management that keeps the EPUB open and reliably releases its source scope, including explicit handling of opening failures.
-- [ ] Add the minimal check entry point: retain fresh findings, immediately stop on failure, and produce a skip with the configured reason and details. Update protocol documentation to remove warn/repair decision policies.
-- [ ] Automatically convert processing exceptions into error outcomes while retaining earlier evidence and propagating interrupts. Require explicit success after export/output validation; define behavior for missing completion.
-- [ ] Test source lifetime/cleanup, short-circuiting, opening/processing failures, retained evidence, interrupts, explicit success, and missing completion with synthetic books. Keep the legacy recipe working.
+- [x] Enter an empty context and call `open_epub(path)` inside its block to construct/open the EPUB and capture original information. Convert setup failures to outcomes with the input path and no invented metadata; reliably release acquired sources.
+- [x] Add the minimal check entry point: consume each check result, immediately stop on failure, and produce a skip with the configured reason and details. Update protocol documentation to remove warn/repair decision policies.
+- [x] Automatically convert processing exceptions into error outcomes while retaining earlier evidence and propagating interrupts. Require explicit success after export/output validation; define behavior for missing completion.
+- [x] Test source lifetime/cleanup, short-circuiting, construction/opening/metadata/processing failures, partial outcome reporting/serialization, retained evidence, interrupts, explicit success, and missing completion with synthetic books. Keep the legacy recipe working.
 
 ### 4. Prove the operation interface with simple steps
 
