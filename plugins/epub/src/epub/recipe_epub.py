@@ -72,7 +72,7 @@ def _fully_process_encrypted_panda(path: str) -> EpubOperationResult:
             # recipe_package.relocate_package(epub)
 
             for verification in (OPFPath(), SerenePanda()):
-                finding = verification.verify(epub)
+                finding = verification.verify_epub(epub)
                 if not finding.passed:
                     logger.warning("SKIP %s: %s", current_path, finding.details)
                     return EpubOperationResult(

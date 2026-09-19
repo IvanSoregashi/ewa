@@ -217,7 +217,7 @@ def test_check_exception_is_error_instead_of_skip(book_path):
     class BrokenCheck:
         skip_reason = EpubSkipReason.NOT_IMPLEMENTED
 
-        def verify(self, epub):
+        def verify(self, context):
             raise ValueError("Cannot inspect chapter")
 
     with ProcessingContext() as context:

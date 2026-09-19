@@ -3,6 +3,7 @@ resources and reports replacement entries that never matched any document.
 """
 
 from library.epub.epub import EPUB
+from epub.processing import ProcessingContext
 from library.epub.media_type import EpubRole, MediaType
 from epub.protocols import EpubOperation
 from library.epub.html_editing import replace_links, translate_text
@@ -25,7 +26,9 @@ def replace_links_in_htmls(resources: ResourceSelection, replacement_dict: dict[
     return {k: v for k, v in unmatched.items() if k not in replaced}
 
 
-class ReplaceLinks(EpubOperation):
+class ReplaceLinks:
+    """Legacy EPUB entry point; shared replacement mapping support is deferred."""
+
     def __init__(self, replacement_dict: dict[str, str]) -> None:
         self.replacement_dict = replacement_dict
 
@@ -42,8 +45,8 @@ class TextTranslator(EpubOperation):
     def __init__(self, replacement_dict: dict) -> None:
         self.replacement_dict = replacement_dict
 
-    def perform(self, epub: EPUB):
-        for resource in epub.resources.by_role(EpubRole.HTML):
+    def perform(self, context: ProcessingContext) -> None:
+        for resource in context.epub.resources.by_role(EpubRole.HTML):
             translate_text(resource, self.replacement_dict)
 
 
@@ -62,7 +65,8 @@ class RemoveResourceAndManifest(EpubOperation):
         self.path = path
         self.flush = flush
 
-    def perform(self, epub: EPUB):
+    def perform(self, context: ProcessingContext) -> None:
+        epub = context.epub
         resources = epub.resources
 
         if self.role is not None:

@@ -6,11 +6,13 @@ provides editing/parsing functions and does not depend on these workflow types.
 """
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 from epub.errors import EpubSkipReason
 from library.analytics import OperationResult
-from library.epub.epub import EPUB
 from library.epub.resources import Resource
+
+if TYPE_CHECKING:
+    from epub.processing import ProcessingContext
 
 
 @dataclass(frozen=True)
@@ -39,7 +41,7 @@ class EpubVerification(Protocol):
 
     skip_reason: EpubSkipReason
 
-    def verify(self, epub: EPUB) -> VerificationResult: ...
+    def verify(self, context: ProcessingContext) -> VerificationResult: ...
 
 
 class ResourceVerification(Protocol):
@@ -49,7 +51,7 @@ class ResourceVerification(Protocol):
 
 
 class EpubOperation(Protocol):
-    def perform(self, epub: EPUB): ...
+    def perform(self, context: ProcessingContext) -> None: ...
 
 
 class ResourceOperation(Protocol):

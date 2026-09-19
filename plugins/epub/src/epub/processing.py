@@ -11,7 +11,7 @@ from typing import Self
 from sqlmodel import SQLModel
 
 from epub.errors import EpubErrorReason, EpubSkipReason
-from epub.protocols import EpubVerification
+from epub.protocols import EpubOperation, EpubVerification
 from epub.results import EpubOperationResult
 from library.epub.epub import EPUB, EpubInfo
 
@@ -100,13 +100,14 @@ class ProcessingContext:
         return True
 
     def verify(self, check: EpubVerification) -> Self:
-        """A failed check aborts the with block as a skip.
-
-        Until checks migrate to verify(context), pass the live EPUB to them.
-        """
-        finding = check.verify(self.epub)
+        """A failed check aborts the with block as a skip."""
+        finding = check.verify(self)
         if not finding.passed:
             raise _SkipBook(check.skip_reason, finding.details)
+        return self
+
+    def perform(self, operation: EpubOperation) -> Self:
+        operation.perform(self)
         return self
 
     def succeed(self, new_info: EpubInfo) -> None:

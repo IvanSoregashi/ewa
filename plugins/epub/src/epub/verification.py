@@ -10,6 +10,7 @@ from zipfile import ZIP_STORED
 from lxml import etree
 from enum import StrEnum
 from library.epub.epub import EPUB
+from epub.processing import ProcessingContext
 from epub.protocols import EpubVerification, VerificationResult
 from epub.errors import EpubSkipReason
 from library.epub.media_type import FileName, EpubRole, MediaType
@@ -40,7 +41,11 @@ class SerenePanda(EpubVerification):
     def __init__(self, strict: bool = False) -> None:
         self.strict = strict
 
-    def verify(self, epub: EPUB) -> VerificationResult:
+    def verify(self, context: ProcessingContext) -> VerificationResult:
+        return self.verify_epub(context.epub)
+
+    def verify_epub(self, epub: EPUB) -> VerificationResult:
+        """Temporary entry point for the legacy Panda recipe."""
         strict_filename = FileName.SP_FONT
         filename = FileName.SP_FONT_LOWER_ENDSWITH
         with epub.keep_open():
@@ -76,7 +81,8 @@ class HasNoGiantGifs(EpubVerification):
     def __init__(self, threshold_mb: int = 5) -> None:
         self.threshold_mb = threshold_mb
 
-    def verify(self, epub: EPUB) -> VerificationResult:
+    def verify(self, context: ProcessingContext) -> VerificationResult:
+        epub = context.epub
         offenders = []
 
         with epub.keep_open():
@@ -102,7 +108,11 @@ class OPFPath(EpubVerification):
     def __init__(self, expected_path: str = "content.opf") -> None:
         self.expected_path = expected_path
 
-    def verify(self, epub: EPUB) -> VerificationResult:
+    def verify(self, context: ProcessingContext) -> VerificationResult:
+        return self.verify_epub(context.epub)
+
+    def verify_epub(self, epub: EPUB) -> VerificationResult:
+        """Temporary entry point for the legacy Panda recipe."""
         with epub.keep_open():
             actual_path = epub.package.resource.filename
             if actual_path != self.expected_path:
@@ -117,7 +127,8 @@ class MimetypeVerification(EpubVerification):
 
     skip_reason = EpubSkipReason.MIMETYPE_VERIFICATION
 
-    def verify(self, epub: EPUB) -> VerificationResult:
+    def verify(self, context: ProcessingContext) -> VerificationResult:
+        epub = context.epub
         filename = FileName.MIMETYPE
         with epub.keep_open():
             mmt_i = epub.source.getinfo(filename)
@@ -139,7 +150,8 @@ class ValidXMLChapters(EpubVerification):
     def __init__(self, count: int = 10) -> None:
         self.count = count
 
-    def verify(self, epub: EPUB) -> VerificationResult:
+    def verify(self, context: ProcessingContext) -> VerificationResult:
+        epub = context.epub
         with epub.keep_open():
             chapters = epub.resources.by_role(EpubRole.HTML)
             total_chapters = len(chapters)

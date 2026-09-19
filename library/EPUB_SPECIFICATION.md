@@ -7,8 +7,8 @@ Implementation order and completion status live in [EPUB_TODO.md](EPUB_TODO.md);
 contributor instructions live in [AGENTS.md](../AGENTS.md).
 
 The inventory/package foundation, per-book context, and automatic lifecycle outcomes are implemented.
-Migrating existing operation/check signatures to accept the context is the next step.
-The processing-run schema, recorder, and full recipe migration remain pending.
+Simple operations and eligibility checks now accept the context.
+The processing-run schema is next; the recorder and full recipe migration remain pending.
 
 ## Responsibilities
 
@@ -67,9 +67,9 @@ Most operations produce no analytics. Those that do append unsaved SQLModel tabl
 with models defined near their operation. Records contain data, not live resources.
 There is no database session, engine, arbitrary shared-state dictionary, or operation-specific result slot on the context.
 
-### Checks and operations: agreed target
+### Checks and operations
 
-- Keep uniformly chainable class interfaces: `verify(context)` and `perform(context)`. Low-level library functions need not become classes.
+- Checks implement `verify(context) -> VerificationResult`; operations implement `perform(context) -> None`. The context's `verify(check)` and `perform(operation)` methods return the context for chaining. Low-level library functions need not become classes.
 - Checks are eligibility gates. A failed verification immediately stops processing and produces a skip using the check's configured default `skip_reason` and fresh failure details.
 - Conditional transformations, including choosing to do nothing, belong inside operations. Checks do not choose operations or offer warn/repair policies.
 - VerificationResult is an immutable `(passed, details)` dataclass, fresh for each call. Check instances retain configuration, not per-book state.
@@ -91,9 +91,11 @@ There is no database session, engine, arbitrary shared-state dictionary, or oper
 It copies the analytics list while sharing record objects and book information;
 those shared objects must no longer be edited after handoff.
 
-The context's check entry point temporarily calls `check.verify(epub)`. Existing operation/check
-signatures and the Panda recipe remain on the legacy path. EpubOperationResult retains `image_results`
-for that path. The legacy recorder does not yet persist details or the new analytics list.
+Translation, resource removal, CSS cleanup, and eligibility checks use the context contracts.
+The Panda recipe temporarily calls `verify_epub(epub)` on its OPFPath and SerenePanda checks;
+its full migration is step 8. ReplaceLinks remains on its legacy interface until the shared
+replacement mapping is integrated in step 7. EpubOperationResult retains `image_results`
+for the legacy recipe. The legacy recorder does not yet persist details or the new analytics list.
 It also assumes original book information exists; persistence of setup failures awaits the run schema.
 Local pickle tests do not establish actual Windows process-pool transport.
 

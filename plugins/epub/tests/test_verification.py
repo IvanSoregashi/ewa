@@ -8,11 +8,12 @@ import zipfile
 from pathlib import Path
 
 from library.epub.epub import EPUB
+from epub.processing import ProcessingContext
 from library.epub.media_type import FileName
 from epub.verification import ValidXMLChapters, MimetypeVerification
 from epub.errors import EpubSkipReason
 from dataclasses import FrozenInstanceError
-from zipfile import ZIP_DEFLATED, ZipFile
+from zipfile import ZIP_DEFLATED
 import pytest
 
 VALID_CHAPTER = """<?xml version="1.0" encoding="utf-8"?>
@@ -28,7 +29,7 @@ BROKEN_CHAPTER = """<?xml version="1.0" encoding="utf-8"?>
 </html>"""
 
 
-def build_epub(path: Path, chapters: dict[str, str]) -> None:
+def build_epub(path: Path, chapters: dict[str, str], mimetype_compression: int | None = zipfile.ZIP_STORED) -> None:
     manifest_items = "\n".join(
         f'<item id="ch{i}" href="{name.removeprefix("OEBPS/")}" media-type="application/xhtml+xml"/>'
         for i, name in enumerate(chapters)
@@ -45,7 +46,8 @@ def build_epub(path: Path, chapters: dict[str, str]) -> None:
     container = """<?xml version="1.0" encoding="utf-8"?>
 <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>"""
     with zipfile.ZipFile(path, "w") as z:
-        z.writestr(FileName.MIMETYPE, "application/epub+zip", compress_type=zipfile.ZIP_STORED)
+        if mimetype_compression is not None:
+            z.writestr(FileName.MIMETYPE, "application/epub+zip", compress_type=mimetype_compression)
         z.writestr("META-INF/container.xml", container)
         z.writestr("OEBPS/content.opf", opf)
         for name, content in chapters.items():
@@ -62,7 +64,9 @@ def test_valid_xml_chapters_accepts_wellformed_xhtml(tmp_path: Path):
     build_epub(path, {"OEBPS/text/chapter.xhtml": VALID_CHAPTER})
 
     verification = ValidXMLChapters(count=1)
-    result = verification.verify(EPUB(path))
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        result = verification.verify(context)
     assert result.passed is True
     assert result.details == ""
 
@@ -74,7 +78,9 @@ def test_valid_xml_chapters_rejects_broken_chapter(tmp_path: Path):
     build_epub(path, {"OEBPS/text/chapter.xhtml": BROKEN_CHAPTER})
 
     verification = ValidXMLChapters(count=1)
-    result = verification.verify(EPUB(path))
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        result = verification.verify(context)
     assert result.passed is False
     assert "chapter.xhtml" in result.details
 
@@ -84,7 +90,9 @@ def test_valid_xml_chapters_rejects_empty_chapter(tmp_path: Path):
     build_epub(path, {"OEBPS/text/chapter.xhtml": ""})
 
     verification = ValidXMLChapters(count=1)
-    result = verification.verify(EPUB(path))
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        result = verification.verify(context)
     assert result.passed is False
     assert "chapter.xhtml" in result.details
 
@@ -96,7 +104,9 @@ def test_valid_xml_chapters_without_chapters_passes_vacuously(tmp_path: Path):
     build_epub(path, {})
 
     verification = ValidXMLChapters(count=1)
-    result = verification.verify(EPUB(path))
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        result = verification.verify(context)
     assert result.passed is True
 
 
@@ -109,7 +119,10 @@ def test_valid_xml_chapters_all_valid(tmp_path: Path):
     path = tmp_path / "book.epub"
     build_epub(path, {f"OEBPS/text/ch{i}.xhtml": VALID_CHAPTER for i in range(3)})
 
-    assert ValidXMLChapters().verify(EPUB(path)).passed is True  # default count covers all 3
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        result = ValidXMLChapters().verify(context)
+    assert result.passed is True  # default count covers all 3
 
 
 def test_valid_xml_chapters_collects_all_failures(tmp_path: Path):
@@ -126,7 +139,9 @@ def test_valid_xml_chapters_collects_all_failures(tmp_path: Path):
     )
 
     verification = ValidXMLChapters()
-    result = verification.verify(EPUB(path))
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        result = verification.verify(context)
     assert result.passed is False
 
     assert "2/3 of 3" in result.details
@@ -142,12 +157,16 @@ def test_valid_xml_chapters_checks_sample_size(tmp_path: Path):
     build_epub(path, {f"OEBPS/text/bad{i}.xhtml": BROKEN_CHAPTER for i in range(3)})
 
     verification = ValidXMLChapters(count=2)
-    result = verification.verify(EPUB(path))
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        result = verification.verify(context)
     assert result.passed is False
     assert "2/2 of 3" in result.details
 
     verification = ValidXMLChapters(count=10)  # count > available: all checked
-    result = verification.verify(EPUB(path))
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        result = verification.verify(context)
     assert result.passed is False
     assert "3/3 of 3" in result.details
 
@@ -160,7 +179,10 @@ def test_valid_xml_chapters_ignores_non_chapter_resources(tmp_path: Path):
     with zipfile.ZipFile(path, "a") as z:
         z.writestr("OEBPS/text/not_a_chapter.txt", "<this is not xml at all")
 
-    assert ValidXMLChapters().verify(EPUB(path)).passed is True
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        result = ValidXMLChapters().verify(context)
+    assert result.passed is True
 
 
 # ---------------------------------------------------------------------------
@@ -177,10 +199,13 @@ def test_reuse_returns_independent_findings_without_book_analytics(tmp_path, mon
     def no_analytics(*args, **kwargs):
         raise AssertionError("Checks must not collect book analytics")
 
-    monkeypatch.setattr(EPUB, "info", no_analytics)
     check = ValidXMLChapters()
-    failure = check.verify(EPUB(broken))
-    success = check.verify(EPUB(valid))
+    with ProcessingContext() as first, ProcessingContext() as second:
+        first.open_epub(broken)
+        second.open_epub(valid)
+        monkeypatch.setattr(EPUB, "info", no_analytics)
+        failure = check.verify(first)
+        success = check.verify(second)
     assert not failure.passed and "bad.xhtml" in failure.details
     assert success.passed and success.details == ""
     assert not hasattr(check, "epub_info")
@@ -191,14 +216,21 @@ def test_reuse_returns_independent_findings_without_book_analytics(tmp_path, mon
 def test_mimetype_check_handles_missing_compressed_and_valid(tmp_path):
     check = MimetypeVerification()
     path = tmp_path / "book.epub"
-    with ZipFile(path, "w") as archive:
-        archive.writestr("placeholder", b"")
-    assert "not found" in check.verify(EPUB(path)).details
-    with ZipFile(path, "w") as archive:
-        archive.writestr(FileName.MIMETYPE, b"application/epub+zip", compress_type=ZIP_DEFLATED)
-    assert "compressed" in check.verify(EPUB(path)).details
+    build_epub(path, {}, mimetype_compression=None)
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        missing = check.verify(context)
+    assert "not found" in missing.details
+    build_epub(path, {}, mimetype_compression=ZIP_DEFLATED)
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        compressed = check.verify(context)
+    assert "compressed" in compressed.details
     build_epub(path, {})
-    assert check.verify(EPUB(path)).passed
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        valid = check.verify(context)
+    assert valid.passed
 
 
 def test_moved_checks_keep_persisted_skip_codes():

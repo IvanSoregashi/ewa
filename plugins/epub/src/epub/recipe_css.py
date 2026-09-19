@@ -1,9 +1,18 @@
 import re
 
+from epub.processing import ProcessingContext
+from epub.protocols import EpubOperation
+from library.epub.media_type import EpubRole
 from library.epub.resources import Resource
 
 
 FONT_FACE = re.compile(r"@font-face\s*\{[^}]*\}")
+
+
+class CleanupPandaCSS(EpubOperation):
+    def perform(self, context: ProcessingContext) -> None:
+        for resource in context.epub.resources.by_role(EpubRole.STYLE):
+            de_panda_css_resource(resource)
 
 
 def cleanup_panda_line(content: bytes) -> bytes:

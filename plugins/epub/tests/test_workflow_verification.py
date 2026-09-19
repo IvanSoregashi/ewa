@@ -1,6 +1,6 @@
 import zipfile
 from pathlib import Path
-from library.epub.epub import EPUB
+from epub.processing import ProcessingContext
 from library.epub.media_type import FileName
 from epub.errors import EpubSkipReason
 from epub.verification import HasNoGiantGifs, OPFPath, SerenePanda
@@ -52,7 +52,9 @@ def test_has_no_giant_gifs_detects_oversized(tmp_path: Path):
         z.writestr("OEBPS/images/small.gif", b"\x00" * 1024)
 
     verification = HasNoGiantGifs()
-    result = verification.verify(EPUB(path))
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        result = verification.verify(context)
     assert result.passed is False
     assert "big.gif" in result.details
     assert "small.gif" not in result.details
@@ -65,7 +67,9 @@ def test_has_no_giant_gifs_passes_when_all_small(tmp_path: Path):
         z.writestr("OEBPS/images/small.gif", b"\x00" * 1024)
 
     verification = HasNoGiantGifs()
-    result = verification.verify(EPUB(path))
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        result = verification.verify(context)
     assert result.passed is True
     assert result.details == ""
 
@@ -73,36 +77,55 @@ def test_has_no_giant_gifs_passes_when_all_small(tmp_path: Path):
 def test_configured_checks_chain_and_short_circuit(tmp_path):
     path = tmp_path / "book.epub"
     build_epub(path, {})
-    epub = EPUB(path)
     reached = []
 
     class Sentinel:
-        def verify(self, epub):
+        skip_reason = EpubSkipReason.NOT_IMPLEMENTED
+
+        def verify(self, context):
             reached.append(True)
             return VerificationResult(True)
 
-    for check in (OPFPath("OEBPS/content.opf"), SerenePanda(), Sentinel()):
-        result = check.verify(epub)
-        if not result.passed:
-            break
-    assert isinstance(check, SerenePanda)
-    assert check.skip_reason == EpubSkipReason.SERENE_PANDA_FONT
-    assert "font not found" in result.details
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        wrong_path = OPFPath().verify(context)
+        for check in (OPFPath("OEBPS/content.opf"), SerenePanda(), Sentinel()):
+            context.verify(check)
+    assert context.result is not None
+    assert context.result.skip == EpubSkipReason.SERENE_PANDA_FONT
+    assert "font not found" in context.result.details
     assert reached == []
-    assert not OPFPath().verify(epub).passed
+    assert not wrong_path.passed
 
 
 def test_font_check_modes_and_reuse(tmp_path):
     path = tmp_path / "book.epub"
     build_epub(path, {})
-    epub = EPUB(path)
     check = SerenePanda(strict=True)
-    assert not check.verify(epub).passed
-    epub.resources.add(Resource.from_bytes(FileName.SP_FONT, b"font"))
-    assert check.verify(epub).passed
-    epub.resources.add(Resource.from_bytes("other.ttf", b"font"))
-    assert not check.verify(epub).passed
-    assert not SerenePanda().verify(epub).passed
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        missing = check.verify(context)
+        context.epub.resources.add(Resource.from_bytes(FileName.SP_FONT, b"font"))
+        matching = check.verify(context)
+        context.epub.resources.add(Resource.from_bytes("other.ttf", b"font"))
+        extra = check.verify(context)
+        relaxed = SerenePanda().verify(context)
+    assert not missing.passed
+    assert matching.passed
+    assert not extra.passed
+    assert not relaxed.passed
+
+
+def test_panda_recipe_legacy_checks_match_context_checks(tmp_path):
+    path = tmp_path / "book.epub"
+    build_epub(path, {})
+    comparisons = []
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        for check in (OPFPath(), OPFPath("OEBPS/content.opf"), SerenePanda()):
+            comparisons.append((check.verify_epub(context.epub), check.verify(context)))
+    assert len(comparisons) == 3
+    assert all(legacy == current for legacy, current in comparisons)
 
 
 def test_default_skip_reasons_can_be_overridden_per_instance():

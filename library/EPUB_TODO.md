@@ -1,7 +1,7 @@
 # EPUB architecture TODO
 
 Work is ordered by dependency and intended execution. Complete one migration step per
-reviewable change while keeping affected callers working. The next step is **4**.
+reviewable change while keeping affected callers working. The next step is **5**.
 Design contracts and open decisions are in [EPUB_SPECIFICATION.md](EPUB_SPECIFICATION.md);
 working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
@@ -42,9 +42,9 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
 ### 4. Prove the operation interface with simple steps
 
-- [ ] Establish uniform `perform(context)` and `verify(context)` contracts using the lifecycle API.
-- [ ] Migrate translation and resource-removal classes first, then CSS cleanup and Panda checks. Adapt callers or retain an explicit temporary legacy path until step 8.
-- [ ] Test ordered execution, failed-check termination, operation-owned conditional behavior, and direct context construction.
+- [x] Establish uniform `perform(context)` and `verify(context)` contracts using the lifecycle API.
+- [x] Migrate translation and resource-removal classes first, then CSS cleanup and Panda checks. Adapt callers or retain an explicit temporary legacy path until step 8.
+- [x] Test ordered execution, failed-check termination, operation-owned conditional behavior, and direct context construction.
 
 ### 5. Establish how analytics belong to a processing run
 
