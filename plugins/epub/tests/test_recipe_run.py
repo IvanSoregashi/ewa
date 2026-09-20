@@ -3,6 +3,7 @@ import random
 import sys
 from contextlib import contextmanager
 from io import BytesIO
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from zipfile import ZipFile
 
@@ -331,3 +332,55 @@ def test_move_problem_retains_original_and_successful_output(recipe, book_path, 
     else:
         assert not processed.exists()
         assert "Move failed" in caplog.text
+
+
+@pytest.mark.parametrize("phase", ["dry_run", "export", "output_validation"])
+def test_output_cleanup_failure_preserves_outcome_and_evidence(recipe, book_path, monkeypatch, caplog, phase):
+    original = book_path.read_bytes()
+    destination = recipe.settings.decrypted_epub_dir / book_path.name
+    unlink = Path.unlink
+
+    def fail_output_removal(path, *args, **kwargs):
+        if path == destination:
+            raise PermissionError("Output is locked")
+        return unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_output_removal)
+    if phase == "export":
+
+        def fail_export(epub, destination, **kwargs):
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(b"unfinished output")
+            raise OSError("Export failed")
+
+        monkeypatch.setattr(EPUB, "package_into", fail_export)
+    elif phase == "output_validation":
+        info = EPUB.info
+
+        def fail_validation(epub):
+            if epub.path == destination:
+                raise ValueError("Output invalid")
+            return info(epub)
+
+        monkeypatch.setattr(EPUB, "info", fail_validation)
+
+    run = recipe._fully_process_encrypted_panda(str(book_path), dry_run=phase == "dry_run")
+    assert run.success == (phase == "dry_run")
+    assert run.skip is None
+    assert run.original_epub is not None
+    assert len(run.analytics) == 1 and run.analytics[0].run_id == run.id
+    if phase == "dry_run":
+        assert run.error is None and run.details == ""
+        assert run.new_epub == EPUB(destination).info()
+        assert "FAILED TO REMOVE DRY-RUN OUTPUT" in caplog.text
+        assert "Output is locked" in caplog.text
+    else:
+        assert run.error == (
+            EpubErrorReason.INCORRECT_RESULT if phase == "output_validation" else EpubErrorReason.UNKNOWN
+        )
+        assert run.new_epub is None
+        assert {"export": "Export failed", "output_validation": "Output invalid"}[phase] in run.details
+        assert "Removing failed output: PermissionError('Output is locked')" in run.details
+    assert book_path.read_bytes() == original
+    assert destination.exists()
+    assert not (recipe.settings.processed_epub_dir / book_path.name).exists()

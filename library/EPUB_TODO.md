@@ -1,7 +1,8 @@
 # EPUB architecture TODO
 
 Work is ordered by dependency and intended execution. Complete one migration step per
-reviewable change while keeping affected callers working. The next step is **10**.
+reviewable change while keeping affected callers working. The ordered migration is complete;
+choose further work from the backlog below.
 Design contracts and open decisions are in [EPUB_SPECIFICATION.md](EPUB_SPECIFICATION.md);
 working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
@@ -93,10 +94,12 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
 ### 10. Integrate batch execution
 
-- [ ] Return the same outcomes/analytics from synchronous and ProcessPoolExecutor paths.
-- [ ] Test spawned workers with success/skip/error outcomes and related analytics, plus parent database failure; retain outcomes for worker failures.
-- [ ] Fix/document the synchronous behavior of `max_workers=None` versus its CPU-count docstring.
-- [ ] Validate the migrated batch path with the copied comparison books and saved analytics before increasing batch size; keep originals untouched.
+- [x] Document the retained synchronous behavior for `max_workers=None` and `0`; positive values use a process pool.
+- [x] Allow concurrent workers to create a shared output directory without a check/create race; add a deterministic regression test.
+- [x] Return the same outcomes/analytics from synchronous and ProcessPoolExecutor paths. Preserve process-pool submission/result failures as UNKNOWN outcomes instead of dropping books; synchronous dispatch calls the recipe directly.
+- [x] Keep dry-run deletion outside the processing context as nonfatal housekeeping; log deletion failures without changing success or analytics. Retain original error codes and analytics if failed-output removal also fails. Test cleanup failures and propagation of unexpected synchronous exceptions.
+- [x] Test real spawned workers with success/skip/error outcomes and related analytics, abrupt worker termination, submission failures, and parent database failure. Compare synchronous/spawned results and output bytes in normal and dry-run modes.
+- [x] Validate isolated copies of the six comparison books with two spawned workers and flush_size=2: all succeed with identical output bytes and saved analytics; 6 runs and 6,755 image records pass database integrity checks. Originals remain unchanged and the merged example stays excluded. Keep CLI batch sizing unchanged.
 
 ## Backlog after the migration
 

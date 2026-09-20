@@ -142,6 +142,9 @@ diagnostics were accepted without requiring exact legacy text. The comparison sc
 regression tests for the sole recipe, including missing manifest entries and combined processing/cleanup failures.
 Windows spawn tests now cover detached outcomes and unsaved image records for success, skip, error,
 and setup failure, followed by parent-side persistence into a temporary database.
+The actual batch dispatcher also matches synchronous outcomes and output bytes under spawn in normal
+and dry-run modes. A two-worker batch of the six supplied books matched the prior output bytes and
+persisted analytics, using isolated copies and a temporary database.
 
 ## Persistence and compatibility
 
@@ -155,9 +158,10 @@ and setup failure, followed by parent-side persistence into a temporary database
 - New writes use `epub_processing_runs` and `epub_image_optimizations`. Historical tables remain untouched, without automatic backfill or dual writes; old integer IDs are never reinterpreted as run UUIDs. Historical reporting must query those old tables explicitly. The legacy writer, outcome conversions, and table-wrapper classes are removed.
 - Persistence errors propagate without clearing the input batch. There are no automatic retries or upserts. Stable primary keys reject duplicate transient records; after an uncertain commit, inspect the database using the original run/record IDs before retrying. Do not generate new IDs merely to bypass a duplicate.
 - The recipe and its single/batch callers accept dry_run=False. Normal success keeps the validated output and moves the original to processed_epub_dir, preserving its relative path. An existing processed path or a move failure leaves the original in place, logs the problem, and retains the successful output.
-- dry_run=True preserves the test workflow: fully process and validate the EPUB, produce logs and analytics, leave the original in place, and delete generated output. It does not create processed directories. This is not a no-I/O/no-database mode; output metadata describes the generated file even though it is subsequently deleted. Processing errors remove unfinished/invalid output in either mode.
+- dry_run=True preserves the test workflow: fully process and validate the EPUB, produce logs and analytics, leave the original in place, and delete generated output. It does not create processed directories. This is not a no-I/O/no-database mode; output metadata describes the generated file even though it is subsequently deleted. Dry-run deletion happens after the processing context closes. Like original-file movement, it is housekeeping: deletion failures are logged and leave the successful outcome, output metadata, and analytics unchanged. Processing errors attempt to remove unfinished/invalid output in either mode; an OSError during removal is appended to the existing diagnostic without replacing its reason or analytics.
 - The decrypt and dd CLI commands expose -d / --dry_run and leave file handling to the recipes. Real-book comparisons use isolated copies and temporary analytics storage; disable dry_run when outputs need to be retained for inspection.
-- `max_workers=None` still takes the synchronous branch despite its CPU-count docstring; this remains a scheduled defect.
+- Batch execution runs synchronously for `max_workers=None` or `0`; positive values use that many workers. Pooled results arrive in completion order; compare by input path, not list position. Workers may create the same output directory concurrently.
+- Process-pool submission and result exceptions become parent-side UNKNOWN runs with input_path and diagnostics. Unreturned metadata/analytics cannot be recovered; these fallback runs leave them empty and do not infer completion or remove possible output. Successfully returned runs are still collected after submission failures. Synchronous dispatch calls the recipe directly: unexpected exceptions, caller-contract violations, and interrupts propagate. Pool-construction failures also propagate; there are no automatic retries.
 
 ## Deferred scope and open decisions
 

@@ -73,7 +73,6 @@ def verify_destination(destination: str | Path, filename: str, suffix: str | Non
     if destination.exists():
         raise FileExistsError(f"File {destination} already exists.")
 
-    if not destination.parent.exists():
-        destination.parent.mkdir(parents=True)
+    destination.parent.mkdir(parents=True, exist_ok=True)
 
     return destination

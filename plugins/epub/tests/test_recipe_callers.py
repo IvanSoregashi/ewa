@@ -110,7 +110,7 @@ def test_callers_process_and_persist_context_outcome(recipe, caller):
     assert not (recipe.settings.decrypted_epub_dir / path.name).exists()
 
 
-@pytest.mark.parametrize("max_workers", [0, 2])
+@pytest.mark.parametrize("max_workers", [0, 2, None])
 @pytest.mark.parametrize("has_eligible", [False, True])
 @pytest.mark.parametrize("dry_run", [False, True])
 def test_batch_filters_before_synchronous_work_or_pool_submission(

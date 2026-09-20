@@ -63,8 +63,11 @@ def _fully_process_encrypted_panda(path: str, *, dry_run: bool = False) -> Proce
     run = require(context.result)
     if not run.success:
         if run.error is not None:
+            try:
+                destination_path.unlink(missing_ok=True)
+            except OSError as error:
+                run.details += f"\nRemoving failed output: {error!r}"
             logger.error("EPUB FAIL %s: %s", path, run.details)
-            destination_path.unlink(missing_ok=True)
         else:
             logger.warning("SKIP %s: %s", path, run.details)
         return run
@@ -77,7 +80,10 @@ def move_the_files(current_path: Path, processed_path: Path, destination_path: P
     """Dry runs still process, validate, and record analytics; discard only their output."""
     if dry_run:
         logger.info("DRY RUN: leaving original %s in place; removing output %s", current_path, destination_path)
-        destination_path.unlink(missing_ok=True)
+        try:
+            destination_path.unlink(missing_ok=True)
+        except OSError as error:
+            logger.error("FAILED TO REMOVE DRY-RUN OUTPUT %s: %s", destination_path, error)
         return
 
     try:
