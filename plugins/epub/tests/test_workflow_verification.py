@@ -87,8 +87,7 @@ def test_configured_checks_chain_and_short_circuit(tmp_path):
     with ProcessingContext() as context:
         context.open_epub(path)
         wrong_path = OPFPath().verify(context)
-        for check in (OPFPath("OEBPS/content.opf"), SerenePanda(), Sentinel()):
-            context.verify(check)
+        context.verify(OPFPath("OEBPS/content.opf"), SerenePanda(), Sentinel())
     assert context.result is not None
     assert context.result.skip == EpubSkipReason.SERENE_PANDA_FONT
     assert "font not found" in context.result.details

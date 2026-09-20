@@ -85,7 +85,7 @@ There is no database session, engine, or arbitrary shared-state dictionary on th
 
 ### Checks and operations
 
-- Checks implement `verify(context) -> str | None`: None passes; a string is the failure message. Operations implement `perform(context) -> None`. The context's `verify(check)` and `perform(operation)` methods return the context for chaining. Low-level library functions need not become classes.
+- Checks implement `verify(context) -> str | None`: None passes; a string is the failure message. Operations implement `perform(context) -> None`. The context's `verify(*checks)` runs checks in order until the first failure; it and `perform(operation)` return the context for chaining. Low-level library functions need not become classes.
 - Checks are gates before or after transformations. A failed verification immediately stops processing and produces a skip using the check's configured default `skip_reason` and fresh failure details.
 - Conditional transformations, including choosing to do nothing, belong inside operations. Checks do not choose operations or offer warn/repair policies.
 - Check instances retain configuration and skip_reason, not per-book state. Callers test `is not None` so even an empty failure message stops processing.
@@ -95,7 +95,7 @@ There is no database session, engine, or arbitrary shared-state dictionary on th
 
 - Enter an empty `ProcessingContext`, then call `context.open_epub(path)` inside the block. It constructs the EPUB, keeps its source open, and captures original information before editing. Cleanup is registered before metadata reading; each context opens only one book.
 - `context.verify(check)` consumes the immediate result and aborts the block on failure through a private control-flow exception. The skip outcome retains its reason and details; passed checks are not accumulated in a findings list.
-- Ordinary processing failures automatically produce an error outcome with diagnostics, using context.error_reason (UNKNOWN by default). The recipe sets INCORRECT_RESULT immediately before reading exported metadata. Source cleanup and missing completion still use UNKNOWN. Earlier analytics survive; failure does not roll back in-memory edits.
+- The context carries no error reason before a failure. In __exit__, InvalidEpubOutput maps to INCORRECT_RESULT; other ordinary exceptions map to UNKNOWN. The recipe wraps only exported-book validation failures in InvalidEpubOutput, preserving the original exception as its cause and diagnostic. Successful/skipped outcomes have error=None. Source cleanup failures and missing completion use UNKNOWN; earlier analytics survive.
 - Construction, opening, and metadata failures become error outcomes without an outer handler. The outcome retains `input_path`; `original_epub` is `None` if information capture failed. No fallback file reads or invented metadata are needed. Interrupts such as KeyboardInterrupt still propagate.
 - `context.succeed(new_info)` marks verified output; `context.result` is finalized after source cleanup. Later failures override success. Normal exit without completion produces an UNKNOWN error. Use a fresh context for each book and enter it once per recipe call; this is a convention, without a re-entry guard or reset machinery.
 - Return ProcessingRun with book information, diagnostics, and unsaved analytics. Exclude the context, live EPUB/source/resources, and working replacement mapping.
@@ -107,9 +107,10 @@ There is no database session, engine, or arbitrary shared-state dictionary on th
 It copies the analytics list while sharing record objects and book information;
 those shared objects must no longer be edited after handoff.
 
-Single/batch callers filter paths outside the input directory and paths with existing destinations
-before dispatch. These paths produce no outcome or analytics; the single caller returns None.
-Both worker recipes assume paths have passed this filter. The persisted skip codes remain for history.
+The decrypt CLI and batch dispatcher filter paths outside the input directory and paths with existing
+destinations before calling the processing functions. These paths produce no outcome or analytics.
+The single-book processing wrapper always returns ProcessingRun; both worker recipes assume paths
+have passed the caller's filter. The persisted skip codes remain for history.
 
 _fully_process_encrypted_panda retains the legacy processing order and is the caller default.
 _fully_process_encrypted_panda_with_context is a separate candidate; verify_epub remains for the legacy path.

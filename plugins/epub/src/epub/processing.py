@@ -11,7 +11,7 @@ from uuid import UUID, uuid4
 
 from sqlmodel import SQLModel
 
-from epub.errors import EpubErrorReason, EpubSkipReason
+from epub.errors import EpubErrorReason, EpubSkipReason, InvalidEpubOutput
 from epub.protocols import EpubOperation, EpubVerification
 from epub.processing_run import ProcessingRun
 from library.epub.epub import EPUB, EpubInfo
@@ -38,7 +38,6 @@ class ProcessingContext:
     replacements: dict[str, str] = field(default_factory=dict)
     unmatched_links: dict[str, str] = field(default_factory=dict)
     analytics: list[SQLModel] = field(default_factory=list)
-    error_reason: EpubErrorReason = EpubErrorReason.UNKNOWN
     result: ProcessingRun | None = field(default=None, init=False)
     _epub: EPUB | None = field(default=None, init=False, repr=False)
     _exit_stack: ExitStack = field(init=False, repr=False)
@@ -90,8 +89,10 @@ class ProcessingContext:
 
         if isinstance(exc, _SkipBook):
             self.result = self.outcome(skip=exc.reason, details=exc.details)
+        elif isinstance(exc, InvalidEpubOutput):
+            self.result = self.outcome(error=EpubErrorReason.INCORRECT_RESULT, details=repr(exc.__cause__ or exc))
         elif isinstance(exc, Exception):
-            self.result = self.outcome(error=self.error_reason, details=repr(exc))
+            self.result = self.outcome(error=EpubErrorReason.UNKNOWN, details=repr(exc))
         elif exc is not None:
             # preserving KeyboardInterrupt or SystemExit
             return False
@@ -103,11 +104,12 @@ class ProcessingContext:
             self.result = self.outcome(success=True, new_epub=self._new_epub)
         return True
 
-    def verify(self, check: EpubVerification) -> Self:
-        """A failed check aborts the with block as a skip."""
-        failure = check.verify(self)
-        if failure is not None:
-            raise _SkipBook(check.skip_reason, failure)
+    def verify(self, *checks: EpubVerification) -> Self:
+        """Run checks in order; the first failure aborts the with block as a skip."""
+        for check in checks:
+            failure = check.verify(self)
+            if failure is not None:
+                raise _SkipBook(check.skip_reason, failure)
         return self
 
     def perform(self, operation: EpubOperation) -> Self:

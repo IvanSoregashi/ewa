@@ -1,5 +1,7 @@
 import importlib
+import sys
 from concurrent.futures import Future
+from types import ModuleType
 
 import pytest
 
@@ -8,8 +10,20 @@ from epub.processing_run import ProcessingRun
 from test_recipe_run import recipe as recipe, write_book
 
 
+@pytest.fixture
+def cli(recipe, monkeypatch):
+    # The unrelated file-moving module imports real application configuration.
+    orchestration = ModuleType("epub.serene_panda.orchestration")
+    setattr(orchestration, "move_file_preserving_hierarchy", lambda *args: pytest.fail("Unexpected file move"))
+    monkeypatch.setitem(sys.modules, "epub.serene_panda.orchestration", orchestration)
+    monkeypatch.delitem(sys.modules, "epub.main", raising=False)
+    module = importlib.import_module("epub.main")
+    yield module
+    sys.modules.pop("epub.main", None)
+
+
 @pytest.mark.parametrize("reason", ["directory", "destination"])
-def test_single_caller_filters_without_processing_or_analytics(recipe, tmp_path, monkeypatch, reason):
+def test_decrypt_filters_without_processing_or_analytics(recipe, cli, tmp_path, monkeypatch, reason):
     path = write_book(recipe.settings.encrypted_epub_dir / "book.epub")
     destination = recipe.settings.decrypted_epub_dir / path.name
     if reason == "directory":
@@ -26,10 +40,28 @@ def test_single_caller_filters_without_processing_or_analytics(recipe, tmp_path,
     monkeypatch.setattr(recipe, "_fully_process_encrypted_panda", unexpected)
     monkeypatch.setattr(recipe, "_fully_process_encrypted_panda_with_context", unexpected)
     monkeypatch.setattr(recipe.recipe_analytics, "record_analytics", unexpected)
-    assert recipe.fully_process_encrypted_panda(str(path)) is None
+    monkeypatch.setattr(recipe, "fully_process_encrypted_panda", unexpected)
+    cli.decrypt(path)
     assert path.read_bytes() == original
     if reason == "destination":
         assert destination.read_bytes() == b"existing destination"
+
+
+def test_decrypt_dispatches_eligible_path_once(recipe, cli, monkeypatch):
+    path = write_book(recipe.settings.encrypted_epub_dir / "book.epub")
+    run = ProcessingRun(input_path=str(path), skip=EpubSkipReason.NOT_IMPLEMENTED)
+    processed = []
+    reported = []
+
+    def process(value):
+        processed.append(value)
+        return run
+
+    monkeypatch.setattr(recipe, "fully_process_encrypted_panda", process)
+    monkeypatch.setattr(ProcessingRun, "report", lambda result: reported.append(result))
+    cli.decrypt(path)
+    assert processed == [str(path)]
+    assert reported == [run]
 
 
 def test_single_caller_uses_legacy_and_records_only_its_result(recipe, monkeypatch):

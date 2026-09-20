@@ -36,7 +36,7 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 ### 3. Add context lifetime management and automatic outcomes
 
 - [x] Enter an empty context and call `open_epub(path)` inside its block to construct/open the EPUB and capture original information. Convert setup failures to outcomes with the input path and no invented metadata; reliably release acquired sources.
-- [x] Add the minimal check entry point: consume each check result, immediately stop on failure, and produce a skip with the configured reason and details. Update protocol documentation to remove warn/repair decision policies.
+- [x] Add verify(*checks): consume checks in order, immediately stop on failure, and produce a skip with the configured reason and details. Update protocol documentation to remove warn/repair decision policies.
 - [x] Automatically convert processing exceptions into error outcomes while retaining earlier evidence and propagating interrupts. Require explicit success after export/output validation; define behavior for missing completion.
 - [x] Test source lifetime/cleanup, short-circuiting, construction/opening/metadata/processing failures, partial outcome reporting/serialization, retained evidence, interrupts, explicit success, and missing completion with synthetic books. Keep the legacy recipe working.
 
@@ -72,7 +72,8 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 - [x] Replace inline work with the reviewed checks/operations and context lifecycle; retain export, output validation, and explicit success.
 - [x] Run NoUnmatchedLinks after reference updates and before translation/export to preserve Panda's unmatched-link skip policy.
 - [x] Keep _fully_process_encrypted_panda as the legacy default and add _fully_process_encrypted_panda_with_context for comparison. Retain verify_epub while the legacy recipe needs it.
-- [x] Move directory/destination filtering into single/batch callers before dispatch; filtered paths produce no ProcessingRun or analytics. Adapt the CLI to an absent result.
+- [x] Move directory/destination filtering into decrypt and the batch dispatcher; filtered paths produce no ProcessingRun or analytics, while processing functions always return a run.
+- [x] Classify InvalidEpubOutput in __exit__ to preserve INCORRECT_RESULT without a mutable error-reason field; keep original exception diagnostics.
 - [x] Preserve destination-deletion/original-movement scaffolding during assembly; schedule its replacement decision before real-book runs in step 9.
 - [x] Test success, early skip, setup/operation/export/output-validation failures, and source cleanup; retain earlier evidence on each outcome.
 

@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import inspect
 from sqlmodel import Field, SQLModel
 
-from epub.errors import EpubErrorReason, EpubSkipReason
+from epub.errors import EpubErrorReason, EpubSkipReason, InvalidEpubOutput
 from epub.processing import ProcessingContext
 from epub.processing_run import ProcessingRun
 from epub.verification import MimetypeVerification, OPFPath, SerenePanda
@@ -78,7 +78,8 @@ def test_contexts_have_independent_working_state(book_path):
 def test_managed_success_keeps_source_open_and_returns_detached_result(book_path, tmp_path):
     with ProcessingContext() as context:
         assert context.result is None
-        assert context.open_epub(str(book_path)).verify(MimetypeVerification()).verify(OPFPath()) is context
+        assert context.open_epub(str(book_path)).verify(MimetypeVerification(), OPFPath()) is context
+        assert context.verify() is context
         assert isinstance(context.epub.source, ZipFileSource)
         handle = context.epub.source.zip_file
         assert handle.fp is not None
@@ -98,6 +99,7 @@ def test_managed_success_keeps_source_open_and_returns_detached_result(book_path
     assert context.epub.source._zip_file is None
     assert context.result is not None
     assert context.result.success
+    assert context.result.error is None
     assert context.result.input_path == str(book_path)
     assert context.result.original_epub is not None
     assert context.result.original_epub.title == "Synthetic book"
@@ -229,6 +231,26 @@ def test_metadata_failure_closes_acquired_source_without_retry(book_path, monkey
     assert context.result.original_epub is None
     assert context.result.input_path == str(book_path)
     assert "Metadata read failed" in context.result.details
+
+
+@pytest.mark.parametrize("output_failure", [False, True])
+def test_exception_type_determines_error_reason(book_path, output_failure):
+    record = ProcessingTestRecord(description="Evidence before failure")
+    with ProcessingContext() as context:
+        context.open_epub(book_path)
+        context.analytics.append(record)
+        try:
+            raise ValueError("Invalid book data")
+        except ValueError as error:
+            if output_failure:
+                raise InvalidEpubOutput(str(error)) from error
+            raise
+
+    result = require(context.result)
+    assert result.error == (EpubErrorReason.INCORRECT_RESULT if output_failure else EpubErrorReason.UNKNOWN)
+    assert result.details == "ValueError('Invalid book data')"
+    assert result.analytics == [record]
+    assert not result.success and result.skip is None
 
 
 def test_check_exception_is_error_instead_of_skip(book_path):

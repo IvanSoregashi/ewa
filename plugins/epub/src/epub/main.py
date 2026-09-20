@@ -56,12 +56,12 @@ def set_config(key: str = typer.Option("", "-k"), value: str = typer.Option("", 
 
 @app.command()
 def decrypt(epub_path: Path = typer.Argument(exists=True)):
+    if not recipe_epub.should_process_path(epub_path):
+        return
     start = time.time()
     result = recipe_epub.fully_process_encrypted_panda(str(epub_path))
     elapsed = time.time() - start
     print(f"ELAPSED {elapsed:.2f}s")
-    if result is None:
-        return
 
     result.report()
 

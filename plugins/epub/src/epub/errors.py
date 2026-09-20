@@ -18,3 +18,7 @@ class EpubSkipReason(IntEnum):
 class EpubErrorReason(IntEnum):
     UNKNOWN = 1
     INCORRECT_RESULT = 2
+
+
+class InvalidEpubOutput(Exception):
+    """Distinguish output-validation failures from errors reading the input book."""

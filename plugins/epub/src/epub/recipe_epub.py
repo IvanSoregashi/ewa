@@ -7,7 +7,7 @@ from epub.config import settings
 from epub.processing import ProcessingContext
 from epub.processing_run import ProcessingRun
 from epub.image_analytics import ImageOptimizationRecord
-from epub.errors import EpubSkipReason, EpubErrorReason
+from epub.errors import EpubSkipReason, EpubErrorReason, InvalidEpubOutput
 from epub import recipe_analytics, recipe_css, recipe_htmls, recipe_image, recipe_package
 from epub.recipe_css import CleanupPandaCSS
 from epub.recipe_htmls import RemoveResourceAndManifest, ReplaceLinks, TextTranslator
@@ -34,9 +34,7 @@ def should_process_path(path: Path) -> bool:
     return True
 
 
-def fully_process_encrypted_panda(path: str) -> ProcessingRun | None:
-    if not should_process_path(Path(path)):
-        return None
+def fully_process_encrypted_panda(path: str) -> ProcessingRun:
     start = time.time()
     result = _fully_process_encrypted_panda(path)
     print(f"ELAPSED _fully_process_encrypted_panda: {time.time() - start:.2f} s")
@@ -170,7 +168,7 @@ def _fully_process_encrypted_panda_with_context(path: str) -> ProcessingRun:
     destination_path = settings.decrypted_epub_dir / relative_path
 
     with ProcessingContext() as context:
-        context.open_epub(current_path).verify(OPFPath()).verify(SerenePanda())
+        context.open_epub(current_path).verify(OPFPath(), SerenePanda())
         # Keep the existing recipe's first-font removal, including relaxed checks.
         font = context.epub.resources.by_role(EpubRole.FONT)[0]
         context.perform(RemoveResourceAndManifest(exact_path=font.filename, flush=False))
@@ -179,8 +177,11 @@ def _fully_process_encrypted_panda_with_context(path: str) -> ProcessingRun:
         context.perform(ReplaceLinks()).verify(NoUnmatchedLinks())
         context.perform(TextTranslator(sp_dictionary))
         context.epub.package_into(destination_path, sort_by_role=True)
-        context.error_reason = EpubErrorReason.INCORRECT_RESULT
-        context.succeed(EPUB(destination_path).info())
+        try:
+            new_info = EPUB(destination_path).info()
+        except Exception as error:
+            raise InvalidEpubOutput(str(error)) from error
+        context.succeed(new_info)
 
     run = require(context.result)
     if not run.success:
