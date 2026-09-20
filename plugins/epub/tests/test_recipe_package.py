@@ -90,7 +90,12 @@ def test_replace_links_updates_href_and_media_type(tmp_path: Path):
     epub.resources.rename(image, "OEBPS/images/pic.jpg")
     assert image.media_type == "image/jpeg"
 
-    replace_links(epub, {"OEBPS/images/pic.png": "OEBPS/images/pic.jpg"})
+    unmatched = replace_links(
+        epub,
+        {"OEBPS/images/absent.png": "OEBPS/images/absent.jpg", "OEBPS/images/pic.png": "OEBPS/images/pic.jpg"},
+    )
+    assert unmatched == {"OEBPS/images/absent.png": "OEBPS/images/absent.jpg"}
+    assert len(epub.package.document.manifest.items) == 3
     epub.package.flush()
 
     opf = epub.package.resource.content.decode()

@@ -3,7 +3,7 @@ resources and reports replacement entries that never matched any document.
 """
 
 from epub.processing import ProcessingContext
-from epub.recipe_package import replace_manifest_links
+from epub.recipe_package import replace_links as replace_manifest_links
 from library.epub.media_type import EpubRole, MediaType
 from epub.protocols import EpubOperation
 from library.epub.html_editing import replace_links, translate_text

@@ -84,10 +84,11 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 - [x] Compare synthetic outcomes, book/image metadata, analytics (excluding generated IDs), and exported resource contents for 14 success/skip/error scenarios.
 - [x] Add explicit regression cases for differences in undeclared-orphan handling and cleanup diagnostics; do not claim full equivalence.
 - [x] Compare missing-manifest images with and without HTML references, and cleanup failures after success, unmatched-link skip, translation/export failure, and output-validation failure; verify retained analytics and unchanged input bytes.
-- [x] Resolve missing-manifest failures by ignoring and separately reporting absent old entries in the candidate, without creating declarations: referenced images can succeed; images absent from HTML still produce UNMATCHED_LINKS. Keep the context's cleanup diagnostics without requiring exact legacy text.
+- [x] Resolve missing-manifest failures with one shared replace_links helper that returns absent old entries without creating declarations. Both recipes now succeed for referenced images and produce UNMATCHED_LINKS for images absent from HTML; compare outcomes, analytics, and exported contents. Keep the context's cleanup diagnostics without requiring exact legacy text.
+- [x] Establish comparison policy: apply intentional behavior improvements to both recipes, sharing helpers instead of preserving obsolete behavior in the old implementation.
 - [ ] Decide explicitly how to replace destination-deletion/original-movement test scaffolding before real-book runs.
 - [ ] Compare copies of the books the user will provide; preserve originals and use temporary analytics storage.
-- [ ] Switch callers to the context recipe only after the comparison is complete; then remove the legacy implementation, verify_epub entry points, and strict recipe_package.replace_links helper.
+- [ ] Switch callers to the context recipe only after the comparison is complete; then remove the legacy implementation and verify_epub entry points.
 
 ### 10. Integrate batch execution
 

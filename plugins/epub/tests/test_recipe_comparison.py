@@ -130,7 +130,7 @@ def test_legacy_and_context_results_and_exported_contents_match(recipe, tmp_path
 
 
 @pytest.mark.parametrize("referenced", [False, True])
-def test_candidate_leaves_undeclared_image_out_of_manifest(recipe, monkeypatch, referenced):
+def test_both_recipes_leave_undeclared_image_out_of_manifest(recipe, monkeypatch, referenced):
     path = write_book(recipe.settings.encrypted_epub_dir / "book.epub", referenced=referenced)
     destination = recipe.settings.decrypted_epub_dir / path.name
     with ZipFile(path) as archive:
@@ -155,20 +155,20 @@ def test_candidate_leaves_undeclared_image_out_of_manifest(recipe, monkeypatch, 
         assert [resource.filename for resource in output.package.undeclared_resources] == ["cover.jpg"]
         assert output.package.manifest_item_by_path("cover.jpg") is None
         assert output.package.manifest_item_by_path("cover.png") is None
-        exports.append(destination.read_bytes())
+        with ZipFile(destination) as archive:
+            exports.append([(name, archive.read(name)) for name in archive.namelist()])
 
     monkeypatch.setattr(EPUB, "package_into", capture_export)
     legacy = recipe._fully_process_encrypted_panda(str(path))
     assert not destination.exists()
     candidate = recipe._fully_process_encrypted_panda_with_context(str(path))
+    assert run_data(legacy) == run_data(candidate)
     if referenced:
-        assert legacy.error == EpubErrorReason.UNKNOWN
-        assert "Manifest(cover.png)" in legacy.details
         assert candidate.success and candidate.skip is None
-        assert len(exports) == 1
+        assert len(exports) == 2
+        assert exports[0] == exports[1]
     else:
         assert legacy.skip == EpubSkipReason.UNMATCHED_LINKS and legacy.error is None
-        assert run_data(legacy) == run_data(candidate)
         assert exports == []
     assert candidate.error is None
     assert run_data(legacy)[1] == run_data(candidate)[1]

@@ -49,8 +49,12 @@ def relocate_package(epub: EPUB, target_package_path: str = FileName.DEFAULT_OPF
     return epub.package.relocate(target_package_path)
 
 
-def replace_manifest_links(epub: EPUB, replace_dict: dict[str, str]) -> dict[str, str]:
-    """Update existing declarations and report missing old paths without adding entries."""
+def replace_links(epub: EPUB, replace_dict: dict[str, str]) -> dict[str, str]:
+    """Update existing declarations and report missing old paths without adding entries.
+
+    Mapping keys and values are archive paths; hrefs stay relative to the OPF.
+    Media-type is refreshed from the renamed resource.
+    """
     unmatched = {}
     for old_link, new_link in replace_dict.items():
         item = epub.package.manifest_item_by_path(old_link)
@@ -61,17 +65,3 @@ def replace_manifest_links(epub: EPUB, replace_dict: dict[str, str]) -> dict[str
         item.href = path_url(posix_relative_href(epub.package.resource.filename, new_link))
         item.media_type = str(resource.media_type)
     return unmatched
-
-
-def replace_links(epub: EPUB, replace_dict: dict[str, str]) -> None:
-    """Update manifest hrefs after resource renames.
-
-    Strict legacy helper retained for recipe comparison.
-    Mapping keys and values are archive paths; hrefs stay relative to the OPF.
-    Media-type is refreshed from the renamed resource.
-    """
-    for old_link, new_link in replace_dict.items():
-        item = require(epub.package.manifest_item_by_path(old_link), f"Manifest({old_link})")
-        resource = require(epub.resources.by_path(new_link), f"Resource({new_link})")
-        item.href = path_url(posix_relative_href(epub.package.resource.filename, new_link))
-        item.media_type = str(resource.media_type)

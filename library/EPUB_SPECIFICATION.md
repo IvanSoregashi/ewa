@@ -127,16 +127,17 @@ have passed the caller's filter. The persisted skip codes remain for history.
 
 _fully_process_encrypted_panda retains the legacy processing order and is the caller default.
 _fully_process_encrypted_panda_with_context is a separate candidate; verify_epub remains for the legacy path.
+Apply intentional processing-policy improvements to both recipes and share their helpers. Comparison
+tests verify the context migration under the same behavior; the old recipe is not a frozen baseline.
 The candidate completes HTML/OPF updates before non-manifest unmatched-link verification and translation,
 and validates output before closing the input context. The legacy recipe validates after closing it.
 
 Synthetic comparisons check outcomes, metadata, image evidence (excluding generated UUIDs), and
-exported resource contents. Missing manifest entries are reported without being added in the candidate:
-a referenced image can now succeed where the legacy recipe errors; an image absent from HTML still yields
+exported resource contents. Both recipes use recipe_package.replace_links, which returns missing
+manifest entries without adding declarations or failing on their absence. A referenced image can
+succeed without its manifest entry; an image absent from HTML still yields
 UNMATCHED_LINKS in both. The context's richer cleanup diagnostics are retained; exact diagnostic
 equivalence is not required. Both implementations remain available pending real-book comparison.
-The strict recipe_package.replace_links helper remains for the legacy path; the candidate uses
-replace_manifest_links, which returns missing entries without failing on them.
 Windows spawn tests now cover detached outcomes and unsaved image records for success, skip, error,
 and setup failure, followed by parent-side persistence into a temporary database.
 
