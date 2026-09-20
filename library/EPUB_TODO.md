@@ -64,13 +64,14 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
 - [x] Publish image records directly from the current Panda recipe, retaining evidence on later skips/errors; remove legacy result/table conversions.
 - [x] Adapt the image operation to publish records through ProcessingContext and successful path changes to its shared replacement mapping.
-- [x] Make ReplaceLinks consume replacements in HTML and OPF, retain unmatched HTML paths on the context, and clear replacements after both consumers finish. Keep skip policy in a separate NoUnmatchedLinks verification.
+- [x] Make ReplaceLinks consume replacements in HTML and OPF, retain separate non-manifest and manifest unmatched-path mappings on the context, and clear replacements after both consumers finish. Missing old manifest entries are reported without adding declarations. Keep HTML skip policy in NoUnmatchedLinks.
 - [x] Test collisions, conversion/rename/link consistency, unchanged images, partial failures, and export/reopen.
 
 ### 8. Assemble a separate Panda recipe around the context
 
 - [x] Replace inline work with the reviewed checks/operations and context lifecycle; retain export, output validation, and explicit success.
 - [x] Run NoUnmatchedLinks after reference updates and before translation/export to preserve Panda's unmatched-link skip policy.
+- [x] Add a separate AllResourcesInManifest check and DeclareMissingResources operation. Retain them as optional tools; automatic repair/full-coverage verification was removed from the candidate because undeclared resources may be abandoned assets.
 - [x] Keep _fully_process_encrypted_panda as the legacy default and add _fully_process_encrypted_panda_with_context for comparison. Retain verify_epub while the legacy recipe needs it.
 - [x] Move directory/destination filtering into decrypt and the batch dispatcher; filtered paths produce no ProcessingRun or analytics, while processing functions always return a run.
 - [x] Classify InvalidEpubOutput in __exit__ to preserve INCORRECT_RESULT without a mutable error-reason field; keep original exception diagnostics.
@@ -82,10 +83,11 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
 - [x] Compare synthetic outcomes, book/image metadata, analytics (excluding generated IDs), and exported resource contents for 14 success/skip/error scenarios.
 - [x] Add explicit regression cases for differences in undeclared-orphan handling and cleanup diagnostics; do not claim full equivalence.
-- [ ] Resolve or explicitly accept the skip/error ordering for optimized images absent from both HTML references and the manifest, and the context's extra cleanup diagnostics.
+- [x] Compare missing-manifest images with and without HTML references, and cleanup failures after success, unmatched-link skip, translation/export failure, and output-validation failure; verify retained analytics and unchanged input bytes.
+- [x] Resolve missing-manifest failures by ignoring and separately reporting absent old entries in the candidate, without creating declarations: referenced images can succeed; images absent from HTML still produce UNMATCHED_LINKS. Keep the context's cleanup diagnostics without requiring exact legacy text.
 - [ ] Decide explicitly how to replace destination-deletion/original-movement test scaffolding before real-book runs.
 - [ ] Compare copies of the books the user will provide; preserve originals and use temporary analytics storage.
-- [ ] Switch callers to the context recipe only after the comparison is complete; then remove the legacy implementation and verify_epub entry points.
+- [ ] Switch callers to the context recipe only after the comparison is complete; then remove the legacy implementation, verify_epub entry points, and strict recipe_package.replace_links helper.
 
 ### 10. Integrate batch execution
 
@@ -104,4 +106,5 @@ These tasks are unscheduled; their order is not an implementation commitment.
 - [ ] Define shared-asset retention and reuse during disassembly/reassembly.
 - [ ] Support incremental chapter updates and EPUB assembly from internet articles.
 - [ ] Revisit navigation across spine, NCX, guide/tours, and EPUB 3 NAV.
+- [ ] Consider creating a new resource for image conversions that change the path, removing the original, and synchronizing the manifest with the final inventory; settle preservation of IDs, properties, and dependent references before replacing the current rename/link-update flow.
 - [ ] Define proper EPUB output validation beyond reopening and metadata reading: agree on validation scope and tooling for archive/package integrity, content references, and EPUB conformance.

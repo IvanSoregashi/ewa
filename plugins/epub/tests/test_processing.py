@@ -67,10 +67,14 @@ def test_contexts_have_independent_working_state(book_path):
         first.open_epub(book_path)
         second.open_epub(book_path)
         first.replacements["cover.png"] = "cover.webp"
+        first.unmatched_links["cover.png"] = "cover.webp"
+        first.unmatched_manifest_links["cover.png"] = "cover.webp"
         first.analytics.append(ProcessingTestRecord(description="First book edited"))
         require(first.epub.resources.by_path("chapter.xhtml")).content = b"edited"
 
         assert second.replacements == {}
+        assert second.unmatched_links == {}
+        assert second.unmatched_manifest_links == {}
         assert second.analytics == []
         assert b"Original" in require(second.epub.resources.by_path("chapter.xhtml")).content
 

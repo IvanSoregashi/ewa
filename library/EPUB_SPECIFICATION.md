@@ -69,10 +69,21 @@ An empty replacement mapping means no work; no separate “not run” state is n
 OptimizeImages appends image records and publishes only successful path changes.
 Image decode/optimization errors remain per-image evidence; inventory rename collisions
 stop the book without overwriting the existing resource. ReplaceLinks consumes the mapping
-in HTML and then OPF, clearing it only after both succeed. It stores paths unmatched in HTML
-in context.unmatched_links; it does not decide whether to skip. NoUnmatchedLinks is a separate
-late verification, placed before export by recipes that reject unmatched paths. The report
-describes the last nonempty replacement pass; an empty pass leaves it available for verification.
+in HTML and then OPF, clearing it after both passes complete. It records missing old paths
+separately: context.unmatched_links for non-manifest files (currently HTML), and
+context.unmatched_manifest_links for manifest entries. Both retain old-to-new path mappings.
+An absent old manifest entry is left absent; other replacements continue. Neither report decides
+whether to skip. NoUnmatchedLinks checks only the non-manifest report. Both reports describe the
+last nonempty replacement pass; an empty pass preserves them. CSS/NCX link rewriting is not yet implemented.
+
+Manifest coverage is independent of HTML references. AllResourcesInManifest reports undeclared
+inventory files; DeclareMissingResources adds their declarations through EpubPackage.add_resource.
+Both use EpubPackage.undeclared_resources, excluding directories, the active OPF, mimetype, and
+META-INF files. NCX, navigation, and other content XML are included. Repair preserves existing
+declarations and inventory bytes, generates IDs unused anywhere in the modeled OPF, and does not
+infer spine order or navigation/cover properties. This is coverage repair, not full EPUB validation.
+These are optional tools, not Panda recipe steps: an undeclared resource may be an abandoned asset,
+so the candidate neither adds its declaration automatically nor requires full manifest coverage.
 
 EpubInfo, ImageInfo, and IndexInfo remain dataclasses. EpubInfo.from_path reads only
 filesystem information. ImageInfo uses `size=None` for unreadable dimensions;
@@ -116,13 +127,16 @@ have passed the caller's filter. The persisted skip codes remain for history.
 
 _fully_process_encrypted_panda retains the legacy processing order and is the caller default.
 _fully_process_encrypted_panda_with_context is a separate candidate; verify_epub remains for the legacy path.
-The candidate completes HTML/OPF updates together before unmatched-link verification and translation,
+The candidate completes HTML/OPF updates before non-manifest unmatched-link verification and translation,
 and validates output before closing the input context. The legacy recipe validates after closing it.
 
 Synthetic comparisons check outcomes, metadata, image evidence (excluding generated UUIDs), and
-exported resource contents. Known differences: an optimized image absent from HTML and the manifest
-produces UNMATCHED_LINKS in the legacy recipe but UNKNOWN in the candidate; cleanup diagnostics also
-differ. Both implementations remain available while those differences and user-provided book copies are evaluated.
+exported resource contents. Missing manifest entries are reported without being added in the candidate:
+a referenced image can now succeed where the legacy recipe errors; an image absent from HTML still yields
+UNMATCHED_LINKS in both. The context's richer cleanup diagnostics are retained; exact diagnostic
+equivalence is not required. Both implementations remain available pending real-book comparison.
+The strict recipe_package.replace_links helper remains for the legacy path; the candidate uses
+replace_manifest_links, which returns missing entries without failing on them.
 Windows spawn tests now cover detached outcomes and unsaved image records for success, skip, error,
 and setup failure, followed by parent-side persistence into a temporary database.
 
@@ -142,6 +156,7 @@ and setup failure, followed by parent-side persistence into a temporary database
 
 ## Deferred scope and open decisions
 
+- Consider replacing renamed images with new resources and synchronizing the manifest with the final inventory. ID/property/reference preservation needs a separate design; current operations still rename resources and update existing declarations.
 - Core/chapter work: disassembly, chapter deduplication, shared assets, reassembly, incremental chapters, and books assembled from internet articles.
 - The core/content distinction is application-defined, not an EPUB partition. A NAV document may belong to the core even when present in the spine.
 - Navigation: spine, NCX, guide/tours, and EPUB 3 NAV; no combined TableOfContents design has been accepted.

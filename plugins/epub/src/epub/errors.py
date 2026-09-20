@@ -13,6 +13,7 @@ class EpubSkipReason(IntEnum):
     SERENE_PANDA_FONT = 7
     INVALID_XML_CHAPTERS = 8
     BIG_GIFS = 9
+    UNDECLARED_RESOURCES = 10
 
 
 class EpubErrorReason(IntEnum):

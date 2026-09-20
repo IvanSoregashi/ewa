@@ -41,6 +41,16 @@ class NoUnmatchedLinks(EpubVerification):
         return None
 
 
+class AllResourcesInManifest(EpubVerification):
+    skip_reason = EpubSkipReason.UNDECLARED_RESOURCES
+
+    def verify(self, context: ProcessingContext) -> str | None:
+        missing = context.epub.package.undeclared_resources
+        if missing:
+            return "Resources missing from manifest:\n" + "\n".join(resource.filename for resource in missing)
+        return None
+
+
 class SerenePanda(EpubVerification):
     """Check that fonts satisfy the SerenePanda filename condition.
 

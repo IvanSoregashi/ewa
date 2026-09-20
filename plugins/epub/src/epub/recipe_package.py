@@ -19,6 +19,18 @@ class PackageEpub(EpubOperation):
         context.succeed(validate_epub_output(self.destination))
 
 
+class DeclareMissingResources(EpubOperation):
+    def perform(self, context: ProcessingContext) -> None:
+        package = context.epub.package
+        used_ids = package.document.ids
+        number = 1
+        for resource in package.undeclared_resources:
+            while (item_id := f"resource-{number}") in used_ids:
+                number += 1
+            package.add_resource(resource, item_id=item_id)
+            used_ids.add(item_id)
+
+
 def validate_epub_output(path: str | Path) -> EpubInfo:
     """Only check reopening and metadata reading; full EPUB validation is pending."""
     try:
@@ -37,9 +49,24 @@ def relocate_package(epub: EPUB, target_package_path: str = FileName.DEFAULT_OPF
     return epub.package.relocate(target_package_path)
 
 
+def replace_manifest_links(epub: EPUB, replace_dict: dict[str, str]) -> dict[str, str]:
+    """Update existing declarations and report missing old paths without adding entries."""
+    unmatched = {}
+    for old_link, new_link in replace_dict.items():
+        item = epub.package.manifest_item_by_path(old_link)
+        if item is None:
+            unmatched[old_link] = new_link
+            continue
+        resource = require(epub.resources.by_path(new_link), f"Resource({new_link})")
+        item.href = path_url(posix_relative_href(epub.package.resource.filename, new_link))
+        item.media_type = str(resource.media_type)
+    return unmatched
+
+
 def replace_links(epub: EPUB, replace_dict: dict[str, str]) -> None:
     """Update manifest hrefs after resource renames.
 
+    Strict legacy helper retained for recipe comparison.
     Mapping keys and values are archive paths; hrefs stay relative to the OPF.
     Media-type is refreshed from the renamed resource.
     """

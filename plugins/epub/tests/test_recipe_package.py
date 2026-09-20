@@ -6,11 +6,20 @@ from pathlib import Path
 
 import pytest
 
-from epub.errors import InvalidEpubOutput
+from epub.errors import EpubSkipReason, InvalidEpubOutput
 from epub.processing import ProcessingContext
-from epub.recipe_package import PackageEpub, relocate_package, replace_links, validate_epub_output
+from epub.recipe_package import (
+    DeclareMissingResources,
+    PackageEpub,
+    relocate_package,
+    replace_links,
+    validate_epub_output,
+)
+from epub.verification import AllResourcesInManifest, NoUnmatchedLinks
+from library.asserts import require
 from library.epub.epub import EPUB
 from library.epub.media_type import FileName
+from library.epub.resources import Resource
 
 
 def build_epub(path: Path) -> None:
@@ -134,3 +143,69 @@ def test_output_validation_preserves_cause(tmp_path: Path, missing: bool):
     cause = failure.value.__cause__
     assert isinstance(cause, FileNotFoundError if missing else ValueError)
     assert str(failure.value) == str(cause)
+
+
+@pytest.mark.parametrize("relocate", [False, True])
+def test_declare_missing_resources_preserves_existing_manifest_and_inventory(tmp_path: Path, relocate: bool):
+    source = tmp_path / "book.epub"
+    destination = tmp_path / "output.epub"
+    build_epub(source)
+    missing_paths = ["OEBPS/images/new cover.png", "toc.ncx", "nav.xhtml", "data.xml", "script.js", "extra.bin"]
+    with ProcessingContext() as context:
+        context.open_epub(source)
+        epub = context.epub
+        package = epub.package
+        # Existing declarations may use encoded paths and IDs outside the manifest.
+        package.document.id = "resource-1"
+        image_item = package.document.manifest.find_item(id="img")
+        assert image_item is not None
+        image_item.href = "images/%70ic.png"
+        image_item.properties = "cover-image"
+        if relocate:
+            relocate_package(epub)
+        for path in [*missing_paths, "META-INF/encryption.xml", "META-INF/vendor.bin"]:
+            epub.resources.add(Resource.from_bytes(path, b"test"))
+        inventory = list(epub.resources)
+        manifest_before = package.document.manifest.model_dump()
+        check = AllResourcesInManifest()
+
+        assert [resource.filename for resource in package.undeclared_resources] == missing_paths
+        failure = check.verify(context)
+        assert failure is not None and all(path in failure for path in missing_paths)
+        assert package.document.manifest.model_dump() == manifest_before
+        assert context.unmatched_links == {}
+        assert NoUnmatchedLinks().verify(context) is None
+
+        context.perform(DeclareMissingResources()).verify(check)
+        assert list(epub.resources) == inventory
+        assert package.document.manifest.model_dump()["items"][:3] == manifest_before["items"]
+        added = package.document.manifest.items[3:]
+        assert [item.id for item in added] == [f"resource-{i}" for i in range(2, 8)]
+        assert [require(package.resource_for_href(item.href)).filename for item in added] == missing_paths
+        assert "%20" in added[0].href
+        assert added[0].media_type == "image/png"
+        manifest_after = package.document.manifest.model_dump()
+        context.perform(DeclareMissingResources())
+        assert package.document.manifest.model_dump() == manifest_after
+        context.perform(PackageEpub(destination))
+
+    assert context.result is not None and context.result.success
+    reopened = EPUB(destination).package
+    assert not reopened.undeclared_resources
+    assert reopened.document.manifest.model_dump() == manifest_after
+
+
+def test_manifest_check_skips_without_repairing_or_reporting_unmatched_html(tmp_path: Path):
+    source = tmp_path / "book.epub"
+    build_epub(source)
+    with ProcessingContext() as context:
+        context.open_epub(source)
+        context.epub.package.document.manifest.remove_item(_id="img")
+        context.verify(AllResourcesInManifest())
+        pytest.fail("Missing manifest entry must stop processing")
+
+    assert context.result is not None
+    assert context.result.skip == EpubSkipReason.UNDECLARED_RESOURCES
+    assert context.result.error is None
+    assert context.epub.package.manifest_item_by_path("OEBPS/images/pic.png") is None
+    assert context.unmatched_links == {}

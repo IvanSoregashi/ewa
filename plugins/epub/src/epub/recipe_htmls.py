@@ -3,7 +3,7 @@ resources and reports replacement entries that never matched any document.
 """
 
 from epub.processing import ProcessingContext
-from epub.recipe_package import replace_links as replace_manifest_links
+from epub.recipe_package import replace_manifest_links
 from library.epub.media_type import EpubRole, MediaType
 from epub.protocols import EpubOperation
 from library.epub.html_editing import replace_links, translate_text
@@ -27,14 +27,14 @@ def replace_links_in_htmls(resources: ResourceSelection, replacement_dict: dict[
 
 
 class ReplaceLinks(EpubOperation):
-    """Update HTML/OPF and report paths unmatched in HTML for later verification."""
+    """Update HTML/OPF and report their unmatched paths separately for verification."""
 
     def perform(self, context: ProcessingContext) -> None:
         if not context.replacements:
             return
         epub = context.epub
         context.unmatched_links = replace_links_in_htmls(epub.resources.by_role(EpubRole.HTML), context.replacements)
-        replace_manifest_links(epub, context.replacements)
+        context.unmatched_manifest_links = replace_manifest_links(epub, context.replacements)
         context.replacements.clear()
 
 

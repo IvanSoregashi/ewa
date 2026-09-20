@@ -35,9 +35,13 @@ class ProcessingContext:
     run_id: UUID = field(default_factory=uuid4, init=False)
     input_path: Path | None = field(default=None, init=False)
     original_epub: EpubInfo | None = field(default=None, init=False)
+
     replacements: dict[str, str] = field(default_factory=dict)
     unmatched_links: dict[str, str] = field(default_factory=dict)
+    unmatched_manifest_links: dict[str, str] = field(default_factory=dict)
+
     analytics: list[SQLModel] = field(default_factory=list)
+
     result: ProcessingRun | None = field(default=None, init=False)
     _epub: EPUB | None = field(default=None, init=False, repr=False)
     _exit_stack: ExitStack = field(init=False, repr=False)

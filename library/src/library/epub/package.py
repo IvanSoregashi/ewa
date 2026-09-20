@@ -113,6 +113,25 @@ class EpubPackage:
         return target[0] if target is not None else None
 
     @property
+    def undeclared_resources(self) -> ResourceSelection:
+        """Inventory files missing from the manifest, excluding archive infrastructure.
+
+        NCX, navigation, and other content XML still need declarations; is_core()
+        is not an infrastructure test. META-INF files and this OPF are excluded.
+        """
+        declared_paths = {self._item_path(item) for item in self.document.manifest.items}
+        return ResourceSelection(
+            resource
+            for resource in self.resources
+            if resource is not self.resource
+            and resource is not self.container_resource
+            and resource.filename != FileName.MIMETYPE
+            and not resource.filename.startswith("META-INF/")
+            and not resource.info.is_dir()
+            and resource.filename not in declared_paths
+        )
+
+    @property
     def manifest_resources(self) -> ResourceSelection:
         """Snapshot of declared local resources; remote entries have no archive bytes."""
         return ResourceSelection(

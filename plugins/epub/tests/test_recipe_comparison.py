@@ -129,9 +129,10 @@ def test_legacy_and_context_results_and_exported_contents_match(recipe, tmp_path
         assert b"Dext" in chapter and b"cover.jpg" in chapter
 
 
-def test_undeclared_orphan_exposes_reference_order_difference(recipe):
-    """Keep this discrepancy visible until the candidate's skip/error ordering is decided."""
-    path = write_book(recipe.settings.encrypted_epub_dir / "book.epub", referenced=False)
+@pytest.mark.parametrize("referenced", [False, True])
+def test_candidate_leaves_undeclared_image_out_of_manifest(recipe, monkeypatch, referenced):
+    path = write_book(recipe.settings.encrypted_epub_dir / "book.epub", referenced=referenced)
+    destination = recipe.settings.decrypted_epub_dir / path.name
     with ZipFile(path) as archive:
         files = {name: archive.read(name) for name in archive.namelist()}
     from lxml import etree
@@ -144,16 +145,42 @@ def test_undeclared_orphan_exposes_reference_order_difference(recipe):
         for name, content in files.items():
             archive.writestr(name, content)
 
+    original = path.read_bytes()
+    exports = []
+    original_export = EPUB.package_into
+
+    def capture_export(epub, destination, **kwargs):
+        original_export(epub, destination, **kwargs)
+        output = EPUB(destination)
+        assert [resource.filename for resource in output.package.undeclared_resources] == ["cover.jpg"]
+        assert output.package.manifest_item_by_path("cover.jpg") is None
+        assert output.package.manifest_item_by_path("cover.png") is None
+        exports.append(destination.read_bytes())
+
+    monkeypatch.setattr(EPUB, "package_into", capture_export)
     legacy = recipe._fully_process_encrypted_panda(str(path))
+    assert not destination.exists()
     candidate = recipe._fully_process_encrypted_panda_with_context(str(path))
-    assert legacy.skip == EpubSkipReason.UNMATCHED_LINKS and legacy.error is None
-    assert candidate.skip is None and candidate.error == EpubErrorReason.UNKNOWN
-    assert "Manifest(cover.png)" in candidate.details
+    if referenced:
+        assert legacy.error == EpubErrorReason.UNKNOWN
+        assert "Manifest(cover.png)" in legacy.details
+        assert candidate.success and candidate.skip is None
+        assert len(exports) == 1
+    else:
+        assert legacy.skip == EpubSkipReason.UNMATCHED_LINKS and legacy.error is None
+        assert run_data(legacy) == run_data(candidate)
+        assert exports == []
+    assert candidate.error is None
     assert run_data(legacy)[1] == run_data(candidate)[1]
+    assert path.read_bytes() == original
+    assert not destination.exists()
 
 
-def test_cleanup_failure_exposes_diagnostic_difference(recipe, monkeypatch):
-    path = write_book(recipe.settings.encrypted_epub_dir / "book.epub")
+@pytest.mark.parametrize("phase", ["success", "skip", "translation", "export", "output_validation"])
+def test_cleanup_failure_exposes_diagnostic_difference(recipe, monkeypatch, phase):
+    path = write_book(recipe.settings.encrypted_epub_dir / "book.epub", referenced=phase != "skip")
+    original = path.read_bytes()
+    destination = recipe.settings.decrypted_epub_dir / path.name
     original_open = EPUB.keep_open
     depth = 0
 
@@ -164,20 +191,58 @@ def test_cleanup_failure_exposes_diagnostic_difference(recipe, monkeypatch):
         try:
             with original_open(epub) as opened:
                 yield opened
-            if depth == 1 and epub.path == path:
-                raise OSError("Source cleanup failed")
         finally:
             depth -= 1
+            if depth == 0 and epub.path == path:
+                raise OSError("Source cleanup failed")
 
     monkeypatch.setattr(EPUB, "keep_open", fail_cleanup)
+    if phase == "translation":
+
+        def fail_translation(*args):
+            raise ValueError("Translation failed")
+
+        monkeypatch.setattr(recipe.html_editing, "translate_text", fail_translation)
+        monkeypatch.setattr(recipe.recipe_htmls, "translate_text", fail_translation)
+    elif phase == "export":
+
+        def fail_export(epub, destination, **kwargs):
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(b"partial output")
+            raise OSError("Export failed")
+
+        monkeypatch.setattr(EPUB, "package_into", fail_export)
+    elif phase == "output_validation":
+        original_info = EPUB.info
+
+        def fail_validation(epub):
+            if epub.path == destination:
+                raise ValueError("Output invalid")
+            return original_info(epub)
+
+        monkeypatch.setattr(EPUB, "info", fail_validation)
+
     legacy = recipe._fully_process_encrypted_panda(str(path))
+    assert not destination.exists()
     candidate = recipe._fully_process_encrypted_panda_with_context(str(path))
     assert legacy.error == candidate.error == EpubErrorReason.UNKNOWN
+    assert legacy.skip is None and candidate.skip is None
+    assert not legacy.success and not candidate.success
     assert legacy.details == "OSError('Source cleanup failed')"
-    assert candidate.details == "Closing EPUB: OSError('Source cleanup failed')"
+    assert candidate.details.endswith("Closing EPUB: OSError('Source cleanup failed')")
+    if phase != "success":
+        assert {
+            "skip": "cover.png",
+            "translation": "Translation failed",
+            "export": "Export failed",
+            "output_validation": "Output invalid",
+        }[phase] in candidate.details
     legacy_data, legacy_analytics = run_data(legacy)
     candidate_data, candidate_analytics = run_data(candidate)
     legacy_data.pop("details")
     candidate_data.pop("details")
     assert legacy_data == candidate_data
     assert legacy_analytics == candidate_analytics
+    assert len(candidate_analytics) == 1
+    assert path.read_bytes() == original
+    assert not destination.exists()

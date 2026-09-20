@@ -196,15 +196,68 @@ def test_unmatched_rename_only_skips_when_recipe_verifies_links(tmp_path, image_
     assert (tmp_path / "processed.epub").exists() == (not verify_links)
 
 
-def test_manifest_failure_keeps_mapping_after_html_consumed_it(tmp_path, image_bytes):
-    path = make_book(tmp_path, {"cover.png": image_bytes}, declared=[])
+@pytest.mark.parametrize("referenced", [False, True])
+@pytest.mark.parametrize("declared", [False, True])
+def test_missing_links_are_reported_independently_without_adding_declarations(
+    tmp_path, image_bytes, referenced, declared
+):
+    path = make_book(
+        tmp_path,
+        {"orphan.png": image_bytes, "cover.png": image_bytes},
+        referenced=["cover.png", *(["orphan.png"] if referenced else [])],
+        declared=["cover.png", *(["orphan.png"] if declared else [])],
+    )
+    missing = {"OEBPS/images/orphan.png": "OEBPS/images/orphan.jpg"}
+    original = path.read_bytes()
     with ProcessingContext() as context:
         context.open_epub(path).perform(OptimizeImages()).perform(ReplaceLinks())
-        pytest.fail("Missing manifest entry must stop processing")
+        assert context.unmatched_links == ({} if referenced else missing)
+        assert context.unmatched_manifest_links == ({} if declared else missing)
+        assert context.replacements == {}
+        assert len(context.epub.package.document.manifest.items) == (3 if declared else 2)
+        # Missing the first declaration must not prevent replacing a later one.
+        assert context.epub.package.manifest_item_by_path("OEBPS/images/cover.jpg") is not None
+        assert (context.epub.package.manifest_item_by_path("OEBPS/images/orphan.jpg") is not None) == declared
+        context.perform(ReplaceLinks())
+        assert context.unmatched_links == ({} if referenced else missing)
+        assert context.unmatched_manifest_links == ({} if declared else missing)
+        assert (NoUnmatchedLinks().verify(context) is None) == referenced
+        output = export(context, tmp_path)
+
+    run = require(context.result)
+    assert run.success and run.error is None
+    assert len(run.analytics) == 2
+    assert (output.package.manifest_item_by_path("OEBPS/images/orphan.jpg") is not None) == declared
+    chapter = require(output.resources.by_path("OEBPS/text/chapter.xhtml")).content
+    assert b"cover.jpg" in chapter
+    assert (b"orphan.jpg" in chapter) == referenced
+    assert path.read_bytes() == original
+
+
+def test_nonempty_replacement_pass_refreshes_both_missing_link_reports(tmp_path, image_bytes):
+    path = make_book(tmp_path, {"cover.png": image_bytes})
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        context.unmatched_links = {"old.png": "old.jpg"}
+        context.unmatched_manifest_links = {"old.png": "old.jpg"}
+        context.perform(OptimizeImages()).perform(ReplaceLinks())
+        assert context.unmatched_links == {}
+        assert context.unmatched_manifest_links == {}
+        export(context, tmp_path)
+    assert require(context.result).success
+
+
+def test_missing_replacement_resource_keeps_mapping_after_html_consumed_it(tmp_path, image_bytes):
+    path = make_book(tmp_path, {"cover.png": image_bytes})
+    with ProcessingContext() as context:
+        context.open_epub(path).perform(OptimizeImages())
+        context.epub.resources.remove(require(context.epub.resources.by_path("OEBPS/images/cover.jpg")))
+        context.perform(ReplaceLinks())
+        pytest.fail("An existing declaration cannot point to a missing replacement resource")
 
     run = require(context.result)
     assert run.error == EpubErrorReason.UNKNOWN
-    assert "Manifest(OEBPS/images/cover.png)" in run.details
+    assert "Resource(OEBPS/images/cover.jpg)" in run.details
     assert len(run.analytics) == 1
     assert context.replacements == {"OEBPS/images/cover.png": "OEBPS/images/cover.jpg"}
     assert b"cover.jpg" in require(context.epub.resources.by_path("OEBPS/text/chapter.xhtml")).content
