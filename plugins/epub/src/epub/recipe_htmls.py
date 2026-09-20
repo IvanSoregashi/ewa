@@ -2,9 +2,6 @@
 resources and reports replacement entries that never matched any document.
 """
 
-import json
-
-from epub.errors import EpubSkipReason
 from epub.processing import ProcessingContext
 from epub.recipe_package import replace_links as replace_manifest_links
 from library.epub.media_type import EpubRole, MediaType
@@ -30,19 +27,13 @@ def replace_links_in_htmls(resources: ResourceSelection, replacement_dict: dict[
 
 
 class ReplaceLinks(EpubOperation):
-    """Consume renames in HTML and OPF before clearing the shared mapping.
-
-    Preserve Panda's policy: a renamed image absent from HTML skips the book,
-    even if it is declared in the manifest.
-    """
+    """Update HTML/OPF and report paths unmatched in HTML for later verification."""
 
     def perform(self, context: ProcessingContext) -> None:
         if not context.replacements:
             return
         epub = context.epub
-        unmatched = replace_links_in_htmls(epub.resources.by_role(EpubRole.HTML), context.replacements)
-        if unmatched:
-            context.skip(EpubSkipReason.UNMATCHED_LINKS, json.dumps(unmatched, indent=4))
+        context.unmatched_links = replace_links_in_htmls(epub.resources.by_role(EpubRole.HTML), context.replacements)
         replace_manifest_links(epub, context.replacements)
         context.replacements.clear()
 

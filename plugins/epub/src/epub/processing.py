@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from contextlib import ExitStack
 from pathlib import Path
 from types import TracebackType
-from typing import Never, Self
+from typing import Self
 from uuid import UUID, uuid4
 
 from sqlmodel import SQLModel
@@ -36,6 +36,7 @@ class ProcessingContext:
     input_path: Path | None = field(default=None, init=False)
     original_epub: EpubInfo | None = field(default=None, init=False)
     replacements: dict[str, str] = field(default_factory=dict)
+    unmatched_links: dict[str, str] = field(default_factory=dict)
     analytics: list[SQLModel] = field(default_factory=list)
     result: ProcessingRun | None = field(default=None, init=False)
     _epub: EPUB | None = field(default=None, init=False, repr=False)
@@ -105,12 +106,8 @@ class ProcessingContext:
         """A failed check aborts the with block as a skip."""
         finding = check.verify(self)
         if not finding.passed:
-            self.skip(check.skip_reason, finding.details)
+            raise _SkipBook(check.skip_reason, finding.details)
         return self
-
-    def skip(self, reason: EpubSkipReason, details: str = "") -> Never:
-        """Stop processing, retaining evidence gathered before the skip."""
-        raise _SkipBook(reason, details)
 
     def perform(self, operation: EpubOperation) -> Self:
         operation.perform(self)

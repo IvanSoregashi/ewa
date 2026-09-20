@@ -13,6 +13,7 @@ from epub.image_analytics import ImageOptimizationRecord
 from epub.processing import ProcessingContext
 from epub.recipe_htmls import ReplaceLinks
 from epub.recipe_image import OptimizeImages
+from epub.verification import NoUnmatchedLinks
 from library.asserts import require
 from library.epub.epub import EPUB
 from library.epub.media_type import MediaType
@@ -68,7 +69,7 @@ def test_conversion_updates_inventory_html_manifest_and_export(tmp_path, image_b
         assert context.epub.resources.by_path("OEBPS/images/cover.png") is None
         # Both consumers still need the original path at this point.
         assert context.epub.package.manifest_item_by_path("OEBPS/images/cover.png") is not None
-        context.perform(ReplaceLinks())
+        context.perform(ReplaceLinks()).verify(NoUnmatchedLinks())
         assert context.replacements == {}
         output = export(context, tmp_path)
 
@@ -167,21 +168,32 @@ def test_collision_stops_book_without_overwrite_and_retains_earlier_evidence(tmp
     assert path.read_bytes() == original
 
 
-def test_unmatched_rename_skips_book_and_retains_mapping_and_analytics(tmp_path, image_bytes):
+@pytest.mark.parametrize("verify_links", [False, True])
+def test_unmatched_rename_only_skips_when_recipe_verifies_links(tmp_path, image_bytes, verify_links):
     path = make_book(tmp_path, {"cover.png": image_bytes, "orphan.png": image_bytes}, referenced=["cover.png"])
     with ProcessingContext() as context:
         context.open_epub(path).perform(OptimizeImages()).perform(ReplaceLinks())
-        pytest.fail("Unmatched link must stop processing")
+        assert context.replacements == {}
+        assert context.unmatched_links == {"OEBPS/images/orphan.png": "OEBPS/images/orphan.jpg"}
+        assert context.epub.package.manifest_item_by_path("OEBPS/images/orphan.jpg") is not None
+        # An empty replacement pass must not erase evidence before verification.
+        context.perform(ReplaceLinks())
+        if verify_links:
+            context.verify(NoUnmatchedLinks())
+            pytest.fail("Failed verification must stop processing")
+        export(context, tmp_path)
 
     run = require(context.result)
-    assert run.skip == EpubSkipReason.UNMATCHED_LINKS
+    assert run.success == (not verify_links)
+    assert run.skip == (EpubSkipReason.UNMATCHED_LINKS if verify_links else None)
     assert run.error is None
-    assert json.loads(run.details) == {"OEBPS/images/orphan.png": "OEBPS/images/orphan.jpg"}
+    if verify_links:
+        assert json.loads(run.details) == context.unmatched_links
     assert len(run.analytics) == 2
-    assert len(context.replacements) == 2
-    assert context.epub.package.manifest_item_by_path("OEBPS/images/cover.png") is not None
+    assert context.replacements == {}
+    assert context.epub.package.manifest_item_by_path("OEBPS/images/cover.jpg") is not None
     assert b"cover.jpg" in require(context.epub.resources.by_path("OEBPS/text/chapter.xhtml")).content
-    assert not (tmp_path / "processed.epub").exists()
+    assert (tmp_path / "processed.epub").exists() == (not verify_links)
 
 
 def test_manifest_failure_keeps_mapping_after_html_consumed_it(tmp_path, image_bytes):

@@ -68,8 +68,10 @@ An empty replacement mapping means no work; no separate “not run” state is n
 OptimizeImages appends image records and publishes only successful path changes.
 Image decode/optimization errors remain per-image evidence; inventory rename collisions
 stop the book without overwriting the existing resource. ReplaceLinks consumes the mapping
-in HTML and then OPF, clearing it only after both succeed. A renamed path unmatched in HTML
-still skips the book, even when declared in OPF. Earlier evidence and mappings survive failures.
+in HTML and then OPF, clearing it only after both succeed. It stores paths unmatched in HTML
+in context.unmatched_links; it does not decide whether to skip. NoUnmatchedLinks is a separate
+late verification, placed before export by recipes that reject unmatched paths. The report
+describes the last nonempty replacement pass; an empty pass leaves it available for verification.
 
 EpubInfo, ImageInfo, and IndexInfo remain dataclasses. EpubInfo.from_path reads only
 filesystem information. ImageInfo uses `size=None` for unreadable dimensions;
@@ -78,12 +80,12 @@ Density thresholds belong to the optimizer and retain their existing byte-based 
 
 Most operations produce no analytics. Those that do append unsaved SQLModel table instances,
 with models defined near their operation and `run_id=context.run_id`. Records contain data, not live resources.
-There is no database session, engine, arbitrary shared-state dictionary, or operation-specific result slot on the context.
+There is no database session, engine, or arbitrary shared-state dictionary on the context.
 
 ### Checks and operations
 
 - Checks implement `verify(context) -> VerificationResult`; operations implement `perform(context) -> None`. The context's `verify(check)` and `perform(operation)` methods return the context for chaining. Low-level library functions need not become classes.
-- Checks are eligibility gates. A failed verification immediately stops processing and produces a skip using the check's configured default `skip_reason` and fresh failure details.
+- Checks are gates before or after transformations. A failed verification immediately stops processing and produces a skip using the check's configured default `skip_reason` and fresh failure details.
 - Conditional transformations, including choosing to do nothing, belong inside operations. Checks do not choose operations or offer warn/repair policies.
 - VerificationResult is an immutable `(passed, details)` dataclass, fresh for each call. Check instances retain configuration, not per-book state.
 - Output validation is separate from eligibility: invalid exported output produces an error, not a skip.
@@ -92,7 +94,6 @@ There is no database session, engine, arbitrary shared-state dictionary, or oper
 
 - Enter an empty `ProcessingContext`, then call `context.open_epub(path)` inside the block. It constructs the EPUB, keeps its source open, and captures original information before editing. Cleanup is registered before metadata reading; each context opens only one book.
 - `context.verify(check)` consumes the immediate result and aborts the block on failure through a private control-flow exception. The skip outcome retains its reason and details; passed checks are not accumulated in a findings list.
-- Operations can call `context.skip(reason, details)` for expected processing conditions such as unmatched links; it uses the same stop-and-retain-evidence behavior as a failed check.
 - Ordinary processing failures automatically produce an error outcome with diagnostics. Earlier analytics survive. Failure does not roll back in-memory edits.
 - Construction, opening, and metadata failures become error outcomes without an outer handler. The outcome retains `input_path`; `original_epub` is `None` if information capture failed. No fallback file reads or invented metadata are needed. Interrupts such as KeyboardInterrupt still propagate.
 - `context.succeed(new_info)` marks verified output; `context.result` is finalized after source cleanup. Later failures override success. Normal exit without completion produces an UNKNOWN error. Use a fresh context for each book and enter it once per recipe call; this is a convention, without a re-entry guard or reset machinery.

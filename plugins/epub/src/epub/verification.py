@@ -5,6 +5,7 @@ check establishes full publication validity. Failed eligibility checks skip the 
 """
 
 import io
+import json
 import random
 from zipfile import ZIP_STORED
 from lxml import etree
@@ -27,6 +28,17 @@ class EpubSpecification(StrEnum):
     WEB_TO_EPUB = "WEB_TO_EPUB"
     EPUB_PRESS = "EPUB_PRESS"
     EWA_ONE = "EWA_ONE"
+
+
+class NoUnmatchedLinks(EpubVerification):
+    """Run after ReplaceLinks to reject renames that matched no HTML reference."""
+
+    skip_reason = EpubSkipReason.UNMATCHED_LINKS
+
+    def verify(self, context: ProcessingContext) -> VerificationResult:
+        if context.unmatched_links:
+            return VerificationResult(False, json.dumps(context.unmatched_links, indent=4))
+        return VerificationResult(True)
 
 
 class SerenePanda(EpubVerification):

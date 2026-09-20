@@ -64,12 +64,13 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
 - [x] Publish image records directly from the current Panda recipe, retaining evidence on later skips/errors; remove legacy result/table conversions.
 - [x] Adapt the image operation to publish records through ProcessingContext and successful path changes to its shared replacement mapping.
-- [x] Make ReplaceLinks consume replacements in HTML and OPF; clear mappings only after both finish. Preserve the current unmatched-link skip policy through context.skip().
+- [x] Make ReplaceLinks consume replacements in HTML and OPF, retain unmatched HTML paths on the context, and clear replacements after both consumers finish. Keep skip policy in a separate NoUnmatchedLinks verification.
 - [x] Test collisions, conversion/rename/link consistency, unchanged images, partial failures, and export/reopen.
 
 ### 8. Assemble the Panda recipe around the context
 
 - [ ] Replace inline work with the reviewed checks/operations and context lifecycle; retain recipe ordering, export, output validation, and explicit success.
+- [ ] Run NoUnmatchedLinks after reference updates and before export to preserve Panda's unmatched-link skip policy.
 - [ ] Remove superseded paths and result conversions while preserving eligibility decisions, filenames, and transformations except separately documented fixes.
 - [ ] Decide explicitly how to replace destination-deletion/original-movement test scaffolding before real-book runs.
 - [ ] Test success, early skip, operation failure, and export/output validation failure; retain earlier evidence on each outcome.
@@ -85,6 +86,7 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
 These tasks are unscheduled; their order is not an implementation commitment.
 
+- [ ] Untangle perform_image_optimization: clarify image I/O, optimization/minimum-saving policy, and resource byte/path updates while preserving thresholds and outcome codes.
 - [ ] Define whole-publication deletion/link policy for XHTML, CSS, NCX, and NAV.
 - [ ] Design core/chapter disassembly, chapter deduplication, and reassembly together.
 - [ ] Define shared-asset retention and reuse during disassembly/reassembly.
