@@ -1,61 +1,23 @@
-from epub.results import EpubOperationResult
-from epub.tables import (
-    SkippedImageModel,
-    ErrorImageModel,
-    SuccessfulImageModel,
-    SkippedEpubModel,
-    ErrorEpubModel,
-    SuccessfulEpubModel,
-    SkippedImagesTable,
-    ErrorImagesTable,
-    SuccessfulImagesTable,
-    SkippedEpubsTable,
-    ErrorEpubsTable,
-    SuccessfulEpubsTable,
-)
+from sqlalchemy import inspect
+from sqlmodel import Session, SQLModel
+
+from epub.processing_run import ProcessingRun
+from library.database.sqlite_model_table import get_engine
 
 
-def record_analytics(results: list[EpubOperationResult], db_url: str) -> None:
-    """Persist a batch of epub outcomes: one bulk insert per table. Image rows
-    are recorded only for successfully processed books, attributed to their
-    successful_epubs row."""
-    skipped_results = [r for r in results if r.skip is not None]
-    error_results = [r for r in results if r.error is not None]
-    success_results = [r for r in results if r.success]
-
-    if skipped_results:
-        with SkippedEpubsTable(db_url) as table:
-            table.insert_many([SkippedEpubModel.from_result(r) for r in skipped_results])
-
-    if error_results:
-        with ErrorEpubsTable(db_url) as table:
-            table.insert_many([ErrorEpubModel.from_result(r) for r in error_results])
-
-    if not success_results:
+def record_analytics(runs: list[ProcessingRun], db_url: str) -> None:
+    """Persist runs and their operation-owned evidence in one transaction."""
+    if not runs:
         return
-
-    with SuccessfulEpubsTable(db_url) as table:
-        epub_rows = [SuccessfulEpubModel.from_result(r) for r in success_results]
-        table.insert_many(epub_rows)
-        id_by_path = {row.path: row.id for row in epub_rows}
-
-    skipped, errors, successes = [], [], []
-    for result in success_results:
-        epub_id = id_by_path[str(result.new_epub.path)]
-        for image_result in result.image_results:
-            if image_result.skip is not None:
-                skipped.append(SkippedImageModel.from_result(epub_id, image_result))
-            elif image_result.error is not None:
-                errors.append(ErrorImageModel.from_result(epub_id, image_result))
-            elif image_result.success:
-                successes.append(SuccessfulImageModel.from_result(epub_id, image_result))
-
-    if skipped:
-        with SkippedImagesTable(db_url) as table:
-            table.insert_many(skipped)
-    if errors:
-        with ErrorImagesTable(db_url) as table:
-            table.insert_many(errors)
-    if successes:
-        with SuccessfulImagesTable(db_url) as table:
-            table.insert_many(successes)
+    records = [record for run in runs for record in run.analytics]
+    models = {type(record) for record in records} | {ProcessingRun}
+    tables = [inspect(model).local_table for model in models]
+    engine = get_engine(db_url)
+    with engine.connect() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+        SQLModel.metadata.create_all(connection, tables=tables)
+        connection.commit()
+        with Session(connection, expire_on_commit=False) as session, session.begin():
+            session.add_all(runs)
+            session.flush()
+            session.add_all(records)

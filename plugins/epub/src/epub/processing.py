@@ -7,12 +7,13 @@ from contextlib import ExitStack
 from pathlib import Path
 from types import TracebackType
 from typing import Self
+from uuid import UUID, uuid4
 
 from sqlmodel import SQLModel
 
 from epub.errors import EpubErrorReason, EpubSkipReason
 from epub.protocols import EpubOperation, EpubVerification
-from epub.results import EpubOperationResult
+from epub.processing_run import ProcessingRun
 from library.epub.epub import EPUB, EpubInfo
 
 
@@ -27,15 +28,16 @@ class ProcessingContext:
     """Use a fresh context for each book and enter it once per recipe call.
 
     Call open_epub(path) inside the with block so setup failures become outcomes.
-    analytics holds unsaved table instances without live resource references.
+    analytics holds unsaved table instances linked by run_id, without live resources.
     Only the parent persists records. Exiting stores result without rollback.
     """
 
+    run_id: UUID = field(default_factory=uuid4, init=False)
     input_path: Path | None = field(default=None, init=False)
     original_epub: EpubInfo | None = field(default=None, init=False)
     replacements: dict[str, str] = field(default_factory=dict)
     analytics: list[SQLModel] = field(default_factory=list)
-    result: EpubOperationResult | None = field(default=None, init=False)
+    result: ProcessingRun | None = field(default=None, init=False)
     _epub: EPUB | None = field(default=None, init=False, repr=False)
     _exit_stack: ExitStack = field(init=False, repr=False)
     _new_epub: EpubInfo | None = field(default=None, init=False, repr=False)
@@ -124,7 +126,7 @@ class ProcessingContext:
         error: EpubErrorReason | None = None,
         new_epub: EpubInfo | None = None,
         details: str = "",
-    ) -> EpubOperationResult:
+    ) -> ProcessingRun:
         """Build a detached outcome without finalizing or changing working state.
 
         The analytics list is copied; records and book information must not
@@ -136,13 +138,15 @@ class ProcessingContext:
             raise ValueError("Success requires new_epub information from the output book.")
         if success and self.original_epub is None:
             raise ValueError("Success requires original_epub information from the input book.")
-        return EpubOperationResult(
+        result = ProcessingRun(
+            id=self.run_id,
             success=success,
             skip=skip,
             error=error,
             original_epub=self.original_epub,
-            input_path=self.input_path,
+            input_path=str(self.input_path) if self.input_path is not None else None,
             new_epub=new_epub,
             details=details,
-            analytics=list(self.analytics),
         )
+        result.analytics.extend(self.analytics)
+        return result

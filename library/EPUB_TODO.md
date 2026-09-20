@@ -1,7 +1,7 @@
 # EPUB architecture TODO
 
 Work is ordered by dependency and intended execution. Complete one migration step per
-reviewable change while keeping affected callers working. The next step is **5**.
+reviewable change while keeping affected callers working. The next step is **7**.
 Design contracts and open decisions are in [EPUB_SPECIFICATION.md](EPUB_SPECIFICATION.md);
 working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
@@ -30,7 +30,7 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
 - [x] Add ProcessingContext with live EPUB, original information, replacements, and one unsaved SQLModel analytics list.
 - [x] Document per-book ownership, sequential use, and empty replacements meaning no work.
-- [x] Reuse EpubOperationResult for success/skip/error outcomes retaining diagnostics and analytics without live resources or rollback.
+- [x] Initially reuse EpubOperationResult for detached outcomes; step 5 supersedes it with ProcessingRun.
 - [x] Test independent contexts, outcomes, and local serialization while keeping the legacy recipe working.
 
 ### 3. Add context lifetime management and automatic outcomes
@@ -48,20 +48,22 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
 ### 5. Establish how analytics belong to a processing run
 
-- [ ] Define a minimal run record for success, skip, and error outcomes.
-- [ ] Choose run IDs versus object relationships to an unsaved run record; prove parent/child persistence and an actual Windows process-pool round trip.
-- [ ] Define analytics models near their operations in importable modules without database/configuration I/O. Document schema registration/imports.
-- [ ] Plan coexistence or migration of existing analytics tables/data while preserving history and reason codes.
+- [x] Use ProcessingRun directly for success, skip, and error outcomes and persistence; remove the duplicate result class and conversion.
+- [x] Choose worker-created UUIDs and scalar foreign keys; prove parent/child persistence and an actual Windows process-pool round trip, including setup failures and retained evidence.
+- [x] Keep book/image metadata typed as EpubInfo/ImageInfo through one TypedJSON adapter; operation-owned image records remain importable without database/configuration I/O.
+- [x] Clarify dataclass snapshot semantics: unknown image dimensions/density, byte-based density naming, optimizer-owned thresholds, and filesystem-only EpubInfo.from_path.
+- [x] Replace the legacy analytics models/wrappers with two tables for new writes; preserve historical tables/data and numeric reason codes.
 
 ### 6. Add the generic parent-side recorder
 
-- [ ] Persist mixed unsaved mapped instances in one session/transaction per batch, including relationship handling.
-- [ ] Test mixed model types, run/child associations, diagnostic details, and rollback in a temporary database. Verify actual batching behavior.
-- [ ] Retain buffers after failed writes. Define duplicate prevention and uncertain-commit handling before adding retries.
+- [x] Persist mixed unsaved mapped instances directly in one session/transaction per batch; flush run records before analytics with scalar foreign keys.
+- [x] Test mixed model types, run/child associations, diagnostic details, rollback, and actual batched inserts in temporary databases.
+- [x] Propagate failed writes without clearing the batch. Use stable primary keys and no automatic retries; document explicit reconciliation for uncertain commits.
 
 ### 7. Migrate image optimization and reference updates
 
-- [ ] Adapt the image operation to publish operation-owned SQLModel analytics and successful path changes to the shared replacement mapping.
+- [x] Publish image records directly from the current Panda recipe, retaining evidence on later skips/errors; remove legacy result/table conversions.
+- [ ] Adapt the image operation to publish records through ProcessingContext and successful path changes to its shared replacement mapping.
 - [ ] Make HTML/OPF steps consume replacements; clear mappings only after all consumers finish. Preserve the current unmatched-link policy.
 - [ ] Test collisions, conversion/rename/link consistency, unchanged images, partial failures, and export/reopen.
 

@@ -9,7 +9,7 @@ from sqlmodel import Field, SQLModel
 
 from epub.errors import EpubErrorReason, EpubSkipReason
 from epub.processing import ProcessingContext
-from epub.results import EpubOperationResult
+from epub.processing_run import ProcessingRun
 from epub.verification import MimetypeVerification, OPFPath, SerenePanda
 from library.asserts import require
 from library.epub.epub import EPUB
@@ -80,11 +80,11 @@ def test_managed_success_keeps_source_open_and_returns_detached_result(book_path
     assert context.epub.source._zip_file is None
     assert context.result is not None
     assert context.result.success
-    assert context.result.input_path == book_path
+    assert context.result.input_path == str(book_path)
     assert context.result.original_epub is not None
     assert context.result.original_epub.title == "Synthetic book"
     assert context.result.new_epub == new_info
-    assert pickle.loads(pickle.dumps(context.result)) == context.result
+    assert pickle.loads(pickle.dumps(context.result)).model_dump() == context.result.model_dump()
 
 
 @pytest.mark.parametrize("status", ["success", "skip", "error"])
@@ -160,9 +160,9 @@ def test_setup_failure_returns_reportable_outcome_without_outer_catch(tmp_path, 
     assert outcome.error == EpubErrorReason.UNKNOWN
     assert not outcome.success
     assert outcome.original_epub is None
-    assert outcome.input_path == path
+    assert outcome.input_path == str(path)
     assert outcome.details
-    assert pickle.loads(pickle.dumps(outcome)) == outcome
+    assert pickle.loads(pickle.dumps(outcome)).model_dump() == outcome.model_dump()
     outcome.report()
     outcome.short_report()
     output = capsys.readouterr().out
@@ -186,7 +186,7 @@ def test_source_open_failure_keeps_input_and_earlier_evidence(book_path, monkeyp
         pytest.fail("Opening failure did not stop the block")
 
     assert context.result is not None
-    assert context.result.input_path == book_path
+    assert context.result.input_path == str(book_path)
     assert context.result.original_epub is None
     assert context.result.error == EpubErrorReason.UNKNOWN
     assert "PermissionError" in context.result.details
@@ -209,7 +209,7 @@ def test_metadata_failure_closes_acquired_source_without_retry(book_path, monkey
     assert acquired[0].fp is None
     assert context.result is not None
     assert context.result.original_epub is None
-    assert context.result.input_path == book_path
+    assert context.result.input_path == str(book_path)
     assert "Metadata read failed" in context.result.details
 
 
@@ -353,7 +353,7 @@ def test_second_book_cannot_replace_first(book_path, tmp_path):
         pytest.fail("A second book was opened")
     assert context.result is not None
     assert "only open one book" in context.result.details
-    assert context.result.input_path == book_path
+    assert context.result.input_path == str(book_path)
     assert context.result.original_epub is not None
     assert context.result.original_epub.path == book_path
     assert handle.fp is None
@@ -374,11 +374,10 @@ def test_manual_outcome_requires_one_status_and_output_info(arguments):
         ProcessingContext().outcome(**arguments)
 
 
-def test_legacy_results_remain_constructible_and_reportable(book_path, capsys):
+def test_runs_are_constructible_and_reportable(book_path, capsys):
     info = EPUB(book_path).info()
-    outcome = EpubOperationResult(skip=EpubSkipReason.NOT_IMPLEMENTED, original_epub=info)
+    outcome = ProcessingRun(skip=EpubSkipReason.NOT_IMPLEMENTED, original_epub=info)
     assert outcome.analytics == []
-    assert outcome.image_results == []
     assert outcome.input_path is None
     outcome.report()
     outcome.short_report()

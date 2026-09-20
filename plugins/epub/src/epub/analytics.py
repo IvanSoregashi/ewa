@@ -6,6 +6,7 @@ from pathlib import Path
 
 def load_data(csv_path: str) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
+    # Historical CSVs call this column bpp, but its values are bytes per pixel.
     df["bpp"] = df["bpp"].astype(float)
     df["pixels"] = df["size"].apply(lambda x: eval(x)[0] * eval(x)[1] if isinstance(x, str) else x[0] * x[1])
     df["width"] = df["size"].apply(lambda x: eval(x)[0] if isinstance(x, str) else x[0])
@@ -78,15 +79,15 @@ def plot_bpp_distribution(
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
     axes[0].hist(data, bins=50, edgecolor="black", alpha=0.7, color="green")
-    axes[0].set_xlabel("Bits Per Pixel")
+    axes[0].set_xlabel("Bytes Per Pixel")
     axes[0].set_ylabel("Count")
-    axes[0].set_title("BPP Distribution (Histogram)")
+    axes[0].set_title("Bytes Per Pixel Distribution (Histogram)")
     axes[0].axvline(data.mean(), color="red", linestyle="--", label=f"Mean: {data.mean():.2f}")
     axes[0].legend()
 
     axes[1].boxplot(data, vert=True)
-    axes[1].set_ylabel("Bits Per Pixel")
-    axes[1].set_title("BPP Distribution (Boxplot)")
+    axes[1].set_ylabel("Bytes Per Pixel")
+    axes[1].set_title("Bytes Per Pixel Distribution (Boxplot)")
 
     plt.tight_layout()
     if save_path:
@@ -139,8 +140,8 @@ def plot_bpp_by_format(df: pd.DataFrame, save_path: str | None = None):
     fig, ax = plt.subplots(figsize=(12, 6))
     df.boxplot(column="bpp", by="format", ax=ax)
     ax.set_xlabel("Format")
-    ax.set_ylabel("Bits Per Pixel")
-    ax.set_title("BPP Distribution by Format")
+    ax.set_ylabel("Bytes Per Pixel")
+    ax.set_title("Bytes Per Pixel Distribution by Format")
     plt.suptitle("")
 
     if save_path:
@@ -151,9 +152,9 @@ def plot_bpp_by_format(df: pd.DataFrame, save_path: str | None = None):
 def plot_filesize_vs_bpp(df: pd.DataFrame, save_path: str | None = None):
     fig, ax = plt.subplots(figsize=(10, 8))
     scatter = ax.scatter(df["bpp"], df["filesize_kb"], alpha=0.5, c=df["pixels"], cmap="viridis", s=20)
-    ax.set_xlabel("Bits Per Pixel")
+    ax.set_xlabel("Bytes Per Pixel")
     ax.set_ylabel("Filesize (KB)")
-    ax.set_title("Filesize vs BPP (color = total pixels)")
+    ax.set_title("Filesize vs Bytes Per Pixel (color = total pixels)")
     plt.colorbar(scatter, label="Pixels")
 
     corr = df["bpp"].corr(df["filesize_kb"])
@@ -243,8 +244,8 @@ def generate_summary_stats(df: pd.DataFrame) -> pd.DataFrame:
                 "Total Images",
                 "Mean Filesize (KB)",
                 "Median Filesize (KB)",
-                "Mean BPP",
-                "Median BPP",
+                "Mean Bytes Per Pixel",
+                "Median Bytes Per Pixel",
                 "Mean Processing Time (s)",
                 "Mean Width",
                 "Mean Height",
@@ -284,7 +285,7 @@ def run_all_analysis(csv_path: str, output_dir: str = "analysis_results", max_fi
         df, save_path=str(output_path / "filesize_distribution.png"), max_filesize_kb=max_filesize_kb
     )
 
-    print("3. BPP Distribution")
+    print("3. Bytes Per Pixel Distribution")
     plot_bpp_distribution(df, save_path=str(output_path / "bpp_distribution.png"))
 
     print("4. Format Distribution")
@@ -296,10 +297,10 @@ def run_all_analysis(csv_path: str, output_dir: str = "analysis_results", max_fi
     print("6. Filesize by Format")
     plot_filesize_by_format(df, save_path=str(output_path / "filesize_by_format.png"))
 
-    print("7. BPP by Format")
+    print("7. Bytes Per Pixel by Format")
     plot_bpp_by_format(df, save_path=str(output_path / "bpp_by_format.png"))
 
-    print("8. Filesize vs BPP")
+    print("8. Filesize vs Bytes Per Pixel")
     plot_filesize_vs_bpp(df, save_path=str(output_path / "filesize_vs_bpp.png"))
 
     print("9. Processing Time Distribution")

@@ -7,13 +7,13 @@ from typing import Literal
 from PIL import Image
 
 from library.analytics import OperationResult
-from library.image.constants import ImageFormat, ImageMode, EFFICIENT_BPP, EXTRA_EFFICIENT_BPP, USELESS_ALPHA_THRESHOLD
+from library.image.constants import ImageFormat, ImageMode, USELESS_ALPHA_THRESHOLD
 
 
 @dataclass(kw_only=True)
 class ImageInfo:
     path: str | None = None
-    size: tuple[int, int]
+    size: tuple[int, int] | None
     filesize: int
     format: ImageFormat | Literal["UNKNOWN"]
     mode: ImageMode | Literal["UNKNOWN"]
@@ -49,34 +49,31 @@ class ImageInfo:
 
     @classmethod
     def from_file(cls, file: Path) -> ImageInfo:
-        image = Image.open(file)
-        return cls.from_image(image=image, filesize=file.stat().st_size)
+        with Image.open(file) as image:
+            return cls.from_image(image=image, filesize=file.stat().st_size)
 
     @classmethod
     def failed(cls, path: str | None = None, filesize: int = 0) -> ImageInfo:
-        """Placeholder for images that could not even be opened:
-        zeroed dimensions, plain "UNKNOWN" format/mode strings."""
-        return cls(size=(0, 0), filesize=filesize, format="UNKNOWN", mode="UNKNOWN", path=path)
+        """Retain known file information when image metadata could not be read."""
+        return cls(size=None, filesize=filesize, format="UNKNOWN", mode="UNKNOWN", path=path)
 
     @property
-    def width(self) -> int:
-        return self.size[0]
+    def width(self) -> int | None:
+        return self.size[0] if self.size is not None else None
 
     @property
-    def height(self) -> int:
-        return self.size[1]
+    def height(self) -> int | None:
+        return self.size[1] if self.size is not None else None
 
     @property
-    def bpp(self) -> float:
-        return self.filesize / (self.width * self.height)
-
-    @property
-    def is_efficient(self) -> bool:
-        return self.bpp < EFFICIENT_BPP
-
-    @property
-    def is_extra_efficient(self) -> bool:
-        return self.bpp < EXTRA_EFFICIENT_BPP
+    def bytes_per_pixel(self) -> float | None:
+        """Unknown dimensions, including old zero-area snapshots, have no density."""
+        if self.size is None:
+            return None
+        width, height = self.size
+        if width <= 0 or height <= 0:
+            return None
+        return self.filesize / (width * height)
 
     @property
     def useless_transparency(self) -> bool:

@@ -8,7 +8,9 @@ contributor instructions live in [AGENTS.md](../AGENTS.md).
 
 The inventory/package foundation, per-book context, and automatic lifecycle outcomes are implemented.
 Simple operations and eligibility checks now accept the context.
-The processing-run schema is next; the recorder and full recipe migration remain pending.
+Workers return ProcessingRun directly, with typed metadata and unsaved image analytics;
+the parent recorder persists those same objects. Windows spawn and transactional persistence are tested.
+Image/reference integration with the context and full recipe migration remain pending.
 
 ## Responsibilities
 
@@ -63,8 +65,13 @@ Operations run sequentially. The context holds the live EPUB, original book info
 a shared old-path-to-new-path replacement mapping and one analytics list.
 An empty replacement mapping means no work; no separate “not run” state is needed.
 
+EpubInfo, ImageInfo, and IndexInfo remain dataclasses. EpubInfo.from_path reads only
+filesystem information. ImageInfo uses `size=None` for unreadable dimensions;
+`bytes_per_pixel` returns None for unknown or zero-area dimensions, including older snapshots.
+Density thresholds belong to the optimizer and retain their existing byte-based values.
+
 Most operations produce no analytics. Those that do append unsaved SQLModel table instances,
-with models defined near their operation. Records contain data, not live resources.
+with models defined near their operation and `run_id=context.run_id`. Records contain data, not live resources.
 There is no database session, engine, arbitrary shared-state dictionary, or operation-specific result slot on the context.
 
 ### Checks and operations
@@ -82,7 +89,7 @@ There is no database session, engine, arbitrary shared-state dictionary, or oper
 - Ordinary processing failures automatically produce an error outcome with diagnostics. Earlier analytics survive. Failure does not roll back in-memory edits.
 - Construction, opening, and metadata failures become error outcomes without an outer handler. The outcome retains `input_path`; `original_epub` is `None` if information capture failed. No fallback file reads or invented metadata are needed. Interrupts such as KeyboardInterrupt still propagate.
 - `context.succeed(new_info)` marks verified output; `context.result` is finalized after source cleanup. Later failures override success. Normal exit without completion produces an UNKNOWN error. Use a fresh context for each book and enter it once per recipe call; this is a convention, without a re-entry guard or reset machinery.
-- Return EpubOperationResult with book information, diagnostics, and analytics. Exclude the context, live EPUB/source/resources, and working replacement mapping.
+- Return ProcessingRun with book information, diagnostics, and unsaved analytics. Exclude the context, live EPUB/source/resources, and working replacement mapping.
 - Reports display unavailable statistics and percentages with a zero denominator as `N/A`; they do not invent zero-valued statistics.
 
 ### Current prototype and migration compatibility
@@ -94,20 +101,24 @@ those shared objects must no longer be edited after handoff.
 Translation, resource removal, CSS cleanup, and eligibility checks use the context contracts.
 The Panda recipe temporarily calls `verify_epub(epub)` on its OPFPath and SerenePanda checks;
 its full migration is step 8. ReplaceLinks remains on its legacy interface until the shared
-replacement mapping is integrated in step 7. EpubOperationResult retains `image_results`
-for the legacy recipe. The legacy recorder does not yet persist details or the new analytics list.
-It also assumes original book information exists; persistence of setup failures awaits the run schema.
-Local pickle tests do not establish actual Windows process-pool transport.
+replacement mapping is integrated in step 7. Both recipe paths return ProcessingRun;
+the current Panda recipe already attaches image records and retains them on later failures/skips.
+Windows spawn tests now cover detached outcomes and unsaved image records for success, skip, error,
+and setup failure, followed by parent-side persistence into a temporary database.
 
 ## Persistence and compatibility
 
-- Only the parent persists results. Analytics must eventually attach to success, skip, and error processing runs, including evidence produced before a failure.
+- Only the parent persists results. Analytics attach to success, skip, and error processing runs, including evidence produced before a failure.
 - Preserve existing numeric reason codes and analytics history. SQLModel `create_all` is not an existing-schema migration.
-- Run schema, ID versus object-relationship association, import/schema registration, and existing-data migration remain undecided.
-- The parent recorder will accept mixed mapped instances in one session/transaction per batch and retain failed-write buffers. Retry and duplicate handling require an explicit design before enabling retries.
-- Current image tables reference successful EPUBs. Their replacement/association is deferred until the run schema is established.
+- Each context creates a UUID before opening the book; it becomes `ProcessingRun.id`. Operation records use it as a scalar foreign key. A fresh attempt gets a new ID even for the same path; workers need no database-generated IDs or ORM relationships.
+- ProcessingRun is both the outcome and the persisted row. Its `analytics` property is a per-instance, unmapped transport list: it survives worker serialization, but queried runs start with an empty list. Query operation tables by `run_id` for saved evidence. The context copies its list at handoff; records and metadata must then remain unchanged.
+- `original_epub`/`new_epub` hold EpubInfo; image records hold ImageInfo. A shared TypedJSON column adapter stores ordinary JSON and validates/reconstructs these dataclasses on database reads, including nested types, paths, enums, and unknown values. There are no duplicate snapshot models. Replace a whole snapshot when an update is necessary; nested edits are not tracked by SQLAlchemy.
+- ImageOptimizationRecord is the only image analytics entity. Its small `from_result()` bridge accepts the reusable library optimizer's ImageOptimizationResult, which remains independent of plugin/database schemas.
+- Import operation model modules before creating their records; imports only register schemas. The recorder creates tables for the concrete models in the batch, enables SQLite foreign keys, flushes runs before analytics, and commits all rows in one transaction. Returned objects remain readable after the session closes.
+- New writes use `epub_processing_runs` and `epub_image_optimizations`. Historical tables remain untouched, without automatic backfill or dual writes; old integer IDs are never reinterpreted as run UUIDs. Historical reporting must query those old tables explicitly. The legacy writer, outcome conversions, and table-wrapper classes are removed.
+- Persistence errors propagate without clearing the input batch. There are no automatic retries or upserts. Stable primary keys reject duplicate transient records; after an uncertain commit, inspect the database using the original run/record IDs before retrying. Do not generate new IDs merely to bypass a duplicate.
 - Current recipe scaffolding deletes destination output on success and leaves original movement disabled. Changing this requires an explicit decision before real-book validation.
-- Current batch code clears buffers after persistence failure, and `max_workers=None` takes the synchronous branch despite its docstring. These are scheduled defects, not accepted target behavior.
+- `max_workers=None` still takes the synchronous branch despite its CPU-count docstring; this remains a scheduled defect.
 
 ## Deferred scope and open decisions
 

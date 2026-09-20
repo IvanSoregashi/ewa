@@ -46,7 +46,7 @@ def test_optimization_resizes_large_jpeg():
 
 
 def test_optimization_converts_png_to_jpeg():
-    """Noisy RGB PNG above the size threshold: inefficient bpp -> converted to JPEG."""
+    """Noisy RGB PNG above the size threshold: high bytes per pixel -> converted to JPEG."""
     image_bytes, filename = generate_image(ImageFormat.PNG, ImageMode.RGB, (1500, 1500), noise=True)
     resource, _ = counted_resource(image_bytes, filename)
     assert resource.content and len(resource.content) >= 50 * 1024  # guard: actually above threshold
@@ -101,7 +101,7 @@ def test_optimization_drops_useless_transparency_and_stays_png():
     assert result.new_image is not None
     assert result.original_image.mode is ImageMode.RGBA
     assert result.new_image.mode is ImageMode.RGB  # useless transparency dropped
-    assert result.new_image.format is ImageFormat.PNG  # efficient bpp -> no conversion
+    assert result.new_image.format is ImageFormat.PNG  # low bytes per pixel -> no conversion
     assert result.new_image.size == (2560, 2560)  # extra-efficient -> EXTRA_WIDTH_SIZE
 
     with Image.open(BytesIO(resource.content)) as optimized:
@@ -205,7 +205,7 @@ def test_perform_optimization_garbage_payload_returns_error_result():
     assert result.error == ImageErrorReason.DECODE_FAILED
     assert result.new_image is None
     info = result.original_image
-    assert info.size == (0, 0)
+    assert info.size is None
     assert info.filesize == resource.info.file_size
     assert info.path == "OEBPS/images/garbage.png"
     assert info.format == "UNKNOWN"
@@ -226,7 +226,7 @@ def test_perform_optimization_source_read_failure_returns_read_error():
 
     assert result.success is False
     assert result.error == ImageErrorReason.READ_ERROR
-    assert result.original_image.size == (0, 0)
+    assert result.original_image.size is None
     assert result.original_image.filesize == 1234
     assert result.original_image.path == "OEBPS/images/unreadable.png"
     assert result.original_image.format == "UNKNOWN"

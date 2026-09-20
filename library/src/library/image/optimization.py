@@ -11,6 +11,8 @@ from library.image.constants import (
     ImageFormat,
     ImageMode,
     USELESS_ALPHA_THRESHOLD,
+    EFFICIENT_BYTES_PER_PIXEL,
+    EXTRA_EFFICIENT_BYTES_PER_PIXEL,
 )
 from library.image.models import (
     ImageErrorReason,
@@ -21,6 +23,16 @@ from library.image.models import (
 from library.image.optimize_gif import convert_to_mp4
 
 logger = logging.getLogger(__name__)
+
+
+def is_efficient(info: ImageInfo) -> bool:
+    density = info.bytes_per_pixel
+    return density is not None and density < EFFICIENT_BYTES_PER_PIXEL
+
+
+def is_extra_efficient(info: ImageInfo) -> bool:
+    density = info.bytes_per_pixel
+    return density is not None and density < EXTRA_EFFICIENT_BYTES_PER_PIXEL
 
 
 def crop_dimensions(image_dimensions: tuple[int, int], max_dimensions: tuple[int, int]) -> tuple[int, int]:
@@ -76,7 +88,7 @@ def optimize_png_image(
         return ImageOptimizationResult(skip=ImageSkipReason.HAS_ANIMATION, original_image=original_image_info)
 
     # Reduce the image dimensions
-    if image_info.is_extra_efficient:
+    if is_extra_efficient(image_info):
         image, resized_size = crop_image_dimensions(image, EXTRA_WIDTH_SIZE)
     else:
         image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
@@ -88,7 +100,7 @@ def optimize_png_image(
         image_info.mode = ImageMode.RGB
 
     #  Convert to JPG if meaningful
-    if not image_info.is_efficient and image_info.mode == ImageMode.RGB:
+    if not is_efficient(image_info) and image_info.mode == ImageMode.RGB:
         image_info.format = ImageFormat.JPEG
         image.save(buffer, format=ImageFormat.JPEG, optimize=True, quality=85)
         image_info.filesize = len(buffer.getvalue())
@@ -111,12 +123,13 @@ def optimize_jpg_image(
     compression: int,
 ) -> ImageOptimizationResult:
     image_info = deepcopy(original_image_info)
-    if original_image_info.bpp < 0.1:
+    density = original_image_info.bytes_per_pixel
+    if density is not None and density < 0.1:
         image, image_info.size = crop_image_dimensions(image, EXTRA_WIDTH_SIZE)
     else:
         image, image_info.size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
 
-    if image_info.size != original_image_info.size or not original_image_info.is_efficient or compression < 75:
+    if image_info.size != original_image_info.size or not is_efficient(original_image_info) or compression < 75:
         image.save(buffer, format=ImageFormat.JPEG, optimize=True, quality=75)
         image_info.filesize = len(buffer.getvalue())
         return ImageOptimizationResult(success=True, original_image=original_image_info, new_image=image_info)

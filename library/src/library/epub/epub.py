@@ -169,5 +169,6 @@ class EpubInfo:
     author: str | None = None
 
     @classmethod
-    def failed(cls, path: Path) -> EpubInfo:
+    def from_path(cls, path: Path) -> EpubInfo:
+        """Read filesystem size only, without opening or parsing the EPUB."""
         return cls(path=path, path_size=path.stat().st_size)
