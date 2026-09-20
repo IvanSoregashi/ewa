@@ -10,7 +10,7 @@ The inventory/package foundation, per-book context, and automatic lifecycle outc
 Simple operations and eligibility checks now accept the context.
 Workers return ProcessingRun directly, with typed metadata and unsaved image analytics;
 the parent recorder persists those same objects. Windows spawn and transactional persistence are tested.
-Image/reference integration with the context and full recipe migration remain pending.
+Image optimization and HTML/OPF reference updates now use the context; full recipe assembly remains pending.
 
 ## Responsibilities
 
@@ -65,6 +65,12 @@ Operations run sequentially. The context holds the live EPUB, original book info
 a shared old-path-to-new-path replacement mapping and one analytics list.
 An empty replacement mapping means no work; no separate “not run” state is needed.
 
+OptimizeImages appends image records and publishes only successful path changes.
+Image decode/optimization errors remain per-image evidence; inventory rename collisions
+stop the book without overwriting the existing resource. ReplaceLinks consumes the mapping
+in HTML and then OPF, clearing it only after both succeed. A renamed path unmatched in HTML
+still skips the book, even when declared in OPF. Earlier evidence and mappings survive failures.
+
 EpubInfo, ImageInfo, and IndexInfo remain dataclasses. EpubInfo.from_path reads only
 filesystem information. ImageInfo uses `size=None` for unreadable dimensions;
 `bytes_per_pixel` returns None for unknown or zero-area dimensions, including older snapshots.
@@ -86,6 +92,7 @@ There is no database session, engine, arbitrary shared-state dictionary, or oper
 
 - Enter an empty `ProcessingContext`, then call `context.open_epub(path)` inside the block. It constructs the EPUB, keeps its source open, and captures original information before editing. Cleanup is registered before metadata reading; each context opens only one book.
 - `context.verify(check)` consumes the immediate result and aborts the block on failure through a private control-flow exception. The skip outcome retains its reason and details; passed checks are not accumulated in a findings list.
+- Operations can call `context.skip(reason, details)` for expected processing conditions such as unmatched links; it uses the same stop-and-retain-evidence behavior as a failed check.
 - Ordinary processing failures automatically produce an error outcome with diagnostics. Earlier analytics survive. Failure does not roll back in-memory edits.
 - Construction, opening, and metadata failures become error outcomes without an outer handler. The outcome retains `input_path`; `original_epub` is `None` if information capture failed. No fallback file reads or invented metadata are needed. Interrupts such as KeyboardInterrupt still propagate.
 - `context.succeed(new_info)` marks verified output; `context.result` is finalized after source cleanup. Later failures override success. Normal exit without completion produces an UNKNOWN error. Use a fresh context for each book and enter it once per recipe call; this is a convention, without a re-entry guard or reset machinery.
@@ -100,8 +107,8 @@ those shared objects must no longer be edited after handoff.
 
 Translation, resource removal, CSS cleanup, and eligibility checks use the context contracts.
 The Panda recipe temporarily calls `verify_epub(epub)` on its OPFPath and SerenePanda checks;
-its full migration is step 8. ReplaceLinks remains on its legacy interface until the shared
-replacement mapping is integrated in step 7. Both recipe paths return ProcessingRun;
+its full migration is step 8. OptimizeImages and ReplaceLinks are ready for that assembly;
+the current recipe still uses their low-level functions. Both recipe paths return ProcessingRun;
 the current Panda recipe already attaches image records and retains them on later failures/skips.
 Windows spawn tests now cover detached outcomes and unsaved image records for success, skip, error,
 and setup failure, followed by parent-side persistence into a temporary database.

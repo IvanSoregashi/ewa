@@ -7,13 +7,30 @@ import io
 import logging
 from pathlib import PurePosixPath
 from PIL import Image
+from epub.image_analytics import ImageOptimizationRecord
+from epub.processing import ProcessingContext
+from epub.protocols import EpubOperation
 from library.asserts import require
+from library.epub.media_type import EpubRole, MediaType
 from library.epub.resources import Resource, ResourceIndex
 from library.image.constants import ImageFormat
 from library.image.models import ImageErrorReason, ImageInfo, ImageOptimizationResult, ImageSkipReason
 from library.image.optimization import optimization_machine
 
 logger = logging.getLogger(__name__)
+
+
+class OptimizeImages(EpubOperation):
+    def perform(self, context: ProcessingContext) -> None:
+        resources = context.epub.resources
+        for resource in resources.by_role(EpubRole.IMAGE):
+            if resource.media_type is MediaType.IMAGE_SVG:
+                continue
+            old_path = resource.filename
+            result = perform_image_optimization(resource, resources=resources)
+            context.analytics.append(ImageOptimizationRecord.from_result(context.run_id, result))
+            if result.success and resource.filename != old_path:
+                context.replacements[old_path] = resource.filename
 
 
 def perform_image_optimization(

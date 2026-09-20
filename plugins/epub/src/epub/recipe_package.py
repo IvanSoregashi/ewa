@@ -18,9 +18,8 @@ def relocate_package(epub: EPUB, target_package_path: str = FileName.DEFAULT_OPF
 def replace_links(epub: EPUB, replace_dict: dict[str, str]) -> None:
     """Update manifest hrefs after resource renames.
 
-    Args and keys are archive paths; the opf is expected to be standardized to
-    the archive root (standardize_opf_location), where manifest hrefs coincide
-    with archive paths. Media-type is refreshed from the renamed resource.
+    Mapping keys and values are archive paths; hrefs stay relative to the OPF.
+    Media-type is refreshed from the renamed resource.
     """
     for old_link, new_link in replace_dict.items():
         item = require(epub.package.manifest_item_by_path(old_link), f"Manifest({old_link})")

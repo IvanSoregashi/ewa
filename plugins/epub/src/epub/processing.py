@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from contextlib import ExitStack
 from pathlib import Path
 from types import TracebackType
-from typing import Self
+from typing import Never, Self
 from uuid import UUID, uuid4
 
 from sqlmodel import SQLModel
@@ -105,8 +105,12 @@ class ProcessingContext:
         """A failed check aborts the with block as a skip."""
         finding = check.verify(self)
         if not finding.passed:
-            raise _SkipBook(check.skip_reason, finding.details)
+            self.skip(check.skip_reason, finding.details)
         return self
+
+    def skip(self, reason: EpubSkipReason, details: str = "") -> Never:
+        """Stop processing, retaining evidence gathered before the skip."""
+        raise _SkipBook(reason, details)
 
     def perform(self, operation: EpubOperation) -> Self:
         operation.perform(self)

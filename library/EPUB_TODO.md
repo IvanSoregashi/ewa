@@ -1,7 +1,7 @@
 # EPUB architecture TODO
 
 Work is ordered by dependency and intended execution. Complete one migration step per
-reviewable change while keeping affected callers working. The next step is **7**.
+reviewable change while keeping affected callers working. The next step is **8**.
 Design contracts and open decisions are in [EPUB_SPECIFICATION.md](EPUB_SPECIFICATION.md);
 working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
@@ -63,9 +63,9 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 ### 7. Migrate image optimization and reference updates
 
 - [x] Publish image records directly from the current Panda recipe, retaining evidence on later skips/errors; remove legacy result/table conversions.
-- [ ] Adapt the image operation to publish records through ProcessingContext and successful path changes to its shared replacement mapping.
-- [ ] Make HTML/OPF steps consume replacements; clear mappings only after all consumers finish. Preserve the current unmatched-link policy.
-- [ ] Test collisions, conversion/rename/link consistency, unchanged images, partial failures, and export/reopen.
+- [x] Adapt the image operation to publish records through ProcessingContext and successful path changes to its shared replacement mapping.
+- [x] Make ReplaceLinks consume replacements in HTML and OPF; clear mappings only after both finish. Preserve the current unmatched-link skip policy through context.skip().
+- [x] Test collisions, conversion/rename/link consistency, unchanged images, partial failures, and export/reopen.
 
 ### 8. Assemble the Panda recipe around the context
 
