@@ -44,6 +44,24 @@ def book_path(tmp_path):
     return path
 
 
+@pytest.mark.parametrize("message", ["", "Book rejected"])
+def test_failure_message_stops_processing_even_when_empty(book_path, message):
+    class RejectBook:
+        skip_reason = EpubSkipReason.NOT_IMPLEMENTED
+
+        def verify(self, context) -> str | None:
+            return message
+
+    with ProcessingContext() as context:
+        context.open_epub(book_path).verify(RejectBook())
+        pytest.fail("A failure message must stop processing")
+
+    result = require(context.result)
+    assert result.skip == EpubSkipReason.NOT_IMPLEMENTED
+    assert result.details == message
+    assert result.error is None
+
+
 def test_contexts_have_independent_working_state(book_path):
     with ProcessingContext() as first, ProcessingContext() as second:
         first.open_epub(book_path)

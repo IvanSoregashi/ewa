@@ -12,9 +12,7 @@ from epub.processing import ProcessingContext
 from library.epub.media_type import FileName
 from epub.verification import ValidXMLChapters, MimetypeVerification
 from epub.errors import EpubSkipReason
-from dataclasses import FrozenInstanceError
 from zipfile import ZIP_DEFLATED
-import pytest
 
 VALID_CHAPTER = """<?xml version="1.0" encoding="utf-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -67,8 +65,7 @@ def test_valid_xml_chapters_accepts_wellformed_xhtml(tmp_path: Path):
     with ProcessingContext() as context:
         context.open_epub(path)
         result = verification.verify(context)
-    assert result.passed is True
-    assert result.details == ""
+    assert result is None
 
 
 def test_valid_xml_chapters_rejects_broken_chapter(tmp_path: Path):
@@ -81,8 +78,8 @@ def test_valid_xml_chapters_rejects_broken_chapter(tmp_path: Path):
     with ProcessingContext() as context:
         context.open_epub(path)
         result = verification.verify(context)
-    assert result.passed is False
-    assert "chapter.xhtml" in result.details
+    assert result is not None
+    assert "chapter.xhtml" in result
 
 
 def test_valid_xml_chapters_rejects_empty_chapter(tmp_path: Path):
@@ -93,8 +90,8 @@ def test_valid_xml_chapters_rejects_empty_chapter(tmp_path: Path):
     with ProcessingContext() as context:
         context.open_epub(path)
         result = verification.verify(context)
-    assert result.passed is False
-    assert "chapter.xhtml" in result.details
+    assert result is not None
+    assert "chapter.xhtml" in result
 
 
 def test_valid_xml_chapters_without_chapters_passes_vacuously(tmp_path: Path):
@@ -107,7 +104,7 @@ def test_valid_xml_chapters_without_chapters_passes_vacuously(tmp_path: Path):
     with ProcessingContext() as context:
         context.open_epub(path)
         result = verification.verify(context)
-    assert result.passed is True
+    assert result is None
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +119,7 @@ def test_valid_xml_chapters_all_valid(tmp_path: Path):
     with ProcessingContext() as context:
         context.open_epub(path)
         result = ValidXMLChapters().verify(context)
-    assert result.passed is True  # default count covers all 3
+    assert result is None  # default count covers all 3
 
 
 def test_valid_xml_chapters_collects_all_failures(tmp_path: Path):
@@ -142,12 +139,12 @@ def test_valid_xml_chapters_collects_all_failures(tmp_path: Path):
     with ProcessingContext() as context:
         context.open_epub(path)
         result = verification.verify(context)
-    assert result.passed is False
+    assert result is not None
 
-    assert "2/3 of 3" in result.details
-    assert "bad1.xhtml" in result.details
-    assert "bad2.xhtml" in result.details
-    assert "good.xhtml" not in result.details
+    assert "2/3 of 3" in result
+    assert "bad1.xhtml" in result
+    assert "bad2.xhtml" in result
+    assert "good.xhtml" not in result
 
 
 def test_valid_xml_chapters_checks_sample_size(tmp_path: Path):
@@ -160,15 +157,15 @@ def test_valid_xml_chapters_checks_sample_size(tmp_path: Path):
     with ProcessingContext() as context:
         context.open_epub(path)
         result = verification.verify(context)
-    assert result.passed is False
-    assert "2/2 of 3" in result.details
+    assert result is not None
+    assert "2/2 of 3" in result
 
     verification = ValidXMLChapters(count=10)  # count > available: all checked
     with ProcessingContext() as context:
         context.open_epub(path)
         result = verification.verify(context)
-    assert result.passed is False
-    assert "3/3 of 3" in result.details
+    assert result is not None
+    assert "3/3 of 3" in result
 
 
 def test_valid_xml_chapters_ignores_non_chapter_resources(tmp_path: Path):
@@ -182,7 +179,7 @@ def test_valid_xml_chapters_ignores_non_chapter_resources(tmp_path: Path):
     with ProcessingContext() as context:
         context.open_epub(path)
         result = ValidXMLChapters().verify(context)
-    assert result.passed is True
+    assert result is None
 
 
 # ---------------------------------------------------------------------------
@@ -206,11 +203,9 @@ def test_reuse_returns_independent_findings_without_book_analytics(tmp_path, mon
         monkeypatch.setattr(EPUB, "info", no_analytics)
         failure = check.verify(first)
         success = check.verify(second)
-    assert not failure.passed and "bad.xhtml" in failure.details
-    assert success.passed and success.details == ""
+    assert failure is not None and "bad.xhtml" in failure
+    assert success is None
     assert not hasattr(check, "epub_info")
-    with pytest.raises(FrozenInstanceError):
-        failure.passed = True  # ty: ignore[invalid-assignment] - Test frozen dataclass enforcement.
 
 
 def test_mimetype_check_handles_missing_compressed_and_valid(tmp_path):
@@ -220,17 +215,17 @@ def test_mimetype_check_handles_missing_compressed_and_valid(tmp_path):
     with ProcessingContext() as context:
         context.open_epub(path)
         missing = check.verify(context)
-    assert "not found" in missing.details
+    assert missing is not None and "not found" in missing
     build_epub(path, {}, mimetype_compression=ZIP_DEFLATED)
     with ProcessingContext() as context:
         context.open_epub(path)
         compressed = check.verify(context)
-    assert "compressed" in compressed.details
+    assert compressed is not None and "compressed" in compressed
     build_epub(path, {})
     with ProcessingContext() as context:
         context.open_epub(path)
         valid = check.verify(context)
-    assert valid.passed
+    assert valid is None
 
 
 def test_moved_checks_keep_persisted_skip_codes():

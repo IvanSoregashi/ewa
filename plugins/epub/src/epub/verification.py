@@ -12,7 +12,7 @@ from lxml import etree
 from enum import StrEnum
 from library.epub.epub import EPUB
 from epub.processing import ProcessingContext
-from epub.protocols import EpubVerification, VerificationResult
+from epub.protocols import EpubVerification
 from epub.errors import EpubSkipReason
 from library.epub.media_type import FileName, EpubRole, MediaType
 
@@ -35,10 +35,10 @@ class NoUnmatchedLinks(EpubVerification):
 
     skip_reason = EpubSkipReason.UNMATCHED_LINKS
 
-    def verify(self, context: ProcessingContext) -> VerificationResult:
+    def verify(self, context: ProcessingContext) -> str | None:
         if context.unmatched_links:
-            return VerificationResult(False, json.dumps(context.unmatched_links, indent=4))
-        return VerificationResult(True)
+            return json.dumps(context.unmatched_links, indent=4)
+        return None
 
 
 class SerenePanda(EpubVerification):
@@ -53,10 +53,10 @@ class SerenePanda(EpubVerification):
     def __init__(self, strict: bool = False) -> None:
         self.strict = strict
 
-    def verify(self, context: ProcessingContext) -> VerificationResult:
+    def verify(self, context: ProcessingContext) -> str | None:
         return self.verify_epub(context.epub)
 
-    def verify_epub(self, epub: EPUB) -> VerificationResult:
+    def verify_epub(self, epub: EPUB) -> str | None:
         """Temporary entry point for the legacy Panda recipe."""
         strict_filename = FileName.SP_FONT
         filename = FileName.SP_FONT_LOWER_ENDSWITH
@@ -64,23 +64,19 @@ class SerenePanda(EpubVerification):
             fonts = epub.resources.by_role(EpubRole.FONT)
 
             if not fonts:
-                return VerificationResult(False, "SerenePanda font not found")
+                return "SerenePanda font not found"
             if self.strict and len(fonts) != 1:
-                return VerificationResult(False, f"Expected exactly one font, found {len(fonts)}")
+                return f"Expected exactly one font, found {len(fonts)}"
 
             for font in fonts:
                 if self.strict:
                     if font.filename != strict_filename:
-                        return VerificationResult(
-                            False, f"Font filename {font.filename!r}, expected {strict_filename!r}"
-                        )
+                        return f"Font filename {font.filename!r}, expected {strict_filename!r}"
                 else:
                     if filename not in font.filename.lower():
-                        return VerificationResult(
-                            False, f"Font filename {font.filename!r} does not contain {filename!r}"
-                        )
+                        return f"Font filename {font.filename!r} does not contain {filename!r}"
 
-        return VerificationResult(True)
+        return None
 
 
 class HasNoGiantGifs(EpubVerification):
@@ -93,7 +89,7 @@ class HasNoGiantGifs(EpubVerification):
     def __init__(self, threshold_mb: int = 5) -> None:
         self.threshold_mb = threshold_mb
 
-    def verify(self, context: ProcessingContext) -> VerificationResult:
+    def verify(self, context: ProcessingContext) -> str | None:
         epub = context.epub
         offenders = []
 
@@ -104,9 +100,9 @@ class HasNoGiantGifs(EpubVerification):
                     offenders.append(f"{gif.filename!s}: {file_size_mb:.2f} MB")
 
         if offenders:
-            return VerificationResult(False, f"{len(offenders)} offenders found:\n" + "\n".join(offenders))
+            return f"{len(offenders)} offenders found:\n" + "\n".join(offenders)
 
-        return VerificationResult(True)
+        return None
 
 
 class OPFPath(EpubVerification):
@@ -120,16 +116,16 @@ class OPFPath(EpubVerification):
     def __init__(self, expected_path: str = "content.opf") -> None:
         self.expected_path = expected_path
 
-    def verify(self, context: ProcessingContext) -> VerificationResult:
+    def verify(self, context: ProcessingContext) -> str | None:
         return self.verify_epub(context.epub)
 
-    def verify_epub(self, epub: EPUB) -> VerificationResult:
+    def verify_epub(self, epub: EPUB) -> str | None:
         """Temporary entry point for the legacy Panda recipe."""
         with epub.keep_open():
             actual_path = epub.package.resource.filename
             if actual_path != self.expected_path:
-                return VerificationResult(False, f"Package path {actual_path!r}, expected {self.expected_path!r}")
-        return VerificationResult(True)
+                return f"Package path {actual_path!r}, expected {self.expected_path!r}"
+        return None
 
 
 class MimetypeVerification(EpubVerification):
@@ -139,16 +135,16 @@ class MimetypeVerification(EpubVerification):
 
     skip_reason = EpubSkipReason.MIMETYPE_VERIFICATION
 
-    def verify(self, context: ProcessingContext) -> VerificationResult:
+    def verify(self, context: ProcessingContext) -> str | None:
         epub = context.epub
         filename = FileName.MIMETYPE
         with epub.keep_open():
             mmt_i = epub.source.getinfo(filename)
             if mmt_i is None:
-                return VerificationResult(False, "mimetype file not found")
+                return "mimetype file not found"
             if mmt_i.compress_type not in (ZIP_STORED, None):
-                return VerificationResult(False, "mimetype file is compressed")
-        return VerificationResult(True)
+                return "mimetype file is compressed"
+        return None
 
 
 class ValidXMLChapters(EpubVerification):
@@ -162,7 +158,7 @@ class ValidXMLChapters(EpubVerification):
     def __init__(self, count: int = 10) -> None:
         self.count = count
 
-    def verify(self, context: ProcessingContext) -> VerificationResult:
+    def verify(self, context: ProcessingContext) -> str | None:
         epub = context.epub
         with epub.keep_open():
             chapters = epub.resources.by_role(EpubRole.HTML)
@@ -178,6 +174,6 @@ class ValidXMLChapters(EpubVerification):
                     failures.append(f"{chapter.filename!r}: {error}")
 
             if failures:
-                return VerificationResult(False, f"{len(failures)}/{count} of {total_chapters}\n" + "\n".join(failures))
+                return f"{len(failures)}/{count} of {total_chapters}\n" + "\n".join(failures)
 
-        return VerificationResult(True)
+        return None

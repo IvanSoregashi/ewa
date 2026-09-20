@@ -104,9 +104,9 @@ class ProcessingContext:
 
     def verify(self, check: EpubVerification) -> Self:
         """A failed check aborts the with block as a skip."""
-        finding = check.verify(self)
-        if not finding.passed:
-            raise _SkipBook(check.skip_reason, finding.details)
+        failure = check.verify(self)
+        if failure is not None:
+            raise _SkipBook(check.skip_reason, failure)
         return self
 
     def perform(self, operation: EpubOperation) -> Self:

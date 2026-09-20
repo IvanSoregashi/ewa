@@ -22,7 +22,7 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 ### 1. Finish the library/plugin boundary
 
 - [x] Move configured verification classes and their tests into the plugin; keep reusable parsing/editing functions in the library.
-- [x] Consolidate verification protocols and immutable VerificationResult in the plugin; preserve configured skip reasons and numeric values.
+- [x] Consolidate verification protocols in the plugin; return None on success or a failure message, preserving configured skip reasons and numeric values.
 - [x] Remove obsolete EPUB verification entry points and duplicate library/plugin protocol inheritance.
 - [x] Verify library code/tests do not import the plugin and checks work in an ordered loop.
 

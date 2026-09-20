@@ -72,11 +72,11 @@ def _fully_process_encrypted_panda(path: str) -> ProcessingRun:
             # recipe_package.relocate_package(epub)
 
             for verification in (OPFPath(), SerenePanda()):
-                finding = verification.verify_epub(epub)
-                if not finding.passed:
-                    logger.warning("SKIP %s: %s", current_path, finding.details)
+                failure = verification.verify_epub(epub)
+                if failure is not None:
+                    logger.warning("SKIP %s: %s", current_path, failure)
                     run.skip = verification.skip_reason
-                    run.details = finding.details
+                    run.details = failure
                     return run
 
             fonts = [f for f in epub.resources.by_role(EpubRole.FONT) if "serenepanda" in f.filename.lower()]

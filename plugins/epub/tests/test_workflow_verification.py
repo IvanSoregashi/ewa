@@ -4,7 +4,6 @@ from epub.processing import ProcessingContext
 from library.epub.media_type import FileName
 from epub.errors import EpubSkipReason
 from epub.verification import HasNoGiantGifs, OPFPath, SerenePanda
-from epub.protocols import VerificationResult
 from library.epub.resources import Resource
 
 VALID_CHAPTER = """<?xml version="1.0" encoding="utf-8"?>
@@ -55,9 +54,9 @@ def test_has_no_giant_gifs_detects_oversized(tmp_path: Path):
     with ProcessingContext() as context:
         context.open_epub(path)
         result = verification.verify(context)
-    assert result.passed is False
-    assert "big.gif" in result.details
-    assert "small.gif" not in result.details
+    assert result is not None
+    assert "big.gif" in result
+    assert "small.gif" not in result
 
 
 def test_has_no_giant_gifs_passes_when_all_small(tmp_path: Path):
@@ -70,8 +69,7 @@ def test_has_no_giant_gifs_passes_when_all_small(tmp_path: Path):
     with ProcessingContext() as context:
         context.open_epub(path)
         result = verification.verify(context)
-    assert result.passed is True
-    assert result.details == ""
+    assert result is None
 
 
 def test_configured_checks_chain_and_short_circuit(tmp_path):
@@ -84,7 +82,7 @@ def test_configured_checks_chain_and_short_circuit(tmp_path):
 
         def verify(self, context):
             reached.append(True)
-            return VerificationResult(True)
+            return None
 
     with ProcessingContext() as context:
         context.open_epub(path)
@@ -95,7 +93,7 @@ def test_configured_checks_chain_and_short_circuit(tmp_path):
     assert context.result.skip == EpubSkipReason.SERENE_PANDA_FONT
     assert "font not found" in context.result.details
     assert reached == []
-    assert not wrong_path.passed
+    assert wrong_path is not None
 
 
 def test_font_check_modes_and_reuse(tmp_path):
@@ -110,10 +108,10 @@ def test_font_check_modes_and_reuse(tmp_path):
         context.epub.resources.add(Resource.from_bytes("other.ttf", b"font"))
         extra = check.verify(context)
         relaxed = SerenePanda().verify(context)
-    assert not missing.passed
-    assert matching.passed
-    assert not extra.passed
-    assert not relaxed.passed
+    assert missing is not None
+    assert matching is None
+    assert extra is not None
+    assert relaxed is not None
 
 
 def test_panda_recipe_legacy_checks_match_context_checks(tmp_path):

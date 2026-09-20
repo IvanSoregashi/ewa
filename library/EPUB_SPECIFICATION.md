@@ -84,10 +84,10 @@ There is no database session, engine, or arbitrary shared-state dictionary on th
 
 ### Checks and operations
 
-- Checks implement `verify(context) -> VerificationResult`; operations implement `perform(context) -> None`. The context's `verify(check)` and `perform(operation)` methods return the context for chaining. Low-level library functions need not become classes.
+- Checks implement `verify(context) -> str | None`: None passes; a string is the failure message. Operations implement `perform(context) -> None`. The context's `verify(check)` and `perform(operation)` methods return the context for chaining. Low-level library functions need not become classes.
 - Checks are gates before or after transformations. A failed verification immediately stops processing and produces a skip using the check's configured default `skip_reason` and fresh failure details.
 - Conditional transformations, including choosing to do nothing, belong inside operations. Checks do not choose operations or offer warn/repair policies.
-- VerificationResult is an immutable `(passed, details)` dataclass, fresh for each call. Check instances retain configuration, not per-book state.
+- Check instances retain configuration and skip_reason, not per-book state. Callers test `is not None` so even an empty failure message stops processing.
 - Output validation is separate from eligibility: invalid exported output produces an error, not a skip.
 
 ### Context lifetime and outcomes
