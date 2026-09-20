@@ -10,7 +10,8 @@ The inventory/package foundation, per-book context, and automatic lifecycle outc
 Simple operations and eligibility checks now accept the context.
 Workers return ProcessingRun directly, with typed metadata and unsaved image analytics;
 the parent recorder persists those same objects. Windows spawn and transactional persistence are tested.
-Image optimization and HTML/OPF reference updates now use the context; full recipe assembly remains pending.
+A separate Panda candidate uses the context for checks, transformations, export, and output validation.
+Callers retain the legacy recipe until side-by-side comparison is complete; real books will be provided later.
 
 ## Responsibilities
 
@@ -94,23 +95,31 @@ There is no database session, engine, or arbitrary shared-state dictionary on th
 
 - Enter an empty `ProcessingContext`, then call `context.open_epub(path)` inside the block. It constructs the EPUB, keeps its source open, and captures original information before editing. Cleanup is registered before metadata reading; each context opens only one book.
 - `context.verify(check)` consumes the immediate result and aborts the block on failure through a private control-flow exception. The skip outcome retains its reason and details; passed checks are not accumulated in a findings list.
-- Ordinary processing failures automatically produce an error outcome with diagnostics. Earlier analytics survive. Failure does not roll back in-memory edits.
+- Ordinary processing failures automatically produce an error outcome with diagnostics, using context.error_reason (UNKNOWN by default). The recipe sets INCORRECT_RESULT immediately before reading exported metadata. Source cleanup and missing completion still use UNKNOWN. Earlier analytics survive; failure does not roll back in-memory edits.
 - Construction, opening, and metadata failures become error outcomes without an outer handler. The outcome retains `input_path`; `original_epub` is `None` if information capture failed. No fallback file reads or invented metadata are needed. Interrupts such as KeyboardInterrupt still propagate.
 - `context.succeed(new_info)` marks verified output; `context.result` is finalized after source cleanup. Later failures override success. Normal exit without completion produces an UNKNOWN error. Use a fresh context for each book and enter it once per recipe call; this is a convention, without a re-entry guard or reset machinery.
 - Return ProcessingRun with book information, diagnostics, and unsaved analytics. Exclude the context, live EPUB/source/resources, and working replacement mapping.
 - Reports display unavailable statistics and percentages with a zero denominator as `N/A`; they do not invent zero-valued statistics.
 
-### Current prototype and migration compatibility
+### Panda recipes and comparison
 
 `ProcessingContext.outcome()` remains a manual outcome builder used by the lifecycle methods.
 It copies the analytics list while sharing record objects and book information;
 those shared objects must no longer be edited after handoff.
 
-Translation, resource removal, CSS cleanup, and eligibility checks use the context contracts.
-The Panda recipe temporarily calls `verify_epub(epub)` on its OPFPath and SerenePanda checks;
-its full migration is step 8. OptimizeImages and ReplaceLinks are ready for that assembly;
-the current recipe still uses their low-level functions. Both recipe paths return ProcessingRun;
-the current Panda recipe already attaches image records and retains them on later failures/skips.
+Single/batch callers filter paths outside the input directory and paths with existing destinations
+before dispatch. These paths produce no outcome or analytics; the single caller returns None.
+Both worker recipes assume paths have passed this filter. The persisted skip codes remain for history.
+
+_fully_process_encrypted_panda retains the legacy processing order and is the caller default.
+_fully_process_encrypted_panda_with_context is a separate candidate; verify_epub remains for the legacy path.
+The candidate completes HTML/OPF updates together before unmatched-link verification and translation,
+and validates output before closing the input context. The legacy recipe validates after closing it.
+
+Synthetic comparisons check outcomes, metadata, image evidence (excluding generated UUIDs), and
+exported resource contents. Known differences: an optimized image absent from HTML and the manifest
+produces UNMATCHED_LINKS in the legacy recipe but UNKNOWN in the candidate; cleanup diagnostics also
+differ. Both implementations remain available while those differences and user-provided book copies are evaluated.
 Windows spawn tests now cover detached outcomes and unsaved image records for success, skip, error,
 and setup failure, followed by parent-side persistence into a temporary database.
 

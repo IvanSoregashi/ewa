@@ -4,23 +4,39 @@ import time
 from pathlib import Path
 
 from epub.config import settings
+from epub.processing import ProcessingContext
 from epub.processing_run import ProcessingRun
 from epub.image_analytics import ImageOptimizationRecord
-from library.asserts import require
-from library.epub.epub import EPUB, EpubInfo
 from epub.errors import EpubSkipReason, EpubErrorReason
-from library.epub.media_type import EpubRole, MediaType
-from epub import recipe_image, recipe_htmls
+from epub import recipe_analytics, recipe_css, recipe_htmls, recipe_image, recipe_package
+from epub.recipe_css import CleanupPandaCSS
+from epub.recipe_htmls import RemoveResourceAndManifest, ReplaceLinks, TextTranslator
+from epub.recipe_image import OptimizeImages
+from epub.verification import NoUnmatchedLinks, OPFPath, SerenePanda
+from library.asserts import require
+from library.epub.epub import EPUB
 from library.epub import html_editing
-from epub import recipe_analytics, recipe_css, recipe_package
-from epub.verification import OPFPath, SerenePanda
+from library.epub.media_type import EpubRole, MediaType
 
 logger = logging.getLogger(__name__)
 sp_dictionary_path: Path = settings.serene_panda_dir / "translator.json"
 sp_dictionary = str.maketrans(json.loads(sp_dictionary_path.read_text(encoding="utf-8")))
 
 
-def fully_process_encrypted_panda(path: str) -> ProcessingRun:
+def should_process_path(path: Path) -> bool:
+    if not path.is_relative_to(settings.encrypted_epub_dir):
+        logger.warning("SKIP %s FILE NOT FROM %s", path, settings.encrypted_epub_dir)
+        return False
+    destination = settings.decrypted_epub_dir / path.relative_to(settings.encrypted_epub_dir)
+    if destination.exists():
+        logger.warning("SKIP %s SINCE %s EXISTS", path, destination)
+        return False
+    return True
+
+
+def fully_process_encrypted_panda(path: str) -> ProcessingRun | None:
+    if not should_process_path(Path(path)):
+        return None
     start = time.time()
     result = _fully_process_encrypted_panda(path)
     print(f"ELAPSED _fully_process_encrypted_panda: {time.time() - start:.2f} s")
@@ -31,7 +47,7 @@ def fully_process_encrypted_panda(path: str) -> ProcessingRun:
 
 
 def _fully_process_encrypted_panda(path: str) -> ProcessingRun:
-    """
+    """Legacy recipe; callers filter input paths before dispatch.
 
     1. Check EPUB eligibility
     2. relocate opf to root -> content.opf
@@ -50,21 +66,8 @@ def _fully_process_encrypted_panda(path: str) -> ProcessingRun:
     current_path = Path(path)
     run = ProcessingRun(input_path=str(current_path))
 
-    if not current_path.is_relative_to(settings.encrypted_epub_dir):
-        logger.warning(f"SKIP {str(current_path)!s} FILE NOT FROM {str(settings.encrypted_epub_dir)!s}")
-        # EPUB STAYS IN PLACE
-        run.skip = EpubSkipReason.INCORRECT_DIRECTORY
-        run.original_epub = EpubInfo.from_path(current_path)
-        return run
-
     relative_path = current_path.relative_to(settings.encrypted_epub_dir)
     destination_path = settings.decrypted_epub_dir / relative_path
-    if destination_path.exists():
-        logger.warning(f"SKIP {str(current_path)!s} SINCE {str(destination_path)!s} EXISTS")
-        # EPUB STAYS IN PLACE
-        run.skip = EpubSkipReason.DESTINATION_EXISTS
-        run.original_epub = EpubInfo.from_path(current_path)
-        return run
 
     try:
         with EPUB(current_path).keep_open() as epub:
@@ -157,6 +160,53 @@ def _fully_process_encrypted_panda(path: str) -> ProcessingRun:
 
     run.success = True
     run.new_epub = new_info
+    return run
+
+
+def _fully_process_encrypted_panda_with_context(path: str) -> ProcessingRun:
+    """Candidate recipe kept separate for comparison with the legacy implementation."""
+    current_path = Path(path)
+    relative_path = current_path.relative_to(settings.encrypted_epub_dir)
+    destination_path = settings.decrypted_epub_dir / relative_path
+
+    with ProcessingContext() as context:
+        context.open_epub(current_path).verify(OPFPath()).verify(SerenePanda())
+        # Keep the existing recipe's first-font removal, including relaxed checks.
+        font = context.epub.resources.by_role(EpubRole.FONT)[0]
+        context.perform(RemoveResourceAndManifest(exact_path=font.filename, flush=False))
+        context.perform(CleanupPandaCSS())
+        context.perform(OptimizeImages())
+        context.perform(ReplaceLinks()).verify(NoUnmatchedLinks())
+        context.perform(TextTranslator(sp_dictionary))
+        context.epub.package_into(destination_path, sort_by_role=True)
+        context.error_reason = EpubErrorReason.INCORRECT_RESULT
+        context.succeed(EPUB(destination_path).info())
+
+    run = require(context.result)
+    if not run.success:
+        if run.error is not None:
+            logger.error("EPUB FAIL %s: %s", path, run.details)
+            destination_path.unlink(missing_ok=True)
+        else:
+            logger.warning("SKIP %s: %s", path, run.details)
+        return run
+
+    # move original to processed
+    try:
+        processed_path = settings.processed_epub_dir / relative_path
+        processed_path.parent.mkdir(parents=True, exist_ok=True)
+        if processed_path.exists():
+            logger.warning(f"PROCESSED PATH EXISTS {str(processed_path)!s}, NOT MOVING ORIGINAL")
+        else:
+            # shutil.move(current_path, processed_path)
+            pass
+    except Exception as e:
+        # housekeeping only: the processed epub is already written and verified,
+        # so the result stays a success - the original simply remains in place
+        logger.error(f"FAILED TO MOVE ORIGINAL {path} -> {str(processed_path)!s}: {e}")
+
+    destination_path.unlink(missing_ok=True)
+
     return run
 
 

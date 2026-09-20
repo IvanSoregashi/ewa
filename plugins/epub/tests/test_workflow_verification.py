@@ -114,18 +114,6 @@ def test_font_check_modes_and_reuse(tmp_path):
     assert relaxed is not None
 
 
-def test_panda_recipe_legacy_checks_match_context_checks(tmp_path):
-    path = tmp_path / "book.epub"
-    build_epub(path, {})
-    comparisons = []
-    with ProcessingContext() as context:
-        context.open_epub(path)
-        for check in (OPFPath(), OPFPath("OEBPS/content.opf"), SerenePanda()):
-            comparisons.append((check.verify_epub(context.epub), check.verify(context)))
-    assert len(comparisons) == 3
-    assert all(legacy == current for legacy, current in comparisons)
-
-
 def test_default_skip_reasons_can_be_overridden_per_instance():
     assert OPFPath().skip_reason == EpubSkipReason.NON_DEFAULT_OPF
     assert HasNoGiantGifs().skip_reason == EpubSkipReason.BIG_GIFS

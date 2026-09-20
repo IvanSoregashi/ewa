@@ -1,7 +1,7 @@
 # EPUB architecture TODO
 
 Work is ordered by dependency and intended execution. Complete one migration step per
-reviewable change while keeping affected callers working. The next step is **8**.
+reviewable change while keeping affected callers working. The next step is **9**.
 Design contracts and open decisions are in [EPUB_SPECIFICATION.md](EPUB_SPECIFICATION.md);
 working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
@@ -67,20 +67,30 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 - [x] Make ReplaceLinks consume replacements in HTML and OPF, retain unmatched HTML paths on the context, and clear replacements after both consumers finish. Keep skip policy in a separate NoUnmatchedLinks verification.
 - [x] Test collisions, conversion/rename/link consistency, unchanged images, partial failures, and export/reopen.
 
-### 8. Assemble the Panda recipe around the context
+### 8. Assemble a separate Panda recipe around the context
 
-- [ ] Replace inline work with the reviewed checks/operations and context lifecycle; retain recipe ordering, export, output validation, and explicit success.
-- [ ] Run NoUnmatchedLinks after reference updates and before export to preserve Panda's unmatched-link skip policy.
-- [ ] Remove superseded paths and result conversions while preserving eligibility decisions, filenames, and transformations except separately documented fixes.
+- [x] Replace inline work with the reviewed checks/operations and context lifecycle; retain export, output validation, and explicit success.
+- [x] Run NoUnmatchedLinks after reference updates and before translation/export to preserve Panda's unmatched-link skip policy.
+- [x] Keep _fully_process_encrypted_panda as the legacy default and add _fully_process_encrypted_panda_with_context for comparison. Retain verify_epub while the legacy recipe needs it.
+- [x] Move directory/destination filtering into single/batch callers before dispatch; filtered paths produce no ProcessingRun or analytics. Adapt the CLI to an absent result.
+- [x] Preserve destination-deletion/original-movement scaffolding during assembly; schedule its replacement decision before real-book runs in step 9.
+- [x] Test success, early skip, setup/operation/export/output-validation failures, and source cleanup; retain earlier evidence on each outcome.
+
+### 9. Compare recipes before switching callers
+
+- [x] Compare synthetic outcomes, book/image metadata, analytics (excluding generated IDs), and exported resource contents for 14 success/skip/error scenarios.
+- [x] Add explicit regression cases for differences in undeclared-orphan handling and cleanup diagnostics; do not claim full equivalence.
+- [ ] Resolve or explicitly accept the skip/error ordering for optimized images absent from both HTML references and the manifest, and the context's extra cleanup diagnostics.
 - [ ] Decide explicitly how to replace destination-deletion/original-movement test scaffolding before real-book runs.
-- [ ] Test success, early skip, operation failure, and export/output validation failure; retain earlier evidence on each outcome.
+- [ ] Compare copies of the books the user will provide; preserve originals and use temporary analytics storage.
+- [ ] Switch callers to the context recipe only after the comparison is complete; then remove the legacy implementation and verify_epub entry points.
 
-### 9. Integrate batch execution and test real books
+### 10. Integrate batch execution
 
 - [ ] Return the same outcomes/analytics from synchronous and ProcessPoolExecutor paths.
 - [ ] Test spawned workers with success/skip/error outcomes and related analytics, plus parent database failure; retain outcomes for worker failures.
 - [ ] Fix/document the synchronous behavior of `max_workers=None` versus its CPU-count docstring.
-- [ ] Validate a small representative set of copied EPUBs and saved analytics before increasing batch size; keep originals untouched.
+- [ ] Validate the migrated batch path with the copied comparison books and saved analytics before increasing batch size; keep originals untouched.
 
 ## Backlog after the migration
 

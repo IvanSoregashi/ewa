@@ -59,9 +59,11 @@ def decrypt(epub_path: Path = typer.Argument(exists=True)):
     start = time.time()
     result = recipe_epub.fully_process_encrypted_panda(str(epub_path))
     elapsed = time.time() - start
+    print(f"ELAPSED {elapsed:.2f}s")
+    if result is None:
+        return
 
     result.report()
-    print(f"ELAPSED {elapsed:.2f}s")
 
     if result.success and result.new_epub and result.new_epub.path:
         Path(result.new_epub.path).unlink(missing_ok=True)

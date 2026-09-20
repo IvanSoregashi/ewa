@@ -38,6 +38,7 @@ class ProcessingContext:
     replacements: dict[str, str] = field(default_factory=dict)
     unmatched_links: dict[str, str] = field(default_factory=dict)
     analytics: list[SQLModel] = field(default_factory=list)
+    error_reason: EpubErrorReason = EpubErrorReason.UNKNOWN
     result: ProcessingRun | None = field(default=None, init=False)
     _epub: EPUB | None = field(default=None, init=False, repr=False)
     _exit_stack: ExitStack = field(init=False, repr=False)
@@ -90,7 +91,7 @@ class ProcessingContext:
         if isinstance(exc, _SkipBook):
             self.result = self.outcome(skip=exc.reason, details=exc.details)
         elif isinstance(exc, Exception):
-            self.result = self.outcome(error=EpubErrorReason.UNKNOWN, details=repr(exc))
+            self.result = self.outcome(error=self.error_reason, details=repr(exc))
         elif exc is not None:
             # preserving KeyboardInterrupt or SystemExit
             return False

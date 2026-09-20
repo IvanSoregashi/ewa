@@ -57,7 +57,7 @@ class SerenePanda(EpubVerification):
         return self.verify_epub(context.epub)
 
     def verify_epub(self, epub: EPUB) -> str | None:
-        """Temporary entry point for the legacy Panda recipe."""
+        """Entry point retained for the legacy recipe during side-by-side comparison."""
         strict_filename = FileName.SP_FONT
         filename = FileName.SP_FONT_LOWER_ENDSWITH
         with epub.keep_open():
@@ -120,7 +120,7 @@ class OPFPath(EpubVerification):
         return self.verify_epub(context.epub)
 
     def verify_epub(self, epub: EPUB) -> str | None:
-        """Temporary entry point for the legacy Panda recipe."""
+        """Entry point retained for the legacy recipe during side-by-side comparison."""
         with epub.keep_open():
             actual_path = epub.package.resource.filename
             if actual_path != self.expected_path:

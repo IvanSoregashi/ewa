@@ -11,7 +11,7 @@ from pathlib import Path
 from epub.config import settings
 from epub.recipe_analytics import record_analytics
 from epub.processing_run import ProcessingRun
-from epub.recipe_epub import _fully_process_encrypted_panda
+from epub.recipe_epub import _fully_process_encrypted_panda, should_process_path
 from ewa.ui import print_success
 
 logger = logging.getLogger(__name__)
@@ -27,10 +27,13 @@ def fully_process_encrypted_pandas(
     max_workers: None = cpu count, 0 = synchronous (no pool, current process).
     flush_size: how many accumulated results trigger an analytics flush.
 
-    Returns every book's result; lost books (worker raised) are logged and
-    skipped.
+    Paths outside the input directory or with existing destinations are filtered
+    before dispatch, without analytics. Returns attempted books' results;
+    lost books (worker raised) are logged and skipped.
     """
-    paths = sorted(path for path in directory.rglob("*.epub"))
+    paths = [path for path in sorted(directory.rglob("*.epub")) if should_process_path(path)]
+    if not paths:
+        return []
     results: list[ProcessingRun] = []
     buffer: list[ProcessingRun] = []
     flush_end_time = time.time()
