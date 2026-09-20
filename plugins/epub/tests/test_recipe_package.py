@@ -4,7 +4,11 @@ removal, rename handling, and packaging - using a synthetic epub, no repo fixtur
 import zipfile
 from pathlib import Path
 
-from epub.recipe_package import relocate_package, replace_links
+import pytest
+
+from epub.errors import InvalidEpubOutput
+from epub.processing import ProcessingContext
+from epub.recipe_package import PackageEpub, relocate_package, replace_links, validate_epub_output
 from library.epub.epub import EPUB
 from library.epub.media_type import FileName
 
@@ -96,3 +100,37 @@ def test_relocate_is_noop_for_root_opf(tmp_path: Path):
     # second call: opf is now at the root
     assert relocate_package(epub) is False
     assert epub.package.resource.info.filename == FileName.DEFAULT_OPF
+
+
+def test_package_operation_writes_verified_output(tmp_path: Path):
+    source = tmp_path / "book.epub"
+    destination = tmp_path / "output.epub"
+    build_epub(source)
+    original_bytes = source.read_bytes()
+
+    with ProcessingContext() as context:
+        context.open_epub(source).perform(PackageEpub(destination))
+        assert context.result is None
+
+    assert context.result is not None
+    assert context.result.success
+    assert context.result.error is None
+    assert context.result.new_epub == validate_epub_output(destination)
+    assert source.read_bytes() == original_bytes
+    with zipfile.ZipFile(destination) as archive:
+        assert archive.namelist()[0] == "mimetype"
+        assert archive.getinfo("mimetype").compress_type == zipfile.ZIP_STORED
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_output_validation_preserves_cause(tmp_path: Path, missing: bool):
+    output = tmp_path / "invalid.epub"
+    if not missing:
+        output.write_bytes(b"not an archive")
+
+    with pytest.raises(InvalidEpubOutput) as failure:
+        validate_epub_output(output)
+
+    cause = failure.value.__cause__
+    assert isinstance(cause, FileNotFoundError if missing else ValueError)
+    assert str(failure.value) == str(cause)

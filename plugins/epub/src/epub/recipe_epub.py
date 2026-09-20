@@ -7,11 +7,12 @@ from epub.config import settings
 from epub.processing import ProcessingContext
 from epub.processing_run import ProcessingRun
 from epub.image_analytics import ImageOptimizationRecord
-from epub.errors import EpubSkipReason, EpubErrorReason, InvalidEpubOutput
+from epub.errors import EpubSkipReason, EpubErrorReason
 from epub import recipe_analytics, recipe_css, recipe_htmls, recipe_image, recipe_package
 from epub.recipe_css import CleanupPandaCSS
 from epub.recipe_htmls import RemoveResourceAndManifest, ReplaceLinks, TextTranslator
 from epub.recipe_image import OptimizeImages
+from epub.recipe_package import PackageEpub
 from epub.verification import NoUnmatchedLinks, OPFPath, SerenePanda
 from library.asserts import require
 from library.epub.epub import EPUB
@@ -176,12 +177,7 @@ def _fully_process_encrypted_panda_with_context(path: str) -> ProcessingRun:
         context.perform(OptimizeImages())
         context.perform(ReplaceLinks()).verify(NoUnmatchedLinks())
         context.perform(TextTranslator(sp_dictionary))
-        context.epub.package_into(destination_path, sort_by_role=True)
-        try:
-            new_info = EPUB(destination_path).info()
-        except Exception as error:
-            raise InvalidEpubOutput(str(error)) from error
-        context.succeed(new_info)
+        context.perform(PackageEpub(destination_path))
 
     run = require(context.result)
     if not run.success:

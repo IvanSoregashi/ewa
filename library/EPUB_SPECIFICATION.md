@@ -23,7 +23,7 @@ Callers retain the legacy recipe until side-by-side comparison is complete; real
 | Library editing functions | Supply reusable HTML, image, and resource primitives. |
 | Plugin checks and operations | Apply configured eligibility rules and workflow transformations through uniform class interfaces. |
 | ProcessingContext | Hold one book's working state and accumulated evidence for one recipe call. |
-| Recipe | Order steps, export, validate output, and explicitly complete success. |
+| Recipe | Order checks and operations, including packaging and output validation. |
 | Parent process | Persist returned outcomes and unsaved analytics. Workers own no database sessions or connections. |
 
 The library does not import plugin policy, workflow protocols, or persisted outcome codes.
@@ -90,14 +90,16 @@ There is no database session, engine, or arbitrary shared-state dictionary on th
 - Conditional transformations, including choosing to do nothing, belong inside operations. Checks do not choose operations or offer warn/repair policies.
 - Check instances retain configuration and skip_reason, not per-book state. Callers test `is not None` so even an empty failure message stops processing.
 - Output validation is separate from eligibility: invalid exported output produces an error, not a skip.
+- PackageEpub writes to the destination, calls the separate validate_epub_output function, then marks success. Validation currently only reopens the output and reads metadata; full EPUB validation is deferred.
 
 ### Context lifetime and outcomes
 
 - Enter an empty `ProcessingContext`, then call `context.open_epub(path)` inside the block. It constructs the EPUB, keeps its source open, and captures original information before editing. Cleanup is registered before metadata reading; each context opens only one book.
 - `context.verify(check)` consumes the immediate result and aborts the block on failure through a private control-flow exception. The skip outcome retains its reason and details; passed checks are not accumulated in a findings list.
-- The context carries no error reason before a failure. In __exit__, InvalidEpubOutput maps to INCORRECT_RESULT; other ordinary exceptions map to UNKNOWN. The recipe wraps only exported-book validation failures in InvalidEpubOutput, preserving the original exception as its cause and diagnostic. Successful/skipped outcomes have error=None. Source cleanup failures and missing completion use UNKNOWN; earlier analytics survive.
+- The context carries no error reason before a failure. In __exit__, InvalidEpubOutput maps to INCORRECT_RESULT; other ordinary exceptions map to UNKNOWN. The output-validation function wraps only exported-book validation failures in InvalidEpubOutput, preserving the original exception as its cause and diagnostic. Successful/skipped outcomes have error=None. Source cleanup failures and missing completion use UNKNOWN; earlier analytics survive.
 - Construction, opening, and metadata failures become error outcomes without an outer handler. The outcome retains `input_path`; `original_epub` is `None` if information capture failed. No fallback file reads or invented metadata are needed. Interrupts such as KeyboardInterrupt still propagate.
 - `context.succeed(new_info)` marks verified output; `context.result` is finalized after source cleanup. Later failures override success. Normal exit without completion produces an UNKNOWN error. Use a fresh context for each book and enter it once per recipe call; this is a convention, without a re-entry guard or reset machinery.
+- Exiting closes the managed source scope; the context object and its finalized result remain available after the with block.
 - Return ProcessingRun with book information, diagnostics, and unsaved analytics. Exclude the context, live EPUB/source/resources, and working replacement mapping.
 - Reports display unavailable statistics and percentages with a zero denominator as `N/A`; they do not invent zero-valued statistics.
 

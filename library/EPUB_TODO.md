@@ -74,6 +74,7 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 - [x] Keep _fully_process_encrypted_panda as the legacy default and add _fully_process_encrypted_panda_with_context for comparison. Retain verify_epub while the legacy recipe needs it.
 - [x] Move directory/destination filtering into decrypt and the batch dispatcher; filtered paths produce no ProcessingRun or analytics, while processing functions always return a run.
 - [x] Classify InvalidEpubOutput in __exit__ to preserve INCORRECT_RESULT without a mutable error-reason field; keep original exception diagnostics.
+- [x] Extract packaging into PackageEpub, calling a separate output-validation function before marking success; retain the current reopening/metadata check for comparison.
 - [x] Preserve destination-deletion/original-movement scaffolding during assembly; schedule its replacement decision before real-book runs in step 9.
 - [x] Test success, early skip, setup/operation/export/output-validation failures, and source cleanup; retain earlier evidence on each outcome.
 
@@ -103,3 +104,4 @@ These tasks are unscheduled; their order is not an implementation commitment.
 - [ ] Define shared-asset retention and reuse during disassembly/reassembly.
 - [ ] Support incremental chapter updates and EPUB assembly from internet articles.
 - [ ] Revisit navigation across spine, NCX, guide/tours, and EPUB 3 NAV.
+- [ ] Define proper EPUB output validation beyond reopening and metadata reading: agree on validation scope and tooling for archive/package integrity, content references, and EPUB conformance.

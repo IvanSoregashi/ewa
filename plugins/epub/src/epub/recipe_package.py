@@ -1,8 +1,30 @@
+from pathlib import Path
+
+from epub.errors import InvalidEpubOutput
+from epub.processing import ProcessingContext
+from epub.protocols import EpubOperation
 from library.asserts import require
-from library.epub.epub import EPUB
+from library.epub.epub import EPUB, EpubInfo
 from library.epub.media_type import FileName
 from library.epub.package_urls import path_url
 from library.epub.utils_href import posix_relative_href
+
+
+class PackageEpub(EpubOperation):
+    def __init__(self, destination: str | Path) -> None:
+        self.destination = destination
+
+    def perform(self, context: ProcessingContext) -> None:
+        context.epub.package_into(self.destination, sort_by_role=True)
+        context.succeed(validate_epub_output(self.destination))
+
+
+def validate_epub_output(path: str | Path) -> EpubInfo:
+    """Only check reopening and metadata reading; full EPUB validation is pending."""
+    try:
+        return EPUB(path).info()
+    except Exception as error:
+        raise InvalidEpubOutput(str(error)) from error
 
 
 def relocate_package(epub: EPUB, target_package_path: str = FileName.DEFAULT_OPF) -> bool:
