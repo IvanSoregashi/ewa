@@ -5,9 +5,12 @@ from types import ModuleType
 
 import pytest
 from typer.testing import CliRunner
+from sqlmodel import Session, select
 
 from epub.errors import EpubSkipReason
+from epub.image_analytics import ImageOptimizationRecord
 from epub.processing_run import ProcessingRun
+from library.database.sqlite_model_table import get_engine
 from library.epub.epub import EpubInfo
 from test_recipe_run import recipe as recipe, write_book
 
@@ -40,7 +43,6 @@ def test_decrypt_filters_without_processing_or_analytics(recipe, cli, tmp_path, 
         pytest.fail("Filtered paths must not be processed or recorded")
 
     monkeypatch.setattr(recipe, "_fully_process_encrypted_panda", unexpected)
-    monkeypatch.setattr(recipe, "_fully_process_encrypted_panda_with_context", unexpected)
     monkeypatch.setattr(recipe.recipe_analytics, "record_analytics", unexpected)
     monkeypatch.setattr(recipe, "fully_process_encrypted_panda", unexpected)
     cli.decrypt(path)
@@ -68,24 +70,44 @@ def test_decrypt_dispatches_eligible_path_once(recipe, cli, monkeypatch, dry_run
 
 
 @pytest.mark.parametrize("dry_run", [False, True])
-def test_single_caller_uses_legacy_and_records_only_its_result(recipe, monkeypatch, dry_run):
+def test_single_caller_records_worker_result(recipe, monkeypatch, dry_run):
     path = write_book(recipe.settings.encrypted_epub_dir / "book.epub")
     run = ProcessingRun(input_path=str(path), skip=EpubSkipReason.NOT_IMPLEMENTED)
     calls = []
 
-    def legacy(value, **kwargs):
+    def worker(value, **kwargs):
         assert value == str(path)
         assert kwargs == {"dry_run": dry_run}
         return run
 
-    def candidate(*args):
-        pytest.fail("Candidate must not silently replace the legacy recipe")
-
-    monkeypatch.setattr(recipe, "_fully_process_encrypted_panda", legacy)
-    monkeypatch.setattr(recipe, "_fully_process_encrypted_panda_with_context", candidate)
+    monkeypatch.setattr(recipe, "_fully_process_encrypted_panda", worker)
     monkeypatch.setattr(recipe.recipe_analytics, "record_analytics", lambda rows, url: calls.append((rows, url)))
     assert recipe.fully_process_encrypted_panda(str(path), dry_run=dry_run) is run
     assert calls == [([run], recipe.settings.database_url)]
+
+
+@pytest.mark.parametrize("caller", ["single", "batch"])
+def test_callers_process_and_persist_context_outcome(recipe, caller):
+    path = write_book(recipe.settings.encrypted_epub_dir / "book.epub")
+    original = path.read_bytes()
+    if caller == "single":
+        run = recipe.fully_process_encrypted_panda(str(path), dry_run=True)
+    else:
+        batch = importlib.import_module("epub.recipe_epubs")
+        runs = batch.fully_process_encrypted_pandas(path.parent, max_workers=0, dry_run=True)
+        assert len(runs) == 1
+        run = runs[0]
+
+    assert run.success, run.details
+    assert len(run.analytics) == 1
+    with Session(get_engine(recipe.settings.database_url)) as session:
+        stored = session.exec(select(ProcessingRun)).one()
+        image = session.exec(select(ImageOptimizationRecord)).one()
+        assert stored.model_dump() == run.model_dump()
+        assert image.model_dump() == run.analytics[0].model_dump()
+        assert image.run_id == stored.id
+    assert path.read_bytes() == original
+    assert not (recipe.settings.decrypted_epub_dir / path.name).exists()
 
 
 @pytest.mark.parametrize("max_workers", [0, 2])
@@ -110,7 +132,7 @@ def test_batch_filters_before_synchronous_work_or_pool_submission(
     submitted = []
     pools = []
 
-    def legacy(path, **kwargs):
+    def worker(path, **kwargs):
         assert kwargs == {"dry_run": dry_run}
         processed.append(path)
         return run
@@ -126,14 +148,14 @@ def test_batch_filters_before_synchronous_work_or_pool_submission(
             return False
 
         def submit(self, function, path, **kwargs):
-            assert function is legacy
+            assert function is worker
             assert kwargs == {"dry_run": dry_run}
             submitted.append(path)
             future = Future()
             future.set_result(function(path, **kwargs))
             return future
 
-    monkeypatch.setattr(batch, "_fully_process_encrypted_panda", legacy)
+    monkeypatch.setattr(batch, "_fully_process_encrypted_panda", worker)
     monkeypatch.setattr(batch, "ProcessPoolExecutor", ImmediatePool)
     monkeypatch.setattr(batch, "record_analytics", lambda rows, url: recorded.append(list(rows)))
     results = batch.fully_process_encrypted_pandas(tmp_path, max_workers=max_workers, flush_size=1, dry_run=dry_run)

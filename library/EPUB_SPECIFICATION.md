@@ -10,8 +10,8 @@ The inventory/package foundation, per-book context, and automatic lifecycle outc
 Simple operations and eligibility checks now accept the context.
 Workers return ProcessingRun directly, with typed metadata and unsaved image analytics;
 the parent recorder persists those same objects. Windows spawn and transactional persistence are tested.
-A separate Panda candidate uses the context for checks, transformations, export, and output validation.
-Callers retain the legacy recipe until side-by-side comparison is complete; real books will be provided later.
+The Panda recipe uses the context for checks, transformations, export, and output validation.
+Single-book and batch callers use this implementation; the legacy recipe was retired after comparison.
 
 ## Responsibilities
 
@@ -83,7 +83,7 @@ META-INF files. NCX, navigation, and other content XML are included. Repair pres
 declarations and inventory bytes, generates IDs unused anywhere in the modeled OPF, and does not
 infer spine order or navigation/cover properties. This is coverage repair, not full EPUB validation.
 These are optional tools, not Panda recipe steps: an undeclared resource may be an abandoned asset,
-so the candidate neither adds its declaration automatically nor requires full manifest coverage.
+so the recipe neither adds its declaration automatically nor requires full manifest coverage.
 
 EpubInfo, ImageInfo, and IndexInfo remain dataclasses. EpubInfo.from_path reads only
 filesystem information. ImageInfo uses `size=None` for unreadable dimensions;
@@ -124,24 +124,22 @@ those shared objects must no longer be edited after handoff.
 
 The decrypt CLI and batch dispatcher filter paths outside the input directory and paths with existing
 destinations before calling the processing functions. These paths produce no outcome or analytics.
-The single-book processing wrapper always returns ProcessingRun; both worker recipes assume paths
+The single-book processing wrapper always returns ProcessingRun; the worker recipe assumes paths
 have passed the caller's filter. The persisted skip codes remain for history.
 
-_fully_process_encrypted_panda retains the legacy processing order and is the caller default.
-_fully_process_encrypted_panda_with_context is a separate candidate; verify_epub remains for the legacy path.
-Apply intentional processing-policy improvements to both recipes and share their helpers. Comparison
-tests verify the context migration under the same behavior; the old recipe is not a frozen baseline.
-The candidate completes HTML/OPF updates before non-manifest unmatched-link verification and translation,
-and validates output before closing the input context. The legacy recipe validates after closing it.
+_fully_process_encrypted_panda is the sole worker recipe used by single-book and batch callers.
+It completes HTML/OPF updates before non-manifest unmatched-link verification and translation,
+and validates output before closing the input context. Checks use only verify(context).
+recipe_package.replace_links returns missing manifest entries without adding declarations or failing
+on their absence. A referenced image can succeed without its manifest entry; an image absent from
+HTML still yields UNMATCHED_LINKS.
 
-Synthetic comparisons check outcomes, metadata, image evidence (excluding generated UUIDs), and
-exported resource contents. Both recipes use recipe_package.replace_links, which returns missing
-manifest entries without adding declarations or failing on their absence. A referenced image can
-succeed without its manifest entry; an image absent from HTML still yields
-UNMATCHED_LINKS in both. The context's richer cleanup diagnostics are retained; exact diagnostic
-equivalence is not required. Six supplied books now produce identical output bytes, outcomes, and
-analytics in both recipes; their originals remain unchanged. The merged example was excluded.
-Both implementations remain available until callers are explicitly switched.
+Before retiring the legacy recipe, synthetic comparisons checked outcomes, metadata, image evidence
+(excluding generated UUIDs), and exported resource contents under the same processing policy.
+Six supplied books produced identical output bytes, outcomes, and analytics in both recipes;
+their originals remained unchanged and the merged example was excluded. The context's richer cleanup
+diagnostics were accepted without requiring exact legacy text. The comparison scenarios now serve as
+regression tests for the sole recipe, including missing manifest entries and combined processing/cleanup failures.
 Windows spawn tests now cover detached outcomes and unsaved image records for success, skip, error,
 and setup failure, followed by parent-side persistence into a temporary database.
 
@@ -156,7 +154,7 @@ and setup failure, followed by parent-side persistence into a temporary database
 - Import operation model modules before creating their records; imports only register schemas. The recorder creates tables for the concrete models in the batch, enables SQLite foreign keys, flushes runs before analytics, and commits all rows in one transaction. Returned objects remain readable after the session closes.
 - New writes use `epub_processing_runs` and `epub_image_optimizations`. Historical tables remain untouched, without automatic backfill or dual writes; old integer IDs are never reinterpreted as run UUIDs. Historical reporting must query those old tables explicitly. The legacy writer, outcome conversions, and table-wrapper classes are removed.
 - Persistence errors propagate without clearing the input batch. There are no automatic retries or upserts. Stable primary keys reject duplicate transient records; after an uncertain commit, inspect the database using the original run/record IDs before retrying. Do not generate new IDs merely to bypass a duplicate.
-- Both recipes and their single/batch callers accept dry_run=False. Normal success keeps the validated output and moves the original to processed_epub_dir, preserving its relative path. An existing processed path or a move failure leaves the original in place, logs the problem, and retains the successful output.
+- The recipe and its single/batch callers accept dry_run=False. Normal success keeps the validated output and moves the original to processed_epub_dir, preserving its relative path. An existing processed path or a move failure leaves the original in place, logs the problem, and retains the successful output.
 - dry_run=True preserves the test workflow: fully process and validate the EPUB, produce logs and analytics, leave the original in place, and delete generated output. It does not create processed directories. This is not a no-I/O/no-database mode; output metadata describes the generated file even though it is subsequently deleted. Processing errors remove unfinished/invalid output in either mode.
 - The decrypt and dd CLI commands expose -d / --dry_run and leave file handling to the recipes. Real-book comparisons use isolated copies and temporary analytics storage; disable dry_run when outputs need to be retained for inspection.
 - `max_workers=None` still takes the synchronous branch despite its CPU-count docstring; this remains a scheduled defect.

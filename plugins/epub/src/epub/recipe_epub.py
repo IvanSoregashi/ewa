@@ -7,9 +7,7 @@ from pathlib import Path
 from epub.config import settings
 from epub.processing import ProcessingContext
 from epub.processing_run import ProcessingRun
-from epub.image_analytics import ImageOptimizationRecord
-from epub.errors import EpubSkipReason, EpubErrorReason
-from epub import recipe_analytics, recipe_css, recipe_htmls, recipe_image, recipe_package
+from epub import recipe_analytics
 from epub.recipe_css import CleanupPandaCSS
 from epub.recipe_htmls import RemoveResourceAndManifest, ReplaceLinks, TextTranslator
 from epub.recipe_image import OptimizeImages
@@ -17,8 +15,7 @@ from epub.recipe_package import PackageEpub
 from epub.verification import NoUnmatchedLinks, OPFPath, SerenePanda
 from library.asserts import require
 from library.epub.epub import EPUB
-from library.epub import html_editing
-from library.epub.media_type import EpubRole, MediaType
+from library.epub.media_type import EpubRole
 
 logger = logging.getLogger(__name__)
 sp_dictionary_path: Path = settings.serene_panda_dir / "translator.json"
@@ -47,111 +44,6 @@ def fully_process_encrypted_panda(path: str, *, dry_run: bool = False) -> Proces
 
 
 def _fully_process_encrypted_panda(path: str, *, dry_run: bool = False) -> ProcessingRun:
-    """Legacy recipe; callers filter input paths before dispatch.
-
-    1. Check EPUB eligibility
-    2. relocate opf to root -> content.opf
-    3. font check, remove sp font resource, remove from manifest
-    4. cleanup css
-    5. images - optimization (all images)
-    6. put stats in db
-    7. form replacement dict
-    8. htmls - replace links, translate
-    9. replace links - in opf
-    10. save opf
-    11. save epub
-    12. verify formed epub
-    13. move original
-    """
-    current_path = Path(path)
-    run = ProcessingRun(input_path=str(current_path))
-
-    relative_path = current_path.relative_to(settings.encrypted_epub_dir)
-    destination_path = settings.decrypted_epub_dir / relative_path
-    processed_path = settings.processed_epub_dir / relative_path
-
-    try:
-        with EPUB(current_path).keep_open() as epub:
-            run.original_epub = epub.info()
-            # recipe_package.relocate_package(epub)
-
-            for verification in (OPFPath(), SerenePanda()):
-                failure = verification.verify_epub(epub)
-                if failure is not None:
-                    logger.warning("SKIP %s: %s", current_path, failure)
-                    run.skip = verification.skip_reason
-                    run.details = failure
-                    return run
-
-            fonts = [f for f in epub.resources.by_role(EpubRole.FONT) if "serenepanda" in f.filename.lower()]
-            font = fonts[0]
-            epub.package.remove_resource(font)
-
-            for css_resource in epub.resources.by_role(EpubRole.STYLE):
-                recipe_css.de_panda_css_resource(css_resource)
-
-            replacement_dict = {}
-            for image_resource in epub.resources.by_role(EpubRole.IMAGE):
-                if image_resource.media_type is MediaType.IMAGE_SVG:
-                    continue
-                result = ImageOptimizationRecord.from_result(
-                    run.id, recipe_image.perform_image_optimization(image_resource, resources=epub.resources)
-                )
-                run.analytics.append(result)
-                if result.success and result.new_image and result.new_image.path:
-                    old_path = require(result.original_image.path)
-                    new_path = result.new_image.path
-                    if new_path in replacement_dict.values():
-                        new_path += ".jpg"
-                    replacement_dict[old_path] = new_path
-
-            htmls = epub.resources.by_role(EpubRole.HTML)
-            if replacement_dict:
-                string = json.dumps(replacement_dict, indent=4)
-                logger.warning(f"{epub} REPLACE:\n{string!s}")
-
-                unmatched = recipe_htmls.replace_links_in_htmls(htmls, replacement_dict=replacement_dict)
-                if unmatched:
-                    string = json.dumps(unmatched, indent=4)
-                    logger.error(f"{epub} LINKS NOT REPLACED:\n{string}")
-                    run.skip = EpubSkipReason.UNMATCHED_LINKS
-                    run.details = string
-                    return run
-
-            for html_resource in htmls:
-                html_editing.translate_text(html_resource, sp_dictionary)
-
-            if replacement_dict:
-                recipe_package.replace_links(epub, replacement_dict)
-
-            epub.package_into(destination_path, sort_by_role=True)
-
-    except Exception as e:
-        logger.exception(f"EPUB FAIL {path}, error: {e}")
-        destination_path.unlink(missing_ok=True)  # remove an unfinished epub, if one was written
-        run.skip = None  # Source cleanup can fail while returning an eligibility skip.
-        run.error = EpubErrorReason.UNKNOWN
-        run.details = repr(e)
-        return run
-
-    try:
-        new_info = EPUB(destination_path).info()
-    except Exception as e:
-        logger.error(f"EPUB RESULT FAIL {path}, error: {e}")
-        destination_path.unlink(missing_ok=True)  # remove the corrupt result
-        run.error = EpubErrorReason.INCORRECT_RESULT
-        run.details = repr(e)
-        return run
-
-    move_the_files(current_path, processed_path, destination_path, dry_run=dry_run)
-
-    run.success = True
-    run.new_epub = new_info
-    return run
-
-
-def _fully_process_encrypted_panda_with_context(path: str, *, dry_run: bool = False) -> ProcessingRun:
-    """Candidate recipe kept separate for comparison with the legacy implementation."""
     current_path = Path(path)
     relative_path = current_path.relative_to(settings.encrypted_epub_dir)
     destination_path = settings.decrypted_epub_dir / relative_path

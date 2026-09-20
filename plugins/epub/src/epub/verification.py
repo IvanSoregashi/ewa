@@ -10,7 +10,6 @@ import random
 from zipfile import ZIP_STORED
 from lxml import etree
 from enum import StrEnum
-from library.epub.epub import EPUB
 from epub.processing import ProcessingContext
 from epub.protocols import EpubVerification
 from epub.errors import EpubSkipReason
@@ -64,10 +63,7 @@ class SerenePanda(EpubVerification):
         self.strict = strict
 
     def verify(self, context: ProcessingContext) -> str | None:
-        return self.verify_epub(context.epub)
-
-    def verify_epub(self, epub: EPUB) -> str | None:
-        """Entry point retained for the legacy recipe during side-by-side comparison."""
+        epub = context.epub
         strict_filename = FileName.SP_FONT
         filename = FileName.SP_FONT_LOWER_ENDSWITH
         with epub.keep_open():
@@ -127,10 +123,7 @@ class OPFPath(EpubVerification):
         self.expected_path = expected_path
 
     def verify(self, context: ProcessingContext) -> str | None:
-        return self.verify_epub(context.epub)
-
-    def verify_epub(self, epub: EPUB) -> str | None:
-        """Entry point retained for the legacy recipe during side-by-side comparison."""
+        epub = context.epub
         with epub.keep_open():
             actual_path = epub.package.resource.filename
             if actual_path != self.expected_path:

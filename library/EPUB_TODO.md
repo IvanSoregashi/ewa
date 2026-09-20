@@ -1,7 +1,7 @@
 # EPUB architecture TODO
 
 Work is ordered by dependency and intended execution. Complete one migration step per
-reviewable change while keeping affected callers working. The next step is **9**.
+reviewable change while keeping affected callers working. The next step is **10**.
 Design contracts and open decisions are in [EPUB_SPECIFICATION.md](EPUB_SPECIFICATION.md);
 working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
@@ -89,7 +89,7 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 - [x] Make the test workflow an explicit dry_run option through both recipes, single/batch callers, and CLI (-d / --dry_run). Dry runs retain originals and discard output while still processing/recording analytics; normal runs keep output and move originals after success. Test both modes and preserve existing processed files.
 - [x] Normalize Pillow rational/fractional DPI metadata to floats so image analytics can serialize and round-trip through JSON storage; test synthetic DPI values.
 - [x] Compare isolated copies of the six supplied Panda books, excluding the merged example: both recipes succeed with identical output bytes, outcomes, and analytics after the shared DPI fix. Original hashes remain unchanged; temporary database integrity checks pass. Compare bytes without displaying book text.
-- [ ] Switch callers to the context recipe only after the comparison is complete; then remove the legacy implementation and verify_epub entry points.
+- [x] Switch single/batch callers to the context recipe after comparison; remove the legacy implementation and verify_epub entry points. Retain comparison scenarios as regression tests and verify caller persistence with a temporary database.
 
 ### 10. Integrate batch execution
 
