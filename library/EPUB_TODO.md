@@ -86,7 +86,7 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 - [x] Compare missing-manifest images with and without HTML references, and cleanup failures after success, unmatched-link skip, translation/export failure, and output-validation failure; verify retained analytics and unchanged input bytes.
 - [x] Resolve missing-manifest failures with one shared replace_links helper that returns absent old entries without creating declarations. Both recipes now succeed for referenced images and produce UNMATCHED_LINKS for images absent from HTML; compare outcomes, analytics, and exported contents. Keep the context's cleanup diagnostics without requiring exact legacy text.
 - [x] Establish comparison policy: apply intentional behavior improvements to both recipes, sharing helpers instead of preserving obsolete behavior in the old implementation.
-- [ ] Decide explicitly how to replace destination-deletion/original-movement test scaffolding before real-book runs.
+- [x] Make the test workflow an explicit dry_run option through both recipes, single/batch callers, and CLI (-d / --dry_run). Dry runs retain originals and discard output while still processing/recording analytics; normal runs keep output and move originals after success. Test both modes and preserve existing processed files.
 - [ ] Compare copies of the books the user will provide; preserve originals and use temporary analytics storage.
 - [ ] Switch callers to the context recipe only after the comparison is complete; then remove the legacy implementation and verify_epub entry points.
 

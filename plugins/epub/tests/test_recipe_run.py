@@ -114,7 +114,7 @@ def test_panda_recipe_returns_run_and_retains_image_evidence(recipe, book_path, 
 
         monkeypatch.setattr(EPUB, "info", fail_output_info)
 
-    run = recipe._fully_process_encrypted_panda_with_context(str(book_path))
+    run = recipe._fully_process_encrypted_panda_with_context(str(book_path), dry_run=True)
     assert isinstance(run, ProcessingRun)
     assert run.success == (failure is None)
     assert run.skip == (EpubSkipReason.UNMATCHED_LINKS if failure == "unmatched_links" else None)
@@ -139,7 +139,7 @@ def test_panda_recipe_returns_run_and_retains_image_evidence(recipe, book_path, 
             failure
         ] in run.details
     assert book_path.read_bytes() == original
-    # Preserve the existing recipe's destination-deletion/original-movement scaffolding.
+    # Dry runs retain the original and discard their generated output.
     assert not (recipe.settings.decrypted_epub_dir / book_path.name).exists()
 
 
@@ -158,7 +158,7 @@ def test_complete_recipe_exports_consistent_translated_book(recipe, book_path, m
         exported.append(destination.read_bytes())
 
     monkeypatch.setattr(EPUB, "package_into", capture_export)
-    run = recipe._fully_process_encrypted_panda_with_context(str(book_path))
+    run = recipe._fully_process_encrypted_panda_with_context(str(book_path), dry_run=True)
     assert run.success, run.details
     assert len(exported) == 1
     assert handles[0].fp is None
@@ -195,7 +195,7 @@ def test_early_book_skips_do_not_optimize(recipe, book_path, monkeypatch, reason
         pytest.fail("Early skip reached image optimization")
 
     monkeypatch.setattr(recipe.OptimizeImages, "perform", unexpected_optimization)
-    run = recipe._fully_process_encrypted_panda_with_context(str(book_path))
+    run = recipe._fully_process_encrypted_panda_with_context(str(book_path), dry_run=True)
     assert run.skip == {"opf": EpubSkipReason.NON_DEFAULT_OPF, "font": EpubSkipReason.SERENE_PANDA_FONT}[reason]
     assert not run.success and run.error is None
     assert run.analytics == []
@@ -249,7 +249,7 @@ def test_cleanup_error_overrides_pending_outcome(recipe, book_path, monkeypatch,
             return original_info(epub)
 
         monkeypatch.setattr(EPUB, "info", fail_output_info)
-    run = recipe._fully_process_encrypted_panda_with_context(str(book_path))
+    run = recipe._fully_process_encrypted_panda_with_context(str(book_path), dry_run=True)
     assert not run.success and run.skip is None
     assert run.new_epub is None
     assert run.error == EpubErrorReason.UNKNOWN
@@ -264,7 +264,7 @@ def test_batch_propagates_persistence_failure_without_clearing_buffer(recipe, bo
     batch = importlib.import_module("epub.recipe_epubs")
     run = ProcessingRun(skip=EpubSkipReason.NOT_IMPLEMENTED, input_path=str(book_path))
     retained = []
-    monkeypatch.setattr(batch, "_fully_process_encrypted_panda", lambda path: run)
+    monkeypatch.setattr(batch, "_fully_process_encrypted_panda", lambda path, **kwargs: run)
 
     def fail_recording(buffer, url):
         retained.append(buffer)
@@ -275,3 +275,61 @@ def test_batch_propagates_persistence_failure_without_clearing_buffer(recipe, bo
         batch.fully_process_encrypted_pandas(recipe.settings.encrypted_epub_dir, max_workers=0, flush_size=1)
     assert len(retained) == 1
     assert retained[0] == [run]
+
+
+@pytest.mark.parametrize("worker", ["_fully_process_encrypted_panda", "_fully_process_encrypted_panda_with_context"])
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_success_file_handling_in_normal_and_dry_runs(recipe, caplog, worker, dry_run):
+    path = recipe.settings.encrypted_epub_dir / "series" / "book.epub"
+    path.parent.mkdir()
+    write_book(path)
+    original = path.read_bytes()
+    destination = recipe.settings.decrypted_epub_dir / "series" / path.name
+    processed = recipe.settings.processed_epub_dir / "series" / path.name
+    caplog.set_level("INFO")
+    process = getattr(recipe, worker)
+    # Omitting the flag must select real processing.
+    run = process(str(path), dry_run=True) if dry_run else process(str(path))
+
+    assert run.success, run.details
+    assert run.error is None and len(run.analytics) == 1
+    assert require(run.new_epub).path == destination
+    if dry_run:
+        assert path.read_bytes() == original
+        assert not destination.exists()
+        assert not recipe.settings.processed_epub_dir.exists()
+        assert "DRY RUN" in caplog.text
+        assert recipe.should_process_path(path)
+    else:
+        assert not path.exists()
+        assert processed.read_bytes() == original
+        assert EPUB(destination).info() == run.new_epub
+        assert not recipe.should_process_path(path)
+
+
+@pytest.mark.parametrize("worker", ["_fully_process_encrypted_panda", "_fully_process_encrypted_panda_with_context"])
+@pytest.mark.parametrize("problem", ["existing_processed", "move_failure"])
+def test_move_problem_retains_original_and_successful_output(recipe, book_path, monkeypatch, caplog, worker, problem):
+    original = book_path.read_bytes()
+    processed = recipe.settings.processed_epub_dir / book_path.name
+    if problem == "existing_processed":
+        processed.parent.mkdir()
+        processed.write_bytes(b"previous original")
+    else:
+
+        def fail_move(*args):
+            raise OSError("Move failed")
+
+        monkeypatch.setattr(recipe.shutil, "move", fail_move)
+
+    run = getattr(recipe, worker)(str(book_path))
+    assert run.success, run.details
+    assert book_path.read_bytes() == original
+    destination = recipe.settings.decrypted_epub_dir / book_path.name
+    assert EPUB(destination).info() == run.new_epub
+    if problem == "existing_processed":
+        assert processed.read_bytes() == b"previous original"
+        assert "NOT MOVING ORIGINAL" in caplog.text
+    else:
+        assert not processed.exists()
+        assert "Move failed" in caplog.text

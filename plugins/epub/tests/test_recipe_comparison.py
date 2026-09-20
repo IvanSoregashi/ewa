@@ -19,6 +19,7 @@ def run_data(run):
     )
 
 
+@pytest.mark.parametrize("dry_run", [False, True])
 @pytest.mark.parametrize(
     "scenario",
     [
@@ -38,7 +39,7 @@ def run_data(run):
         "collision",
     ],
 )
-def test_legacy_and_context_results_and_exported_contents_match(recipe, tmp_path, monkeypatch, scenario):
+def test_legacy_and_context_results_and_exported_contents_match(recipe, tmp_path, monkeypatch, scenario, dry_run):
     path = recipe.settings.encrypted_epub_dir / "book.epub"
     if scenario == "multiple_fonts":
         write_book(path, fonts=("fonts/SerenePanda.ttf", "other/SerenePanda.ttf"))
@@ -110,12 +111,22 @@ def test_legacy_and_context_results_and_exported_contents_match(recipe, tmp_path
     exported_contents = []
     for process in (recipe._fully_process_encrypted_panda, recipe._fully_process_encrypted_panda_with_context):
         exports.clear()
-        run = process(str(path))
+        run = process(str(path), dry_run=dry_run)
         results.append(run)
         exported_contents.append(exports.copy())
-        assert (path.read_bytes() if path.exists() else None) == original
-        assert not (recipe.settings.decrypted_epub_dir / path.name).exists()
-        assert not (recipe.settings.processed_epub_dir / path.name).exists()
+        destination = recipe.settings.decrypted_epub_dir / path.name
+        processed = recipe.settings.processed_epub_dir / path.name
+        if run.success and not dry_run:
+            assert destination.exists()
+            assert not path.exists()
+            assert processed.read_bytes() == original
+            # Restore only this temporary fixture so the second recipe gets the same input.
+            processed.rename(path)
+            destination.unlink()
+        else:
+            assert (path.read_bytes() if path.exists() else None) == original
+            assert not destination.exists()
+            assert not processed.exists()
 
     assert results[0].id != results[1].id
     assert run_data(results[0]) == run_data(results[1])
@@ -159,9 +170,9 @@ def test_both_recipes_leave_undeclared_image_out_of_manifest(recipe, monkeypatch
             exports.append([(name, archive.read(name)) for name in archive.namelist()])
 
     monkeypatch.setattr(EPUB, "package_into", capture_export)
-    legacy = recipe._fully_process_encrypted_panda(str(path))
+    legacy = recipe._fully_process_encrypted_panda(str(path), dry_run=True)
     assert not destination.exists()
-    candidate = recipe._fully_process_encrypted_panda_with_context(str(path))
+    candidate = recipe._fully_process_encrypted_panda_with_context(str(path), dry_run=True)
     assert run_data(legacy) == run_data(candidate)
     if referenced:
         assert candidate.success and candidate.skip is None

@@ -21,11 +21,14 @@ def fully_process_encrypted_pandas(
     directory: Path,
     max_workers: int | None = None,
     flush_size: int = 8,
+    *,
+    dry_run: bool = False,
 ) -> list[ProcessingRun]:
     """Process every epub under `directory` (recursively) in a process pool.
 
     max_workers: None = cpu count, 0 = synchronous (no pool, current process).
     flush_size: how many accumulated results trigger an analytics flush.
+    dry_run: process and record analytics, then remove output and leave originals in place.
 
     Paths outside the input directory or with existing destinations are filtered
     before dispatch, without analytics. Returns attempted books' results;
@@ -58,12 +61,12 @@ def fully_process_encrypted_pandas(
 
     if not max_workers:
         for path in paths:
-            buffer.append(_fully_process_encrypted_panda(str(path)))
+            buffer.append(_fully_process_encrypted_panda(str(path), dry_run=dry_run))
             if len(buffer) >= flush_size:
                 flush()
     else:
         with ProcessPoolExecutor(max_workers=max_workers) as pool:
-            futures = {pool.submit(_fully_process_encrypted_panda, str(path)): path for path in paths}
+            futures = {pool.submit(_fully_process_encrypted_panda, str(path), dry_run=dry_run): path for path in paths}
             for future in as_completed(futures):
                 book_path = futures[future]
                 try:

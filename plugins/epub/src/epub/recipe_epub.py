@@ -1,5 +1,6 @@
 import json
 import logging
+import shutil
 import time
 from pathlib import Path
 
@@ -35,9 +36,9 @@ def should_process_path(path: Path) -> bool:
     return True
 
 
-def fully_process_encrypted_panda(path: str) -> ProcessingRun:
+def fully_process_encrypted_panda(path: str, *, dry_run: bool = False) -> ProcessingRun:
     start = time.time()
-    result = _fully_process_encrypted_panda(path)
+    result = _fully_process_encrypted_panda(path, dry_run=dry_run)
     print(f"ELAPSED _fully_process_encrypted_panda: {time.time() - start:.2f} s")
     start = time.time()
     recipe_analytics.record_analytics([result], settings.database_url)
@@ -45,7 +46,7 @@ def fully_process_encrypted_panda(path: str) -> ProcessingRun:
     return result
 
 
-def _fully_process_encrypted_panda(path: str) -> ProcessingRun:
+def _fully_process_encrypted_panda(path: str, *, dry_run: bool = False) -> ProcessingRun:
     """Legacy recipe; callers filter input paths before dispatch.
 
     1. Check EPUB eligibility
@@ -67,6 +68,7 @@ def _fully_process_encrypted_panda(path: str) -> ProcessingRun:
 
     relative_path = current_path.relative_to(settings.encrypted_epub_dir)
     destination_path = settings.decrypted_epub_dir / relative_path
+    processed_path = settings.processed_epub_dir / relative_path
 
     try:
         with EPUB(current_path).keep_open() as epub:
@@ -141,32 +143,19 @@ def _fully_process_encrypted_panda(path: str) -> ProcessingRun:
         run.details = repr(e)
         return run
 
-    # move original to processed
-    try:
-        processed_path = settings.processed_epub_dir / relative_path
-        processed_path.parent.mkdir(parents=True, exist_ok=True)
-        if processed_path.exists():
-            logger.warning(f"PROCESSED PATH EXISTS {str(processed_path)!s}, NOT MOVING ORIGINAL")
-        else:
-            # shutil.move(current_path, processed_path)
-            pass
-    except Exception as e:
-        # housekeeping only: the processed epub is already written and verified,
-        # so the result stays a success - the original simply remains in place
-        logger.error(f"FAILED TO MOVE ORIGINAL {path} -> {str(processed_path)!s}: {e}")
-
-    destination_path.unlink(missing_ok=True)
+    move_the_files(current_path, processed_path, destination_path, dry_run=dry_run)
 
     run.success = True
     run.new_epub = new_info
     return run
 
 
-def _fully_process_encrypted_panda_with_context(path: str) -> ProcessingRun:
+def _fully_process_encrypted_panda_with_context(path: str, *, dry_run: bool = False) -> ProcessingRun:
     """Candidate recipe kept separate for comparison with the legacy implementation."""
     current_path = Path(path)
     relative_path = current_path.relative_to(settings.encrypted_epub_dir)
     destination_path = settings.decrypted_epub_dir / relative_path
+    processed_path = settings.processed_epub_dir / relative_path
 
     with ProcessingContext() as context:
         context.open_epub(current_path).verify(OPFPath(), SerenePanda())
@@ -188,23 +177,27 @@ def _fully_process_encrypted_panda_with_context(path: str) -> ProcessingRun:
             logger.warning("SKIP %s: %s", path, run.details)
         return run
 
-    # move original to processed
+    move_the_files(current_path, processed_path, destination_path, dry_run=dry_run)
+    return run
+
+
+def move_the_files(current_path: Path, processed_path: Path, destination_path: Path, *, dry_run: bool) -> None:
+    """Dry runs still process, validate, and record analytics; discard only their output."""
+    if dry_run:
+        logger.info("DRY RUN: leaving original %s in place; removing output %s", current_path, destination_path)
+        destination_path.unlink(missing_ok=True)
+        return
+
     try:
-        processed_path = settings.processed_epub_dir / relative_path
         processed_path.parent.mkdir(parents=True, exist_ok=True)
         if processed_path.exists():
             logger.warning(f"PROCESSED PATH EXISTS {str(processed_path)!s}, NOT MOVING ORIGINAL")
         else:
-            # shutil.move(current_path, processed_path)
-            pass
+            shutil.move(current_path, processed_path)
     except Exception as e:
         # housekeeping only: the processed epub is already written and verified,
         # so the result stays a success - the original simply remains in place
-        logger.error(f"FAILED TO MOVE ORIGINAL {path} -> {str(processed_path)!s}: {e}")
-
-    destination_path.unlink(missing_ok=True)
-
-    return run
+        logger.error(f"FAILED TO MOVE ORIGINAL {current_path} -> {str(processed_path)!s}: {e}")
 
 
 def image_stats(path: str) -> None:

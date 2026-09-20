@@ -55,27 +55,43 @@ def set_config(key: str = typer.Option("", "-k"), value: str = typer.Option("", 
 
 
 @app.command()
-def decrypt(epub_path: Path = typer.Argument(exists=True)):
+def decrypt(
+    epub_path: Path = typer.Argument(exists=True),
+    dry_run: bool = typer.Option(
+        False,
+        "-d",
+        "--dry_run",
+        is_flag=True,
+        help="Process and record analytics, discard output, and leave originals in place.",
+    ),
+):
     if not recipe_epub.should_process_path(epub_path):
         return
     start = time.time()
-    result = recipe_epub.fully_process_encrypted_panda(str(epub_path))
+    result = recipe_epub.fully_process_encrypted_panda(str(epub_path), dry_run=dry_run)
     elapsed = time.time() - start
     print(f"ELAPSED {elapsed:.2f}s")
 
     result.report()
 
-    if result.success and result.new_epub and result.new_epub.path:
-        Path(result.new_epub.path).unlink(missing_ok=True)
-
 
 @app.command("dd")
-def decrypt_dir(epub_dir: DirectoryPath = typer.Argument(exists=True)):
+def decrypt_dir(
+    epub_dir: DirectoryPath = typer.Argument(exists=True),
+    dry_run: bool = typer.Option(
+        False,
+        "-d",
+        "--dry_run",
+        is_flag=True,
+        help="Process and record analytics, discard output, and leave originals in place.",
+    ),
+):
     start = time.time()
     results = recipe_epubs.fully_process_encrypted_pandas(
         directory=epub_dir,
         max_workers=8,
         flush_size=32,
+        dry_run=dry_run,
     )
     elapsed = time.time() - start
 
