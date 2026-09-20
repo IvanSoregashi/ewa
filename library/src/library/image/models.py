@@ -21,7 +21,7 @@ class ImageInfo:
     is_animated: bool = False
     n_frames: int = 1
     has_transparency_data: bool | None = None
-    dpi: tuple[int, int] | None = None
+    dpi: tuple[float, float] | None = None
     interlaced: bool | None = None  # png "interlace"
     progressive: bool | None = None  # jpeg "progressive"
     has_exif: bool = False
@@ -40,7 +40,8 @@ class ImageInfo:
             is_animated=bool(getattr(image, "is_animated", False)),
             n_frames=int(n_frames),
             has_transparency_data=getattr(image, "has_transparency_data", None),
-            dpi=tuple(info["dpi"]) if "dpi" in info else None,
+            # EXIF resolution can be Pillow IFDRational values, which are not JSON-serializable.
+            dpi=(float(info["dpi"][0]), float(info["dpi"][1])) if "dpi" in info else None,
             interlaced=bool(info["interlace"]) if "interlace" in info else None,
             progressive=bool(info.get("progressive") or info.get("progression")),
             has_exif=bool(info.get("exif") or info.get("xmp")),

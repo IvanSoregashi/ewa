@@ -89,6 +89,8 @@ EpubInfo, ImageInfo, and IndexInfo remain dataclasses. EpubInfo.from_path reads 
 filesystem information. ImageInfo uses `size=None` for unreadable dimensions;
 `bytes_per_pixel` returns None for unknown or zero-area dimensions, including older snapshots.
 Density thresholds belong to the optimizer and retain their existing byte-based values.
+DPI is captured as a pair of floats: Pillow EXIF rational values otherwise cannot serialize to JSON,
+and integer typing would reject fractional resolutions when reading stored snapshots.
 
 Most operations produce no analytics. Those that do append unsaved SQLModel table instances,
 with models defined near their operation and `run_id=context.run_id`. Records contain data, not live resources.
@@ -137,7 +139,9 @@ exported resource contents. Both recipes use recipe_package.replace_links, which
 manifest entries without adding declarations or failing on their absence. A referenced image can
 succeed without its manifest entry; an image absent from HTML still yields
 UNMATCHED_LINKS in both. The context's richer cleanup diagnostics are retained; exact diagnostic
-equivalence is not required. Both implementations remain available pending real-book comparison.
+equivalence is not required. Six supplied books now produce identical output bytes, outcomes, and
+analytics in both recipes; their originals remain unchanged. The merged example was excluded.
+Both implementations remain available until callers are explicitly switched.
 Windows spawn tests now cover detached outcomes and unsaved image records for success, skip, error,
 and setup failure, followed by parent-side persistence into a temporary database.
 

@@ -3,6 +3,8 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
+from PIL import Image
+from PIL.TiffImagePlugin import IFDRational
 from pydantic import ValidationError
 from sqlalchemy import event, inspect, text
 from sqlalchemy.exc import IntegrityError
@@ -56,6 +58,24 @@ def make_run():
         ]
     )
     return run
+
+
+@pytest.mark.parametrize("dpi", [(72, 96), (72.5, 96.25), (IFDRational(145, 2), IFDRational(385, 4))])
+def test_image_dpi_serializes_and_round_trips_through_database(database, dpi):
+    url, engine = database
+    run = make_run()
+    with Image.new("RGB", (8, 8)) as image:
+        image.format = "JPEG"
+        image.info["dpi"] = dpi
+        info = ImageInfo.from_image(image, filesize=100)
+    record = ImageOptimizationRecord(run_id=run.id, original_image=info, skip=ImageSkipReason.SMALL_IMAGE)
+    run.analytics = [record]
+    assert record.model_dump(mode="json")["original_image"]["dpi"] == [float(value) for value in dpi]
+    record_analytics([run], url)
+    with Session(engine) as session:
+        stored = require(session.get(ImageOptimizationRecord, record.id))
+        assert stored.original_image.dpi == tuple(float(value) for value in dpi)
+        assert all(type(value) is float for value in require(stored.original_image.dpi))
 
 
 def test_mixed_analytics_batch_directly_without_conversions(database):

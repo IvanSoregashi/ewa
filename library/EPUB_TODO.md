@@ -87,7 +87,8 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 - [x] Resolve missing-manifest failures with one shared replace_links helper that returns absent old entries without creating declarations. Both recipes now succeed for referenced images and produce UNMATCHED_LINKS for images absent from HTML; compare outcomes, analytics, and exported contents. Keep the context's cleanup diagnostics without requiring exact legacy text.
 - [x] Establish comparison policy: apply intentional behavior improvements to both recipes, sharing helpers instead of preserving obsolete behavior in the old implementation.
 - [x] Make the test workflow an explicit dry_run option through both recipes, single/batch callers, and CLI (-d / --dry_run). Dry runs retain originals and discard output while still processing/recording analytics; normal runs keep output and move originals after success. Test both modes and preserve existing processed files.
-- [ ] Compare copies of the books the user will provide; preserve originals and use temporary analytics storage.
+- [x] Normalize Pillow rational/fractional DPI metadata to floats so image analytics can serialize and round-trip through JSON storage; test synthetic DPI values.
+- [x] Compare isolated copies of the six supplied Panda books, excluding the merged example: both recipes succeed with identical output bytes, outcomes, and analytics after the shared DPI fix. Original hashes remain unchanged; temporary database integrity checks pass. Compare bytes without displaying book text.
 - [ ] Switch callers to the context recipe only after the comparison is complete; then remove the legacy implementation and verify_epub entry points.
 
 ### 10. Integrate batch execution
