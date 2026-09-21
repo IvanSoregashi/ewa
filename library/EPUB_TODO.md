@@ -101,11 +101,16 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 - [x] Test real spawned workers with success/skip/error outcomes and related analytics, abrupt worker termination, submission failures, and parent database failure. Compare synchronous/spawned results and output bytes in normal and dry-run modes.
 - [x] Validate isolated copies of the six comparison books with two spawned workers and flush_size=2: all succeed with identical output bytes and saved analytics; 6 runs and 6,755 image records pass database integrity checks. Originals remain unchanged and the merged example stays excluded. Keep CLI batch sizing unchanged.
 
+## Completed follow-up work
+
+- [x] Untangle perform_image_optimization: move decoding/encoding and the existing savings gate into library optimize_image; keep resource I/O and accepted byte/path updates in the EPUB adapter. Add OptimizeImages options for PNG-to-JPEG conversion, minimum file size, and resize bounds; retain current defaults and numeric outcome codes.
+- [x] Fix resizing with simultaneous width/height limits and very thin images. Test format-preserving optimization/export without link replacement, configurable thresholds, and the existing savings cutoff.
+- [x] Recheck default image settings on isolated copies of the six supplied books: output bytes and all 6,755 image records match the previous results; originals remain unchanged.
+
 ## Backlog after the migration
 
 These tasks are unscheduled; their order is not an implementation commitment.
 
-- [ ] Untangle perform_image_optimization: clarify image I/O, optimization/minimum-saving policy, and resource byte/path updates while preserving thresholds and outcome codes.
 - [ ] Define whole-publication deletion/link policy for XHTML, CSS, NCX, and NAV.
 - [ ] Design core/chapter disassembly, chapter deduplication, and reassembly together.
 - [ ] Define shared-asset retention and reuse during disassembly/reassembly.
@@ -113,3 +118,4 @@ These tasks are unscheduled; their order is not an implementation commitment.
 - [ ] Revisit navigation across spine, NCX, guide/tours, and EPUB 3 NAV.
 - [ ] Consider creating a new resource for image conversions that change the path, removing the original, and synchronizing the manifest with the final inventory; settle preservation of IDs, properties, and dependent references before replacing the current rename/link-update flow.
 - [ ] Define proper EPUB output validation beyond reopening and metadata reading: agree on validation scope and tooling for archive/package integrity, content references, and EPUB conformance.
+- [ ] Reconcile convert_giant_gifs with animation handling: the regular optimizer skips animated images, while the dedicated GIF-to-MP4 recipe still assumes it converts and renames them. Keep video conversion separate from format-preserving image optimization.

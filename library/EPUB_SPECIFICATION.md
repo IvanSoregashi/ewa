@@ -67,6 +67,23 @@ a shared old-path-to-new-path replacement mapping and one analytics list.
 An empty replacement mapping means no work; no separate “not run” state is needed.
 
 OptimizeImages appends image records and publishes only successful path changes.
+It accepts keyword options `convert_png_to_jpeg=True`, `min_filesize=50 * 1024` (bytes),
+and `max_dimensions=None` (the existing density-based limits). Explicit dimensions bound
+resizing without upscaling; zero leaves an axis unconstrained, so `(0, 0)` disables resizing.
+Disabling PNG-to-JPEG conversion keeps all optimized resources at their existing paths:
+this operation then needs no ReplaceLinks step. Existing replacements from other operations
+are still the recipe's responsibility. Panda keeps the current defaults.
+
+For example, `OptimizeImages(convert_png_to_jpeg=False, max_dimensions=(1080, 1600))`
+can resize PNG/JPEG/static GIF images while preserving their formats and references.
+Unchanged PNGs are skipped rather than re-encoded solely to attempt compression.
+Encoder quality, transparency handling, animation skips, and the historical savings gate
+remain unchanged: the integer output/input size percentage must be at most 97.
+
+The library's optimize_image function owns decoding, encoding, and size acceptance, returning
+an ImageOptimizationResult and accepted bytes (None for skip/error). perform_image_optimization
+is the EPUB adapter: read resource bytes, call the optimizer, then apply accepted bytes and any
+inventory rename. No resource is modified for an image skip/error; collisions still stop the book.
 Image decode/optimization errors remain per-image evidence; inventory rename collisions
 stop the book without overwriting the existing resource. ReplaceLinks consumes the mapping
 in HTML and then OPF, clearing it after both passes complete. It records missing old paths

@@ -81,6 +81,9 @@ def optimize_png_image(
     original_image_info: ImageInfo,
     filesize: int,
     compression: int,
+    *,
+    convert_png_to_jpeg: bool = True,
+    max_dimensions: tuple[int, int] | None = None,
 ) -> ImageOptimizationResult:
     image_info = deepcopy(original_image_info)
 
@@ -88,10 +91,9 @@ def optimize_png_image(
         return ImageOptimizationResult(skip=ImageSkipReason.HAS_ANIMATION, original_image=original_image_info)
 
     # Reduce the image dimensions
-    if is_extra_efficient(image_info):
-        image, resized_size = crop_image_dimensions(image, EXTRA_WIDTH_SIZE)
-    else:
-        image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
+    if max_dimensions is None:
+        max_dimensions = EXTRA_WIDTH_SIZE if is_extra_efficient(image_info) else MEDIUM_WIDTH_SIZE
+    image, resized_size = crop_image_dimensions(image, max_dimensions)
     image_info.size = resized_size
 
     #  Remove transparency if it is useless
@@ -100,7 +102,7 @@ def optimize_png_image(
         image_info.mode = ImageMode.RGB
 
     #  Convert to JPG if meaningful
-    if not is_efficient(image_info) and image_info.mode == ImageMode.RGB:
+    if convert_png_to_jpeg and not is_efficient(image_info) and image_info.mode == ImageMode.RGB:
         image_info.format = ImageFormat.JPEG
         image.save(buffer, format=ImageFormat.JPEG, optimize=True, quality=85)
         image_info.filesize = len(buffer.getvalue())
@@ -121,13 +123,14 @@ def optimize_jpg_image(
     original_image_info: ImageInfo,
     filesize: int,
     compression: int,
+    *,
+    max_dimensions: tuple[int, int] | None = None,
 ) -> ImageOptimizationResult:
     image_info = deepcopy(original_image_info)
     density = original_image_info.bytes_per_pixel
-    if density is not None and density < 0.1:
-        image, image_info.size = crop_image_dimensions(image, EXTRA_WIDTH_SIZE)
-    else:
-        image, image_info.size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
+    if max_dimensions is None:
+        max_dimensions = EXTRA_WIDTH_SIZE if density is not None and density < 0.1 else MEDIUM_WIDTH_SIZE
+    image, image_info.size = crop_image_dimensions(image, max_dimensions)
 
     if image_info.size != original_image_info.size or not is_efficient(original_image_info) or compression < 75:
         image.save(buffer, format=ImageFormat.JPEG, optimize=True, quality=75)
@@ -170,13 +173,15 @@ def optimize_gif_image(
     original_image_info: ImageInfo,
     filesize: int,
     compression: int,
+    *,
+    max_dimensions: tuple[int, int] | None = None,
 ) -> ImageOptimizationResult:
     image_info = deepcopy(original_image_info)
 
     if original_image_info.is_animated:
         return ImageOptimizationResult(skip=ImageSkipReason.HAS_ANIMATION, original_image=original_image_info)
 
-    image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE)
+    image, resized_size = crop_image_dimensions(image, MEDIUM_WIDTH_SIZE if max_dimensions is None else max_dimensions)
 
     if resized_size != image_info.size:
         image_info.size = resized_size
@@ -192,10 +197,13 @@ def optimization_machine(
     buffer: BytesIO,
     filesize: int,
     compression: int,
+    *,
+    convert_png_to_jpeg: bool = True,
+    min_filesize: int = 50 * 1024,
+    max_dimensions: tuple[int, int] | None = None,
 ) -> ImageOptimizationResult:
     """Single failure net: any pixel-decoding/encoding failure on a broken or
     exotic image becomes an error result instead of an exception."""
-    min_filesize = 50 * 1024
     original_image_info = ImageInfo.from_image(image=image, filesize=filesize)
 
     try:
@@ -203,13 +211,25 @@ def optimization_machine(
             return ImageOptimizationResult(skip=ImageSkipReason.SMALL_IMAGE, original_image=original_image_info)
 
         if original_image_info.format == ImageFormat.PNG:
-            return optimize_png_image(image, buffer, original_image_info, filesize, compression)
+            return optimize_png_image(
+                image,
+                buffer,
+                original_image_info,
+                filesize,
+                compression,
+                convert_png_to_jpeg=convert_png_to_jpeg,
+                max_dimensions=max_dimensions,
+            )
 
         if original_image_info.format == ImageFormat.JPEG:
-            return optimize_jpg_image(image, buffer, original_image_info, filesize, compression)
+            return optimize_jpg_image(
+                image, buffer, original_image_info, filesize, compression, max_dimensions=max_dimensions
+            )
 
         if original_image_info.format == ImageFormat.GIF:
-            return optimize_gif_image(image, buffer, original_image_info, filesize, compression)
+            return optimize_gif_image(
+                image, buffer, original_image_info, filesize, compression, max_dimensions=max_dimensions
+            )
 
         return ImageOptimizationResult(skip=ImageSkipReason.NOT_OPTIMIZED, original_image=original_image_info)
 
@@ -217,3 +237,44 @@ def optimization_machine(
         reason = ImageErrorReason.from_error(e)
         logger.warning(f"optimization failed ({reason.name}): {e}")
         return ImageOptimizationResult(error=reason, original_image=original_image_info)
+
+
+def optimize_image(
+    content: bytes,
+    *,
+    compression: int = 100,
+    convert_png_to_jpeg: bool = True,
+    min_filesize: int = 50 * 1024,
+    max_dimensions: tuple[int, int] | None = None,
+) -> tuple[ImageOptimizationResult, bytes | None]:
+    """Return accepted bytes, or None for a skip/error; never mutate the input.
+
+    max_dimensions=None retains density-based limits; (0, 0) disables resizing.
+    A zero width or height leaves that axis unconstrained. min_filesize is in bytes.
+    """
+    buffer = BytesIO()
+    try:
+        with Image.open(BytesIO(content)) as image:
+            result = optimization_machine(
+                image,
+                buffer,
+                len(content),
+                compression,
+                convert_png_to_jpeg=convert_png_to_jpeg,
+                min_filesize=min_filesize,
+                max_dimensions=max_dimensions,
+            )
+    except Exception as error:
+        reason = ImageErrorReason.from_error(error)
+        logger.warning("Image could not be opened (%s): %s", reason.name, error)
+        return ImageOptimizationResult(error=reason, original_image=ImageInfo.failed(filesize=len(content))), None
+
+    if not result.success:
+        return result, None
+    optimized = buffer.getvalue()
+    # Preserve the recipe's historical whole-percent cutoff (97.9% still counts as 97%).
+    if int(len(optimized) / len(content) * 100) > 97:
+        result.success = False
+        result.skip = ImageSkipReason.WORSE_CONVERSION
+        return result, None
+    return result, optimized

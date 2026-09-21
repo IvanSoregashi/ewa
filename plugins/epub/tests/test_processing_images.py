@@ -97,6 +97,33 @@ def test_conversion_updates_inventory_html_manifest_and_export(tmp_path, image_b
     assert path.read_bytes() == original
 
 
+@pytest.mark.parametrize("referenced", [False, True])
+def test_png_optimization_without_conversion_needs_no_link_operation(tmp_path, image_bytes, referenced):
+    path = make_book(tmp_path, {"cover.png": image_bytes}, referenced=["cover.png"] if referenced else [])
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        chapter = require(context.epub.resources.by_path("OEBPS/text/chapter.xhtml")).content
+        context.perform(OptimizeImages(convert_png_to_jpeg=False, min_filesize=0, max_dimensions=(128, 128)))
+        assert context.replacements == {}
+        assert NoUnmatchedLinks().verify(context) is None
+        # Export directly: no HTML or manifest link-replacement step is needed.
+        output = export(context, tmp_path)
+
+    run = require(context.result)
+    assert run.success and len(run.analytics) == 1
+    record = run.analytics[0]
+    assert isinstance(record, ImageOptimizationRecord)
+    assert record.success and record.run_id == run.id
+    resource = require(output.resources.by_path("OEBPS/images/cover.png"))
+    assert resource.content != image_bytes and len(resource.content) == require(record.new_image).filesize
+    assert output.resources.by_path("OEBPS/images/cover.jpg") is None
+    with Image.open(BytesIO(resource.content)) as image:
+        assert image.format == "PNG" and image.size == (128, 128)
+    assert require(output.resources.by_path("OEBPS/text/chapter.xhtml")).content == chapter
+    item = require(output.package.manifest_item_by_path("OEBPS/images/cover.png"))
+    assert item.href == "images/cover.png" and item.media_type == "image/png"
+
+
 def test_small_and_broken_images_stay_unchanged_and_svg_is_excluded(tmp_path):
     buffer = BytesIO()
     with Image.new("RGB", (8, 8)) as image:

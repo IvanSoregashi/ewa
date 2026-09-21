@@ -1,11 +1,13 @@
 from io import BytesIO
+from dataclasses import replace
 from zipfile import ZipInfo
 import pytest
 from PIL import Image
 from epub.recipe_image import perform_image_optimization
 from library.epub.resources import Resource
 from library.image.constants import ImageFormat, ImageMode, MEDIUM_WIDTH_SIZE
-from library.image.models import ImageErrorReason
+from library.image.models import ImageErrorReason, ImageOptimizationResult, ImageSkipReason
+from library.image import optimization
 from library.test_utils.utils_image import counted_resource, generate_image
 
 
@@ -230,3 +232,27 @@ def test_perform_optimization_source_read_failure_returns_read_error():
     assert result.original_image.filesize == 1234
     assert result.original_image.path == "OEBPS/images/unreadable.png"
     assert result.original_image.format == "UNKNOWN"
+
+
+@pytest.mark.parametrize("encoded_size", [970, 979, 980, 1000, 1100])
+def test_minimum_saving_gate_rejects_bytes_before_resource_mutation(monkeypatch, encoded_size):
+    buffer = BytesIO()
+    Image.new("RGB", (8, 8)).save(buffer, format="PNG")
+    content = buffer.getvalue().ljust(1000, b"\0")
+    resource, _ = counted_resource(content, "cover.png")
+
+    def encode(image, buffer, original_image_info, *args, **kwargs):
+        buffer.write(b"x" * encoded_size)
+        return ImageOptimizationResult(
+            success=True,
+            original_image=original_image_info,
+            new_image=replace(original_image_info, format=ImageFormat.JPEG, filesize=encoded_size),
+        )
+
+    monkeypatch.setattr(optimization, "optimize_png_image", encode)
+    result = perform_image_optimization(resource, min_filesize=0)
+    accepted = encoded_size < 980  # Retain the existing whole-percent rounding policy.
+    assert result.success == accepted
+    assert result.skip == (None if accepted else ImageSkipReason.WORSE_CONVERSION)
+    assert resource.filename == ("cover.jpg" if accepted else "cover.png")
+    assert resource.content == (b"x" * encoded_size if accepted else content)
