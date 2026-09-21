@@ -1,8 +1,7 @@
 # Image processing TODO
 
 Work is ordered by dependency and intended execution. Complete one migration step per
-reviewable change while keeping affected callers working. Implementation awaits an explicit
-instruction to start. Unscheduled image work stays in the backlog.
+reviewable change while keeping affected callers working. Unscheduled image work stays in the backlog.
 
 This list owns unfinished library image processing and EPUB image-adapter work.
 Completed migration history remains in [EPUB_TODO.md](EPUB_TODO.md#image-optimization-checkpoint-not-the-finished-design);
@@ -19,10 +18,10 @@ Switch callers only after the replacement passes comparison for all important ca
 
 ### 1. Introduce the concrete library context and its lifetime
 
-- [ ] Use the same bytes input, configuration arguments/defaults, compression data, and return contract as the current optimize_image entry point. Stream/opener support is deferred and does not block the context.
-- [ ] Add ImageProcessingContext in library.image for one image and one recipe call: configuration, original metadata, working Pillow image, candidate bytes, and one final ImageOptimizationResult. Reuse existing result/metadata types and numeric reasons; add no per-step result or findings list.
-- [ ] Open input and create the Pillow image inside the with block so setup failures reach __exit__. Release owned streams, images, and buffers; retain known metadata. Derive error outcomes from exceptions, propagate interrupts, and finalize a detached result after cleanup.
-- [ ] Test opening/metadata/processing/cleanup failures and source ownership with synthetic inputs. Use one context per call by convention, without re-entry or active-context guard machinery.
+- [x] Use the same bytes input, configuration arguments/defaults, compression data, and return contract as the current optimize_image entry point. Stream/opener support is deferred and does not block the context.
+- [x] Add ImageProcessingContext in library.image for one image and one recipe call: configuration, original metadata, working Pillow image, candidate bytes, and one final ImageOptimizationResult. Reuse existing result/metadata types and numeric reasons; add no per-step result or findings list.
+- [x] Open input and create the Pillow image inside the with block so setup failures reach __exit__. Release owned streams, images, and buffers; retain known metadata. Derive error outcomes from exceptions, propagate interrupts, and finalize a detached result after cleanup.
+- [x] Test opening/metadata/processing/cleanup failures and source ownership with synthetic inputs. Use one context per call by convention, without re-entry or active-context guard machinery.
 
 ### 2. Express the image recipe through checks and transformations
 

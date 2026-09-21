@@ -67,8 +67,11 @@ class Resource:
 
     @contextmanager
     def stream(self) -> Generator[IO[bytes], None, None]:
-        stream_func = require(self.stream_bytes, "stream_bytes")
-        streamable = io.BytesIO(self._content) if self._content is not None else stream_func(self._source_info)
+        if self._content is not None:
+            streamable = io.BytesIO(self._content)
+        else:
+            stream_func = require(self.stream_bytes, "stream_bytes")
+            streamable = stream_func(self._source_info)
         with streamable as stream:
             yield stream
 

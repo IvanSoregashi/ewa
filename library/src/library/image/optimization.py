@@ -41,13 +41,13 @@ def crop_dimensions(image_dimensions: tuple[int, int], max_dimensions: tuple[int
 
     new_width, new_height = width, height
     if max_width and width > max_width:
-        ratio = max_width / width
+        ratio = max_width / new_width
         new_width = max_width
-        new_height = int(height * ratio)
+        new_height = max(1, int(new_height * ratio))
 
     if max_height and new_height > max_height:
         ratio = max_height / new_height
-        new_width = int(width * ratio)
+        new_width = max(1, int(new_width * ratio))
         new_height = max_height
 
     return new_width, new_height

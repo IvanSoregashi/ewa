@@ -7,8 +7,8 @@ of EPUB workflows. Implementation order lives in [IMAGE_TODO.md](IMAGE_TODO.md);
 contributor instructions live in [AGENTS.md](../AGENTS.md).
 EPUB resource integration belongs to [EPUB_SPECIFICATION.md](EPUB_SPECIFICATION.md#state-and-ownership).
 
-The existing optimize_image implementation remains active. ImageProcessingContext is planned,
-not implemented; implementation awaits an explicit instruction to start.
+The existing optimize_image implementation remains active. ImageProcessingContext now provides
+a separate concrete lifetime API; recipe checks, transformations, and caller integration remain planned.
 
 ## Current optimizer contract and policy
 
@@ -39,8 +39,8 @@ and integer typing would reject fractional resolutions when reading stored snaps
 
 ## Planned ImageProcessingContext
 
-This refactor is agreed direction, not implemented behavior. `optimize_image` remains the image
-recipe entry point; a concrete `ImageProcessingContext` in `library.image` will own one image's
+The lifetime API below is implemented; the replacement recipe is not yet implemented. `optimize_image` remains the image
+recipe entry point; a concrete `ImageProcessingContext` in `library.image` owns one image's
 working state, lifetime, and automatic outcome. Reuse `ImageInfo` and `ImageOptimizationResult`.
 Keep pixel helpers as functions; adapters remain outside the image library.
 No common context base is needed for this step.
@@ -68,3 +68,24 @@ Create each context and its live inputs inside its worker. Input API flexibility
 that live streams or arbitrary opener functions can cross process boundaries: transport bytes or
 a serializable source description and return detached data. Preserve processing policy during the
 refactor and compare behavior and costs before retiring the current implementation.
+
+## Implemented context lifetime
+
+Create ImageProcessingContext with the existing configuration keywords, then call
+open_image(content) inside its with block. Entering performs no input opening.
+The context owns its input buffer and opened image; replace_image(image) also takes ownership
+of a transformed image. All registered resources are closed on exit, including when another
+close fails. Use a fresh context per call, without re-entry guards.
+
+original_image retains captured metadata (or known byte size if metadata capture fails).
+image is the working Pillow object; candidate and new_image hold encoded candidate bytes
+and their metadata. skip(reason) stops the block, retaining metadata but discarding candidate
+bytes on exit. succeed() requires candidate bytes and metadata; the future recipe must perform
+encoding and size acceptance before calling it. No encoding or savings policy is implemented
+in the context yet.
+
+After the block, outcome() returns the existing (ImageOptimizationResult, accepted bytes or None)
+shape. Ordinary exceptions are classified by ImageErrorReason.from_error; missing completion
+becomes UNKNOWN. Cleanup failure overrides success or skip, while a processing failure retains
+its classification if cleanup also fails. Diagnostics are logged. Interrupts propagate after
+cleanup and leave no completed result. The working image reference is cleared on exit.
