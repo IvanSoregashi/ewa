@@ -6,6 +6,8 @@
 - `src/ewa/`: CLI application; `library/src/library/`: reusable primitives; `plugins/epub/src/epub/`: EPUB workflows.
 - For EPUB work, read [EPUB_SPECIFICATION.md](library/EPUB_SPECIFICATION.md) for design contracts and [EPUB_TODO.md](library/EPUB_TODO.md) for implementation order.
 
+- For image processing work, read [IMAGE_SPECIFICATION.md](library/IMAGE_SPECIFICATION.md) and [IMAGE_TODO.md](library/IMAGE_TODO.md). EPUB adapter responsibilities remain in the EPUB specification.
+
 ## Working conventions
 
 - Prefer simple, concrete APIs, few abstractions, and self-explanatory code. Omit docstrings or keep them very short when names and implementation make the purpose clear.
@@ -35,6 +37,8 @@ git diff --check
 - `AGENTS.md`: durable contributor instructions and commands.
 - `library/EPUB_SPECIFICATION.md`: EPUB responsibilities, contracts, rationale, and open design decisions. Distinguish current behavior from agreed but unimplemented behavior.
 - `library/EPUB_TODO.md`: actionable work and completion status in execution order. Insert prerequisites before dependent steps and update numbering and references; do not append them out of order.
+- [library/IMAGE_SPECIFICATION.md](library/IMAGE_SPECIFICATION.md): reusable image processing contracts, current behavior, and planned design, independent of EPUB integration.
+- [library/IMAGE_TODO.md](library/IMAGE_TODO.md): unfinished image work in execution order, including image-adapter integration tasks.
 - Keep unscheduled work in a separate backlog after the ordered migration. Keep completed items as history.
 - Update the owning document when a decision changes. Link to contracts instead of repeating design discussions or conversation history in TODOs.
 - Treat the specification as a reference, not required user reading. Keep change explanations self-contained and concise; add documentation only when it resolves a concrete ambiguity or preserves a useful constraint.

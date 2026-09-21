@@ -3,8 +3,7 @@
 ## Scope and status
 
 This document records EPUB design contracts for the reusable library and its workflow plugin.
-Implementation order and completion status live in [EPUB_TODO.md](EPUB_TODO.md) for EPUB work
-and [IMAGE_TODO.md](IMAGE_TODO.md) for unfinished image work;
+Implementation order and completion status live in [EPUB_TODO.md](EPUB_TODO.md);
 contributor instructions live in [AGENTS.md](../AGENTS.md).
 
 The inventory/package foundation, per-book context, and automatic lifecycle outcomes are implemented.
@@ -68,24 +67,19 @@ a shared old-path-to-new-path replacement mapping and one analytics list.
 An empty replacement mapping means no work; no separate “not run” state is needed.
 
 OptimizeImages appends image records and publishes only successful path changes.
-It accepts keyword options `convert_png_to_jpeg=True`, `min_filesize=50 * 1024` (bytes),
-and `max_dimensions=None` (the existing density-based limits). Explicit dimensions bound
-resizing without upscaling; zero leaves an axis unconstrained, so `(0, 0)` disables resizing.
-Disabling PNG-to-JPEG conversion keeps all optimized resources at their existing paths:
-this operation then needs no ReplaceLinks step. Existing replacements from other operations
-are still the recipe's responsibility. Panda keeps the current defaults.
+It forwards image configuration to the library optimizer; Panda keeps the current defaults.
+Image policy, metadata, and the planned library context belong to
+[IMAGE_SPECIFICATION.md](IMAGE_SPECIFICATION.md).
+Disabling PNG-to-JPEG conversion keeps optimized resources at their existing paths,
+so this operation needs no ReplaceLinks step. Existing replacements from other operations
+remain the recipe's responsibility.
 
-For example, `OptimizeImages(convert_png_to_jpeg=False, max_dimensions=(1080, 1600))`
-can resize PNG/JPEG/static GIF images while preserving their formats and references.
-Unchanged PNGs are skipped rather than re-encoded solely to attempt compression.
-Encoder quality, transparency handling, animation skips, and the historical savings gate
-remain unchanged: the integer output/input size percentage must be at most 97.
+perform_image_optimization remains a short EPUB resource recipe: acquire resource bytes and
+plain ZIP compression data, call the image optimizer, then apply accepted bytes and any
+inventory rename. Resource changes, link mappings, and database analytics stay in the plugin.
+No resource is modified for an image skip/error; collisions still stop the book.
+No resource context is introduced by the image refactor.
 
-In the current intermediate implementation, the library's optimize_image function owns decoding,
-encoding, and size acceptance, returning
-an ImageOptimizationResult and accepted bytes (None for skip/error). perform_image_optimization
-is the EPUB adapter: read resource bytes, call the optimizer, then apply accepted bytes and any
-inventory rename. No resource is modified for an image skip/error; collisions still stop the book.
 Image decode/optimization errors remain per-image evidence; inventory rename collisions
 stop the book without overwriting the existing resource. ReplaceLinks consumes the mapping
 in HTML and then OPF, clearing it after both passes complete. It records missing old paths
@@ -104,42 +98,11 @@ infer spine order or navigation/cover properties. This is coverage repair, not f
 These are optional tools, not Panda recipe steps: an undeclared resource may be an abandoned asset,
 so the recipe neither adds its declaration automatically nor requires full manifest coverage.
 
-EpubInfo, ImageInfo, and IndexInfo remain dataclasses. EpubInfo.from_path reads only
-filesystem information. ImageInfo uses `size=None` for unreadable dimensions;
-`bytes_per_pixel` returns None for unknown or zero-area dimensions, including older snapshots.
-Density thresholds belong to the optimizer and retain their existing byte-based values.
-DPI is captured as a pair of floats: Pillow EXIF rational values otherwise cannot serialize to JSON,
-and integer typing would reject fractional resolutions when reading stored snapshots.
+EpubInfo and IndexInfo remain dataclasses. EpubInfo.from_path reads only filesystem information.
 
 Most operations produce no analytics. Those that do append unsaved SQLModel table instances,
 with models defined near their operation and `run_id=context.run_id`. Records contain data, not live resources.
 There is no database session, engine, or arbitrary shared-state dictionary on the context.
-
-### Planned ImageProcessingContext
-
-This refactor is agreed direction, not implemented behavior. `optimize_image` remains the image
-recipe entry point; a concrete `ImageProcessingContext` in `library.image` will own one image's
-working state, lifetime, and automatic outcome. Reuse `ImageInfo` and `ImageOptimizationResult`.
-Keep pixel helpers as functions and `perform_image_optimization` as the resource recipe.
-Neither a resource context nor a common context base is needed for this step.
-
-Input acquisition stays behind the context's opening method, called inside the `with` block so
-opening failures reach `__exit__`. Bytes, binary streams, and openers are possible inputs; their
-initial API, seek requirements, borrowed/owned lifetime, and optional known size are to be settled
-before implementation. Header inspection can avoid pixel decoding; avoiding a full encoded-file
-read also requires lazy input acquisition. Do not read the whole source merely to implement a size
-check when its size is already known. ZIP compression information needed by the current JPEG policy
-must remain plain additional data, without a library dependency on EPUB resources.
-
-Checks stop on failure; transformations own conditional behavior. The context retains known
-metadata on failure, releases its owned resources, and returns one detached outcome with accepted
-bytes only after encoding and size acceptance succeed. Interrupts propagate. Resource mutation,
-renaming, link replacement, and persistence remain outside this context.
-
-Create each context and its live inputs inside its worker. Input API flexibility does not imply
-that live streams or arbitrary opener functions can cross process boundaries: transport bytes or
-a serializable source description and return detached data. Preserve processing policy during the
-refactor and compare behavior and costs before retiring the current implementation.
 
 ### Checks and operations
 
