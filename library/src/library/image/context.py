@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Callable
 from contextlib import ExitStack
 from io import BytesIO
 from types import TracebackType
@@ -33,14 +34,14 @@ class ImageProcessingContext:
         self.candidate: bytes | None = None
         self.new_image_info: ImageInfo | None = None
         self.result: ImageOptimizationResult | None = None
-        self._resources = ExitStack()
+        self.exit_stack = ExitStack()
 
     def __enter__(self) -> ImageProcessingContext:
         return self
 
     def open_bytes_as_image(self, content: bytes) -> None:
         self.original_image_info = ImageInfo.failed(filesize=len(content))
-        source = self._resources.enter_context(BytesIO(content))
+        source = self.exit_stack.enter_context(BytesIO(content))
         image = Image.open(source)
         self.replace_image(image)
         self.original_image_info = ImageInfo.from_image(image, len(content))
@@ -48,13 +49,23 @@ class ImageProcessingContext:
     def replace_image(self, image: Image.Image) -> None:
         """Take ownership of an opened or transformed image until the block exits."""
         if image is not self.image:
+            self.exit_stack.callback(image.close)
             if self.image is not None:
                 self.image.close()
-            self._resources.callback(image.close)
             self.image = image
 
+    def verify(self, *checks: Callable[[ImageProcessingContext], ImageSkipReason | None]) -> None:
+        for check in checks:
+            reason = check(self)
+            if reason is not None:
+                self.skip(reason)
+
     def skip(self, reason: ImageSkipReason) -> None:
-        self.result = ImageOptimizationResult(skip=reason, original_image=self.original_image_info, new_image=self.new_image_info)
+        self.result = ImageOptimizationResult(
+            skip=reason,
+            original_image=self.original_image_info,
+            new_image=self.new_image_info,
+        )
         raise _ImageSkipped
 
     def succeed(self) -> None:
@@ -62,7 +73,9 @@ class ImageProcessingContext:
         if self.candidate is None or self.new_image_info is None:
             raise RuntimeError("Image processing completed without an encoded candidate and metadata")
         self.result = ImageOptimizationResult(
-            success=True, original_image=self.original_image_info, new_image=self.new_image_info
+            success=True,
+            original_image=self.original_image_info,
+            new_image=self.new_image_info,
         )
 
     def outcome(self) -> tuple[ImageOptimizationResult, bytes | None]:
@@ -71,11 +84,14 @@ class ImageProcessingContext:
         return self.result, self.candidate if self.result.success else None
 
     def __exit__(
-        self, exc_type: type[BaseException] | None, error: BaseException | None, traceback: TracebackType | None
+        self,
+        exc_type: type[BaseException] | None,
+        error: BaseException | None,
+        traceback: TracebackType | None,
     ) -> bool:
         failure = None if isinstance(error, _ImageSkipped) else error
         try:
-            self._resources.close()
+            self.exit_stack.close()
         except BaseException as cleanup_error:
             # Cleanup must not swallow an interrupt or replace the original processing failure.
             if failure is None or (isinstance(failure, Exception) and not isinstance(cleanup_error, Exception)):

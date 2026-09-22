@@ -8,7 +8,8 @@ contributor instructions live in [AGENTS.md](../AGENTS.md).
 EPUB resource integration belongs to [EPUB_SPECIFICATION.md](EPUB_SPECIFICATION.md#state-and-ownership).
 
 The existing optimize_image implementation remains active. ImageProcessingContext now provides
-a separate concrete lifetime API; recipe checks, transformations, and caller integration remain planned.
+a concrete lifetime API, and recipe.optimize_image_with_context implements the replacement recipe
+alongside it. Existing callers still use optimization.optimize_image; integration remains planned.
 
 ## Current optimizer contract and policy
 
@@ -19,8 +20,8 @@ accepted bytes (None for skip/error). Keep the existing argument names and defau
 Options include convert_png_to_jpeg=True, min_filesize=50 * 1024 (bytes), and
 max_dimensions=None (the existing density-based limits). Explicit dimensions are intended
 to bound resizing without upscaling; zero leaves an axis unconstrained, so (0, 0) disables
-resizing. Current resizing code and tests need reconciliation with those intended bounds
-and the removal of rejected thin-image guards before comparing resize behavior.
+resizing. The committed resize baseline applies the height limit to the already narrowed width
+and keeps the user-restored one-pixel minimum for thin images. Both recipes share this helper.
 
 Preserve PNG/JPEG/static-GIF policies, encoder quality, transparency handling, and animation
 skips. Unchanged PNGs are skipped rather than re-encoded solely to attempt compression.
@@ -39,7 +40,7 @@ and integer typing would reject fractional resolutions when reading stored snaps
 
 ## Planned ImageProcessingContext
 
-The lifetime API below is implemented; the replacement recipe is not yet implemented. `optimize_image` remains the image
+The lifetime API and parallel replacement recipe are implemented; caller migration remains planned. `optimize_image` remains the image
 recipe entry point; a concrete `ImageProcessingContext` in `library.image` owns one image's
 working state, lifetime, and automatic outcome. Reuse `ImageInfo` and `ImageOptimizationResult`.
 Keep pixel helpers as functions; adapters remain outside the image library.
@@ -72,20 +73,39 @@ refactor and compare behavior and costs before retiring the current implementati
 ## Implemented context lifetime
 
 Create ImageProcessingContext with the existing configuration keywords, then call
-open_image(content) inside its with block. Entering performs no input opening.
+open_bytes_as_image(content) inside its with block. Entering performs no input opening.
 The context owns its input buffer and opened image; replace_image(image) also takes ownership
-of a transformed image. All registered resources are closed on exit, including when another
+of a transformed image and immediately closes the previous image to release its pixel buffer.
+The replacement is registered before closing the previous image so cleanup also covers close failures.
+All registered resources are closed on exit, including when another
 close fails. Use a fresh context per call, without re-entry guards.
 
-original_image retains captured metadata (or known byte size if metadata capture fails).
-image is the working Pillow object; candidate and new_image hold encoded candidate bytes
+original_image_info retains captured metadata (or known byte size if metadata capture fails).
+image is the working Pillow object; candidate and new_image_info hold encoded candidate bytes
 and their metadata. skip(reason) stops the block, retaining metadata but discarding candidate
-bytes on exit. succeed() requires candidate bytes and metadata; the future recipe must perform
-encoding and size acceptance before calling it. No encoding or savings policy is implemented
-in the context yet.
+bytes on exit. succeed() requires candidate bytes and metadata; the recipe performs encoding and size acceptance before calling it.
+Encoding and savings policy live in recipe functions, outside the context.
 
 After the block, outcome() returns the existing (ImageOptimizationResult, accepted bytes or None)
 shape. Ordinary exceptions are classified by ImageErrorReason.from_error; missing completion
 becomes UNKNOWN. Cleanup failure overrides success or skip, while a processing failure retains
 its classification if cleanup also fails. Diagnostics are logged. Interrupts propagate after
 cleanup and leave no completed result. The working image reference is cleared on exit.
+
+## Parallel image recipe
+
+recipe.optimize_image_with_context accepts the same bytes and keyword arguments as
+optimization.optimize_image. It opens inside the context, verifies minimum size, supported
+format, and animation policy in order, then resizes, removes useless PNG alpha, encodes, checks
+savings, and marks success. verify(*checks) takes ordinary functions returning None on success
+or an ImageSkipReason on failure; the first failure stops the recipe. Transformations are
+ordinary functions with their conditional behavior inside them, without operation classes.
+
+PNG, JPEG, and static GIF retain their existing format-specific resize thresholds and encoder
+options. Unchanged PNG/GIF and efficient unchanged JPEG skips happen in the encoding operation;
+JPEG still considers the supplied ZIP compression percentage. Candidate metadata is recorded
+after encoding and retained when savings are rejected. Synthetic comparisons cover outcome,
+metadata, and accepted bytes, including configured bounds, modes, transparency, animations,
+size/compression boundaries, invalid/truncated data, and injected processing failures.
+The existing optimizer remains available and active until adapter, worker-isolation, complete
+pipeline, and performance comparisons are finished.

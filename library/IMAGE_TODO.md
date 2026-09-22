@@ -25,11 +25,11 @@ Switch callers only after the replacement passes comparison for all important ca
 
 ### 2. Express the image recipe through checks and transformations
 
-- [ ] Reconcile resizing code/tests with the intended bounds and removal of thin-image guards before comparing resize behavior. Identify intentional policy changes and apply them to both implementations.
-- [ ] Establish synthetic outcome/byte comparisons as each format migrates; keep the existing optimizer available as the comparison implementation.
-- [ ] Add ordered verification that ends the recipe at the first failed gate. Keep conditional transformations inside operations and ordinary pixel/arithmetic helpers as functions; introduce operation objects only where they make the recipe clearer.
-- [ ] Move format eligibility, transparency handling, resizing, encoding, and savings acceptance into explicit recipe steps. Mark success only for accepted encoded output; keep candidate metadata for rejected conversions where currently reported.
-- [ ] Preserve current PNG/JPEG/static-GIF policies, animation skips, encoder settings, configured conversion/size options, and integer savings cutoff. Compare outcomes and accepted bytes as each format migrates; retain the old implementation temporarily for comparison.
+- [x] Use the committed resize fix as the common baseline: both-axis limits use the narrowed dimensions, and the user-restored one-pixel minimum is retained. Both implementations share the helper; resizing tests pass.
+- [x] Establish synthetic outcome/byte comparisons as each format migrates; keep the existing optimizer available as the comparison implementation.
+- [x] Add ordered verification that ends the recipe at the first failed gate. Keep conditional transformations inside operations and ordinary pixel/arithmetic helpers as functions; introduce operation objects only where they make the recipe clearer.
+- [x] Move format eligibility, transparency handling, resizing, encoding, and savings acceptance into explicit recipe steps. Mark success only for accepted encoded output; keep candidate metadata for rejected conversions where currently reported.
+- [x] Preserve current PNG/JPEG/static-GIF policies, animation skips, encoder settings, configured conversion/size options, and integer savings cutoff. Compare outcomes and accepted bytes as each format migrates; retain the old implementation temporarily for comparison.
 
 ### 3. Integrate the resource adapter and verify isolation
 

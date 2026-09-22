@@ -23,6 +23,8 @@ def test_success_owns_input_and_transformed_images(content):
         source = original.fp
         transformed = original.resize((10, 5))
         context.replace_image(transformed)
+        with pytest.raises(ValueError):
+            original.getpixel((0, 0))
         with BytesIO() as output:
             transformed.save(output, format="PNG")
             context.candidate = output.getvalue()
@@ -170,6 +172,24 @@ def test_success_requires_candidate(content):
         context.open_bytes_as_image(content)
         context.succeed()
     assert context.outcome()[0].error == ImageErrorReason.UNKNOWN
+
+
+def test_replacement_is_owned_even_if_previous_close_fails(content, monkeypatch):
+    with ImageProcessingContext() as context:
+        context.open_bytes_as_image(content)
+        original = context.image
+        close = original.close
+        replacement = original.copy()
+
+        def fail_close():
+            close()
+            raise OSError("old image close failed")
+
+        monkeypatch.setattr(original, "close", fail_close)
+        context.replace_image(replacement)
+    assert context.outcome()[0].error == ImageErrorReason.READ_ERROR
+    with pytest.raises(ValueError):
+        replacement.getpixel((0, 0))
 
 
 @pytest.mark.parametrize("body_interrupt", [False, True])
