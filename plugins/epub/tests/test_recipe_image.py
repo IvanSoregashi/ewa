@@ -1,22 +1,26 @@
+from functools import partial
 from io import BytesIO
-from dataclasses import replace
 from zipfile import ZipInfo
 import pytest
 from PIL import Image
 from epub.recipe_image import perform_image_optimization
 from library.epub.resources import Resource
 from library.image.constants import ImageFormat, ImageMode, MEDIUM_WIDTH_SIZE
-from library.image.models import ImageErrorReason, ImageOptimizationResult, ImageSkipReason
-from library.image import optimization
+from library.image.models import ImageErrorReason, ImageSkipReason
 from library.test_utils.utils_image import counted_resource, generate_image
 
 
-def test_optimization_skips_small_images():
+@pytest.fixture(params=[False, True], ids=["current", "context"])
+def optimize_resource(request):
+    return partial(perform_image_optimization, use_context=request.param)
+
+
+def test_optimization_skips_small_images(optimize_resource):
     image_bytes, filename = generate_image(ImageFormat.PNG, ImageMode.RGB, (64, 32), noise=True)
     resource, _ = counted_resource(image_bytes, filename)
     original_content = resource.content
 
-    result = perform_image_optimization(resource)
+    result = optimize_resource(resource)
 
     assert result.success is False
     assert result.skip is not None
@@ -27,12 +31,12 @@ def test_optimization_skips_small_images():
     assert resource.filename == filename
 
 
-def test_optimization_resizes_large_jpeg():
+def test_optimization_resizes_large_jpeg(optimize_resource):
     image_bytes, filename = generate_image(ImageFormat.JPEG, ImageMode.RGB, (1500, 1500), noise=True)
     resource, _ = counted_resource(image_bytes, filename)
     original_content = resource.content
 
-    result = perform_image_optimization(resource)
+    result = optimize_resource(resource)
 
     assert result.success is True
     assert result.new_image is not None
@@ -47,13 +51,13 @@ def test_optimization_resizes_large_jpeg():
     assert resource.filename == filename  # no rename for jpeg
 
 
-def test_optimization_converts_png_to_jpeg():
+def test_optimization_converts_png_to_jpeg(optimize_resource):
     """Noisy RGB PNG above the size threshold: high bytes per pixel -> converted to JPEG."""
     image_bytes, filename = generate_image(ImageFormat.PNG, ImageMode.RGB, (1500, 1500), noise=True)
     resource, _ = counted_resource(image_bytes, filename)
     assert resource.content and len(resource.content) >= 50 * 1024  # guard: actually above threshold
 
-    result = perform_image_optimization(resource)
+    result = optimize_resource(resource)
 
     assert result.success is True
     assert result.new_image is not None
@@ -70,13 +74,13 @@ def test_optimization_converts_png_to_jpeg():
         assert optimized.format == "JPEG"
 
 
-def test_optimization_resized_rgba_png_stays_png():
+def test_optimization_resized_rgba_png_stays_png(optimize_resource):
     """Real (random) alpha channel: no useless-transparency drop, no conversion - only resize."""
     image_bytes, filename = generate_image(ImageFormat.PNG, ImageMode.RGBA, (1500, 1500), noise=True)
     resource, _ = counted_resource(image_bytes, filename)
     assert len(resource.content) >= 50 * 1024
 
-    result = perform_image_optimization(resource)
+    result = optimize_resource(resource)
 
     assert result.success is True
     assert result.new_image is not None
@@ -90,14 +94,14 @@ def test_optimization_resized_rgba_png_stays_png():
         assert optimized.mode == "RGBA"
 
 
-def test_optimization_drops_useless_transparency_and_stays_png():
+def test_optimization_drops_useless_transparency_and_stays_png(optimize_resource):
     """Solid RGBA (fully opaque) above the size threshold: extra-efficient -> EXTRA resize,
     useless alpha dropped (RGBA -> RGB), format stays PNG, no rename."""
     image_bytes, filename = generate_image(ImageFormat.PNG, ImageMode.RGBA, (4000, 4000), noise=False)
     resource, _ = counted_resource(image_bytes, filename)
     assert len(resource.content) >= 50 * 1024  # 70KB in practice: above the skip threshold
 
-    result = perform_image_optimization(resource)
+    result = optimize_resource(resource)
 
     assert result.success is True
     assert result.new_image is not None
@@ -112,13 +116,13 @@ def test_optimization_drops_useless_transparency_and_stays_png():
     assert resource.filename == filename  # no rename: png stayed png
 
 
-def test_optimization_noisy_opaque_rgba_drops_alpha_and_converts():
+def test_optimization_noisy_opaque_rgba_drops_alpha_and_converts(optimize_resource):
     """Noisy pixels with forced-opaque alpha: transparency is useless -> RGB -> JPEG conversion + rename."""
     image_bytes, filename = generate_image(ImageFormat.PNG, ImageMode.RGBA, (1500, 1500), noise=True, alpha=255)
     resource, _ = counted_resource(image_bytes, filename)
     assert len(resource.content) >= 50 * 1024
 
-    result = perform_image_optimization(resource)
+    result = optimize_resource(resource)
 
     assert result.success is True
     assert result.new_image is not None
@@ -129,12 +133,12 @@ def test_optimization_noisy_opaque_rgba_drops_alpha_and_converts():
     assert resource.media_type == "image/jpeg"
 
 
-def test_optimization_result_is_reportable():
+def test_optimization_result_is_reportable(optimize_resource):
     """The result must be plain data (picklable across processes) with full before/after info."""
     image_bytes, filename = generate_image(ImageFormat.JPEG, ImageMode.RGB, (1500, 1500), noise=True)
     resource, _ = counted_resource(image_bytes, filename)
 
-    result = perform_image_optimization(resource)
+    result = optimize_resource(resource)
 
     as_dict = result.as_dict()
     assert as_dict["original_image"]["size"] == (1500, 1500)
@@ -146,14 +150,14 @@ def test_optimization_result_is_reportable():
     "archive_path",
     ["pic.png", "OEBPS/pic.png", "OEBPS/images/pic.png", "OEBPS/deep/nested/dir/pic.png", "OEBPS/v2.dir/pic.png"],
 )
-def test_rename_png_to_jpg_with_archive_paths(archive_path):
+def test_rename_png_to_jpg_with_archive_paths(archive_path, optimize_resource):
     """The rename must only touch the final suffix and keep posix separators -
     str(Path(...)) on Windows would emit backslashes and corrupt the archive path."""
     image_bytes, _ = generate_image(ImageFormat.PNG, ImageMode.RGB, (1500, 1500), noise=True)
     resource, _ = counted_resource(image_bytes, archive_path)
     assert len(resource.content) >= 50 * 1024
 
-    result = perform_image_optimization(resource)
+    result = optimize_resource(resource)
 
     assert result.new_image is not None
     assert result.new_image.path is not None
@@ -170,11 +174,11 @@ def test_rename_png_to_jpg_with_archive_paths(archive_path):
     assert result.original_image.format is ImageFormat.PNG
 
 
-def test_rename_keeps_stem_with_multiple_dots():
+def test_rename_keeps_stem_with_multiple_dots(optimize_resource):
     image_bytes, _ = generate_image(ImageFormat.PNG, ImageMode.RGB, (1500, 1500), noise=True)
     resource, _ = counted_resource(image_bytes, "OEBPS/images/pic.final.png")
 
-    result = perform_image_optimization(resource)
+    result = optimize_resource(resource)
 
     assert result.new_image is not None
     assert result.new_image.format is ImageFormat.JPEG
@@ -182,12 +186,12 @@ def test_rename_keeps_stem_with_multiple_dots():
     assert resource.media_type == "image/jpeg"
 
 
-def test_no_rename_when_png_stays_png():
+def test_no_rename_when_png_stays_png(optimize_resource):
     """Extra-efficient RGBA resize keeps the png format - path and media_type untouched."""
     image_bytes, _ = generate_image(ImageFormat.PNG, ImageMode.RGBA, (4000, 4000), noise=False)
     resource, _ = counted_resource(image_bytes, "OEBPS/images/solid.png")
 
-    result = perform_image_optimization(resource)
+    result = optimize_resource(resource)
 
     assert result.success is True
     assert result.new_image is not None
@@ -197,11 +201,11 @@ def test_no_rename_when_png_stays_png():
     assert resource.media_type == "image/png"
 
 
-def test_perform_optimization_garbage_payload_returns_error_result():
+def test_perform_optimization_garbage_payload_returns_error_result(optimize_resource):
     """Bytes that Image.open rejects entirely (before optimization_machine)."""
     resource, _ = counted_resource(b"this is not an image" * 100, "OEBPS/images/garbage.png")
 
-    result = perform_image_optimization(resource)
+    result = optimize_resource(resource)
 
     assert result.success is False
     assert result.error == ImageErrorReason.DECODE_FAILED
@@ -214,7 +218,7 @@ def test_perform_optimization_garbage_payload_returns_error_result():
     assert info.mode == "UNKNOWN"
 
 
-def test_perform_optimization_source_read_failure_returns_read_error():
+def test_perform_optimization_source_read_failure_returns_read_error(optimize_resource):
     """stream_bytes itself explodes (corrupt zip member, vanished file) -> READ_ERROR."""
     info = ZipInfo("OEBPS/images/unreadable.png")
     info.file_size = 1234
@@ -224,7 +228,7 @@ def test_perform_optimization_source_read_failure_returns_read_error():
 
     resource = Resource(info=info, stream_bytes=broken_stream)
 
-    result = perform_image_optimization(resource)
+    result = optimize_resource(resource)
 
     assert result.success is False
     assert result.error == ImageErrorReason.READ_ERROR
@@ -235,24 +239,47 @@ def test_perform_optimization_source_read_failure_returns_read_error():
 
 
 @pytest.mark.parametrize("encoded_size", [970, 979, 980, 1000, 1100])
-def test_minimum_saving_gate_rejects_bytes_before_resource_mutation(monkeypatch, encoded_size):
+def test_minimum_saving_gate_rejects_bytes_before_resource_mutation(monkeypatch, encoded_size, optimize_resource):
     buffer = BytesIO()
     Image.new("RGB", (8, 8)).save(buffer, format="PNG")
     content = buffer.getvalue().ljust(1000, b"\0")
     resource, _ = counted_resource(content, "cover.png")
 
-    def encode(image, buffer, original_image_info, *args, **kwargs):
+    def encode(image, buffer, *args, **kwargs):
         buffer.write(b"x" * encoded_size)
-        return ImageOptimizationResult(
-            success=True,
-            original_image=original_image_info,
-            new_image=replace(original_image_info, format=ImageFormat.JPEG, filesize=encoded_size),
-        )
 
-    monkeypatch.setattr(optimization, "optimize_png_image", encode)
-    result = perform_image_optimization(resource, min_filesize=0)
+    monkeypatch.setattr(Image.Image, "save", encode)
+    result = optimize_resource(resource, min_filesize=0)
     accepted = encoded_size < 980  # Retain the existing whole-percent rounding policy.
     assert result.success == accepted
     assert result.skip == (None if accepted else ImageSkipReason.WORSE_CONVERSION)
     assert resource.filename == ("cover.jpg" if accepted else "cover.png")
     assert resource.content == (b"x" * encoded_size if accepted else content)
+
+
+@pytest.mark.parametrize("compression", [74, 75, 100])
+def test_adapter_supplies_zip_compression(compression, optimize_resource):
+    buffer = BytesIO()
+    with Image.new("RGB", (256, 256)) as image:
+        image.save(buffer, format="JPEG")
+    content = buffer.getvalue()
+    resource = Resource.from_bytes("cover.jpg", content)
+    resource.info.compress_size = (len(content) * compression + 99) // 100
+    result = optimize_resource(resource, min_filesize=0)
+    if compression >= 75:
+        assert result.skip == ImageSkipReason.NOT_OPTIMIZED
+        assert resource.content == content
+    else:
+        assert result.success
+        assert resource.content != content
+
+
+def test_default_adapter_keeps_current_optimizer(monkeypatch):
+    import epub.recipe_image as adapter
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("The replacement must remain opt-in during comparison")
+
+    monkeypatch.setattr(adapter, "optimize_image_with_context", unexpected)
+    resource = Resource.from_bytes("broken.png", b"invalid")
+    assert perform_image_optimization(resource).error == ImageErrorReason.DECODE_FAILED

@@ -68,6 +68,9 @@ An empty replacement mapping means no work; no separate “not run” state is n
 
 OptimizeImages appends image records and publishes only successful path changes.
 It forwards image configuration to the library optimizer; Panda keeps the current defaults.
+OptimizeImages and perform_image_optimization accept a temporary use_context=False switch.
+True selects the parallel image recipe for comparison; both paths share the same resource
+updates and analytics. This switch does not create worker processes or change default callers.
 Image policy, metadata, and the planned library context belong to
 [IMAGE_SPECIFICATION.md](IMAGE_SPECIFICATION.md).
 Disabling PNG-to-JPEG conversion keeps optimized resources at their existing paths,

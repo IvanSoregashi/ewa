@@ -33,15 +33,30 @@ Switch callers only after the replacement passes comparison for all important ca
 
 ### 3. Integrate the resource adapter and verify isolation
 
-- [ ] Keep perform_image_optimization as a short resource recipe: acquire input/additional metadata, call the image recipe, then apply accepted bytes and rename. Keep resource collisions, link mappings, and database analytics outside the image context.
-- [ ] Create contexts and open sources inside workers. Pass bytes or a serializable source description across process boundaries, never live contexts, Pillow images, streams, EPUB resources, or database state; arbitrary opener functions are not assumed serializable.
-- [ ] Test independent calls and an actual spawned-worker round trip of supported inputs/results. Verify conversion-disabled paths need no new link replacements and per-image errors leave resources unchanged.
+- [x] Keep perform_image_optimization as a short resource recipe with an opt-in use_context comparison path and the current optimizer as default: acquire input/additional metadata, call the image recipe, then apply accepted bytes and rename. Keep resource collisions, link mappings, and database analytics outside the image context.
+- [x] Create contexts and open sources inside workers. Pass bytes or a serializable source description across process boundaries, never live contexts, Pillow images, streams, EPUB resources, or database state; arbitrary opener functions are not assumed serializable.
+- [x] Test independent calls and an actual spawned-worker round trip of supported inputs/results. Verify conversion-disabled paths need no new link replacements and per-image errors leave resources unchanged.
 
-### 4. Compare the complete pipeline and remove superseded machinery
+### 4. Clarify context exception handling
+
+- [ ] Review ImageProcessingContext.__exit__ for readability while preserving failure precedence, retained evidence, and interrupt propagation.
+- [ ] At minimum, add a short comment before each handling block explaining which exception or exit condition it handles and why: recipe skip, cleanup failure, interrupts, missing completion, ordinary failure classification, and candidate disposal.
+- [ ] Keep lifecycle tests covering combined processing/cleanup failures and interrupts.
+
+### 5. Split format processing from saving
+
+- [ ] Split encode_image into a processing operation for each supported format, with each operation acting only when the input is its format.
+- [ ] Give PNG processing ownership of its conditional conversion and unchanged-image policy.
+- [ ] Give JPEG processing ownership of its density/compression decision and encoder settings.
+- [ ] Give static GIF processing ownership of its unchanged-image policy and encoder settings; retain the separate animation gate.
+- [ ] Extract saving into a separate operation that writes the selected format/settings and records candidate bytes/metadata. Keep savings acceptance and success after saving.
+- [ ] Compare outcomes, metadata, and bytes against the retained implementation after the split; introduce no per-operation classes unless they improve the recipe.
+
+### 6. Compare the complete pipeline and remove superseded machinery
 
 - [ ] Compare synthetic success/skip/error outcomes, metadata, and output bytes under the same policy. Repeat the six-book comparison on copies, excluding the merged example; compare bytes and analytics without displaying book contents or changing originals.
 - [ ] Measure and compare read/decode work and runtime against the retained optimizer for cheap skips and larger images. Check avoidable image copies, retained buffers, and transport costs before claiming a performance benefit.
-- [ ] After all important cases pass comparison, switch callers and remove the superseded optimizer path and unused helpers, keeping public callers working. Review the concrete context for unnecessary layers; leave a resource context and generic context base deferred unless a concrete need emerges.
+- [ ] After all important cases pass comparison, switch callers and remove the temporary use_context switch, superseded optimizer path, and unused helpers, keeping public callers working. Review the concrete context for unnecessary layers; leave a resource context and generic context base deferred unless a concrete need emerges.
 
 ## Backlog after the migration
 

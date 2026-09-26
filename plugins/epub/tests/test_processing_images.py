@@ -1,3 +1,4 @@
+from functools import partial
 import json
 import random
 from io import BytesIO
@@ -18,6 +19,11 @@ from library.asserts import require
 from library.epub.epub import EPUB
 from library.epub.media_type import MediaType
 from library.image.models import ImageErrorReason, ImageSkipReason
+
+
+@pytest.fixture(params=[False, True], ids=["current", "context"])
+def optimize_images(request):
+    return partial(OptimizeImages, use_context=request.param)
 
 
 @pytest.fixture
@@ -60,11 +66,11 @@ def export(context, tmp_path):
     return output
 
 
-def test_conversion_updates_inventory_html_manifest_and_export(tmp_path, image_bytes):
+def test_conversion_updates_inventory_html_manifest_and_export(tmp_path, image_bytes, optimize_images):
     path = make_book(tmp_path, {"cover.png": image_bytes})
     original = path.read_bytes()
     with ProcessingContext() as context:
-        context.open_epub(path).perform(OptimizeImages())
+        context.open_epub(path).perform(optimize_images())
         assert context.replacements == {"OEBPS/images/cover.png": "OEBPS/images/cover.jpg"}
         assert context.epub.resources.by_path("OEBPS/images/cover.png") is None
         # Both consumers still need the original path at this point.
@@ -98,12 +104,14 @@ def test_conversion_updates_inventory_html_manifest_and_export(tmp_path, image_b
 
 
 @pytest.mark.parametrize("referenced", [False, True])
-def test_png_optimization_without_conversion_needs_no_link_operation(tmp_path, image_bytes, referenced):
+def test_png_optimization_without_conversion_needs_no_link_operation(
+    tmp_path, image_bytes, referenced, optimize_images
+):
     path = make_book(tmp_path, {"cover.png": image_bytes}, referenced=["cover.png"] if referenced else [])
     with ProcessingContext() as context:
         context.open_epub(path)
         chapter = require(context.epub.resources.by_path("OEBPS/text/chapter.xhtml")).content
-        context.perform(OptimizeImages(convert_png_to_jpeg=False, min_filesize=0, max_dimensions=(128, 128)))
+        context.perform(optimize_images(convert_png_to_jpeg=False, min_filesize=0, max_dimensions=(128, 128)))
         assert context.replacements == {}
         assert NoUnmatchedLinks().verify(context) is None
         # Export directly: no HTML or manifest link-replacement step is needed.
@@ -124,7 +132,7 @@ def test_png_optimization_without_conversion_needs_no_link_operation(tmp_path, i
     assert item.href == "images/cover.png" and item.media_type == "image/png"
 
 
-def test_small_and_broken_images_stay_unchanged_and_svg_is_excluded(tmp_path):
+def test_small_and_broken_images_stay_unchanged_and_svg_is_excluded(tmp_path, optimize_images):
     buffer = BytesIO()
     with Image.new("RGB", (8, 8)) as image:
         image.save(buffer, format="PNG")
@@ -134,7 +142,7 @@ def test_small_and_broken_images_stay_unchanged_and_svg_is_excluded(tmp_path):
         context.open_epub(path)
         chapter = require(context.epub.resources.by_path("OEBPS/text/chapter.xhtml"))
         before = chapter.content
-        context.perform(OptimizeImages()).perform(ReplaceLinks())
+        context.perform(optimize_images()).perform(ReplaceLinks())
         assert context.replacements == {}
         assert chapter.content == before  # Empty mapping avoids parsing/serializing HTML.
         output = export(context, tmp_path)
@@ -150,13 +158,13 @@ def test_small_and_broken_images_stay_unchanged_and_svg_is_excluded(tmp_path):
         assert require(output.resources.by_path(f"OEBPS/images/{name}")).content == content
 
 
-def test_success_without_rename_does_not_require_html_match(tmp_path, image_bytes):
+def test_success_without_rename_does_not_require_html_match(tmp_path, image_bytes, optimize_images):
     buffer = BytesIO()
     with Image.open(BytesIO(image_bytes)) as image:
         image.save(buffer, format="JPEG", quality=100)
     path = make_book(tmp_path, {"cover.jpg": buffer.getvalue()}, referenced=[])
     with ProcessingContext() as context:
-        context.open_epub(path).perform(OptimizeImages()).perform(ReplaceLinks())
+        context.open_epub(path).perform(optimize_images()).perform(ReplaceLinks())
         assert context.replacements == {}
         output = export(context, tmp_path)
 
@@ -168,12 +176,14 @@ def test_success_without_rename_does_not_require_html_match(tmp_path, image_byte
 
 
 @pytest.mark.parametrize("collision", ["cover.jpg", "cover.PNG"])
-def test_collision_stops_book_without_overwrite_and_retains_earlier_evidence(tmp_path, image_bytes, collision):
+def test_collision_stops_book_without_overwrite_and_retains_earlier_evidence(
+    tmp_path, image_bytes, collision, optimize_images
+):
     images = {"first.png": image_bytes, "cover.png": image_bytes, collision: image_bytes}
     path = make_book(tmp_path, images)
     original = path.read_bytes()
     with ProcessingContext() as context:
-        context.open_epub(path).perform(OptimizeImages())
+        context.open_epub(path).perform(optimize_images())
         pytest.fail("Rename collision must stop processing")
 
     run = require(context.result)
@@ -196,10 +206,10 @@ def test_collision_stops_book_without_overwrite_and_retains_earlier_evidence(tmp
 
 
 @pytest.mark.parametrize("verify_links", [False, True])
-def test_unmatched_rename_only_skips_when_recipe_verifies_links(tmp_path, image_bytes, verify_links):
+def test_unmatched_rename_only_skips_when_recipe_verifies_links(tmp_path, image_bytes, verify_links, optimize_images):
     path = make_book(tmp_path, {"cover.png": image_bytes, "orphan.png": image_bytes}, referenced=["cover.png"])
     with ProcessingContext() as context:
-        context.open_epub(path).perform(OptimizeImages()).perform(ReplaceLinks())
+        context.open_epub(path).perform(optimize_images()).perform(ReplaceLinks())
         assert context.replacements == {}
         assert context.unmatched_links == {"OEBPS/images/orphan.png": "OEBPS/images/orphan.jpg"}
         assert context.epub.package.manifest_item_by_path("OEBPS/images/orphan.jpg") is not None
@@ -226,7 +236,7 @@ def test_unmatched_rename_only_skips_when_recipe_verifies_links(tmp_path, image_
 @pytest.mark.parametrize("referenced", [False, True])
 @pytest.mark.parametrize("declared", [False, True])
 def test_missing_links_are_reported_independently_without_adding_declarations(
-    tmp_path, image_bytes, referenced, declared
+    tmp_path, image_bytes, referenced, declared, optimize_images
 ):
     path = make_book(
         tmp_path,
@@ -237,7 +247,7 @@ def test_missing_links_are_reported_independently_without_adding_declarations(
     missing = {"OEBPS/images/orphan.png": "OEBPS/images/orphan.jpg"}
     original = path.read_bytes()
     with ProcessingContext() as context:
-        context.open_epub(path).perform(OptimizeImages()).perform(ReplaceLinks())
+        context.open_epub(path).perform(optimize_images()).perform(ReplaceLinks())
         assert context.unmatched_links == ({} if referenced else missing)
         assert context.unmatched_manifest_links == ({} if declared else missing)
         assert context.replacements == {}
@@ -261,23 +271,23 @@ def test_missing_links_are_reported_independently_without_adding_declarations(
     assert path.read_bytes() == original
 
 
-def test_nonempty_replacement_pass_refreshes_both_missing_link_reports(tmp_path, image_bytes):
+def test_nonempty_replacement_pass_refreshes_both_missing_link_reports(tmp_path, image_bytes, optimize_images):
     path = make_book(tmp_path, {"cover.png": image_bytes})
     with ProcessingContext() as context:
         context.open_epub(path)
         context.unmatched_links = {"old.png": "old.jpg"}
         context.unmatched_manifest_links = {"old.png": "old.jpg"}
-        context.perform(OptimizeImages()).perform(ReplaceLinks())
+        context.perform(optimize_images()).perform(ReplaceLinks())
         assert context.unmatched_links == {}
         assert context.unmatched_manifest_links == {}
         export(context, tmp_path)
     assert require(context.result).success
 
 
-def test_missing_replacement_resource_keeps_mapping_after_html_consumed_it(tmp_path, image_bytes):
+def test_missing_replacement_resource_keeps_mapping_after_html_consumed_it(tmp_path, image_bytes, optimize_images):
     path = make_book(tmp_path, {"cover.png": image_bytes})
     with ProcessingContext() as context:
-        context.open_epub(path).perform(OptimizeImages())
+        context.open_epub(path).perform(optimize_images())
         context.epub.resources.remove(require(context.epub.resources.by_path("OEBPS/images/cover.jpg")))
         context.perform(ReplaceLinks())
         pytest.fail("An existing declaration cannot point to a missing replacement resource")

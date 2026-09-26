@@ -9,7 +9,8 @@ EPUB resource integration belongs to [EPUB_SPECIFICATION.md](EPUB_SPECIFICATION.
 
 The existing optimize_image implementation remains active. ImageProcessingContext now provides
 a concrete lifetime API, and recipe.optimize_image_with_context implements the replacement recipe
-alongside it. Existing callers still use optimization.optimize_image; integration remains planned.
+alongside it. The EPUB adapter can opt into the replacement for comparison; existing callers
+still default to optimization.optimize_image.
 
 ## Current optimizer contract and policy
 
@@ -109,3 +110,8 @@ metadata, and accepted bytes, including configured bounds, modes, transparency, 
 size/compression boundaries, invalid/truncated data, and injected processing failures.
 The existing optimizer remains available and active until adapter, worker-isolation, complete
 pipeline, and performance comparisons are finished.
+
+A spawned-worker regression test sends only bytes and configuration into a worker, creates the
+context and Pillow objects there, and returns detached results and bytes. Repeated success,
+error, skip, and format-preserving calls in the same worker match synchronous calls without
+sharing image state. No image-level parallel scheduler is added to production code.
