@@ -39,9 +39,9 @@ Switch callers only after the replacement passes comparison for all important ca
 
 ### 4. Clarify context exception handling
 
-- [ ] Review ImageProcessingContext.__exit__ for readability while preserving failure precedence, retained evidence, and interrupt propagation.
-- [ ] At minimum, add a short comment before each handling block explaining which exception or exit condition it handles and why: recipe skip, cleanup failure, interrupts, missing completion, ordinary failure classification, and candidate disposal.
-- [ ] Keep lifecycle tests covering combined processing/cleanup failures and interrupts.
+- [x] Review ImageProcessingContext.__exit__ for readability while preserving failure precedence, retained evidence, and interrupt propagation.
+- [x] At minimum, add a short comment before each handling block explaining which exception or exit condition it handles and why: recipe skip, cleanup failure, interrupts, missing completion, ordinary failure classification, and candidate disposal.
+- [x] Keep lifecycle tests covering combined processing/cleanup failures and interrupts.
 
 ### 5. Split format processing from saving
 

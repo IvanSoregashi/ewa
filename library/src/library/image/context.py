@@ -86,35 +86,66 @@ class ImageProcessingContext:
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
-        error: BaseException | None,
+        processing_exception: BaseException | None,
         traceback: TracebackType | None,
     ) -> bool:
-        failure = None if isinstance(error, _ImageSkipped) else error
+        outcome_error: Exception | None = None
+        interrupt: BaseException | None = None
+        if isinstance(processing_exception, _ImageSkipped):
+            # Skip outcome already recorded.
+            pass
+        elif isinstance(processing_exception, Exception):
+            # Record processing errors after cleanup.
+            outcome_error = processing_exception
+        else:
+            # Retain interrupts; None means normal exit.
+            interrupt = processing_exception
+
+        # Attempt every cleanup callback.
         try:
             self.exit_stack.close()
-        except BaseException as cleanup_error:
-            # Cleanup must not swallow an interrupt or replace the original processing failure.
-            if failure is None or (isinstance(failure, Exception) and not isinstance(cleanup_error, Exception)):
-                failure = cleanup_error
+        except Exception as cleanup_error:
+            # Cleanup errors override success/skip, not earlier failures.
+            if outcome_error is None and interrupt is None:
+                outcome_error = cleanup_error
             else:
+                # Log the secondary error.
                 logger.warning("Image cleanup failed: %s", cleanup_error)
+        except BaseException as cleanup_interrupt:
+            # Interrupts take precedence; keep the first.
+            if interrupt is None:
+                interrupt = cleanup_interrupt
+            else:
+                logger.warning("Image cleanup failed: %s", cleanup_interrupt)
         finally:
+            # Drop the working image reference.
             self.image = None
 
-        if failure is not None and not isinstance(failure, Exception):
+        # Discard output before propagating interrupts.
+        if interrupt is not None:
             self.candidate = None
             self.result = None
-            if failure is error:
+            if interrupt is processing_exception:
+                # Preserve the original traceback.
                 return False
-            raise failure
-        if failure is None and self.result is None:
-            failure = RuntimeError("Image processing exited without completion")
-        if failure is not None:
-            reason = ImageErrorReason.from_error(failure)
-            logger.warning("Image processing failed (%s): %s", reason.name, failure)
+            # Re-raise the cleanup interrupt.
+            raise interrupt
+
+        # Require explicit success or skip.
+        if outcome_error is None and self.result is None:
+            outcome_error = RuntimeError("Image processing exited without completion")
+
+        # Record the error, retaining metadata.
+        if outcome_error is not None:
+            reason = ImageErrorReason.from_error(outcome_error)
+            logger.warning("Image processing failed (%s): %s", reason.name, outcome_error)
             self.result = ImageOptimizationResult(
                 error=reason, original_image=self.original_image_info, new_image=self.new_image_info
             )
+
+        # Discard unaccepted bytes.
         if self.result is not None and not self.result.success:
             self.candidate = None
+
+        # Suppress recorded skips/errors.
         return True
