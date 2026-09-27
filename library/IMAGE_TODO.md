@@ -113,7 +113,7 @@ designs superseded by later steps. Step 12 records the validation and caller swi
 ## Completed adapter follow-ups
 
 - [x] Consider replacement resources for path-changing conversions. Retain indexed rename and update the existing manifest declaration: resource/item identity preserves IDs, cover properties, and dependent references. Verify export/reopen in regression tests; see [adapter ownership](EPUB_SPECIFICATION.md#state-and-ownership).
-- [x] Remove dedicated GIF-to-MP4 conversion, poster/video markup helpers, and related tests. Image optimization continues to skip animated images.
+- [x] Save GIF-to-MP4 conversion, poster/video markup, remaining experimental GIF helpers, and their tests on `codex/gif-experiments`. Remove them from this branch; image optimization continues to skip animated images.
 
 ## Backlog after the migration
 
