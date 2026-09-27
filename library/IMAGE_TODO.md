@@ -101,6 +101,7 @@ Switch callers only after the replacement passes comparison for all important ca
 - [x] Keep the current image live until acceptance, close rejected/obsolete images, reset targets after each attempt, and cover encoding/cleanup failures and interrupts.
 - [x] Record attempted changes, byte sizes, settings, and acceptance in operations. Discard rejected ImageInfo instead of retaining stage snapshots; this supersedes that part of step 10.
 - [x] Derive success/skip from accepted output and attempted operations, restore external new_image metadata for accepted states, and update tests for the simplified API.
+- [x] Let convert_image check mode/format changes itself. Separate JPEG recompression and run it before conversion to avoid re-encoding newly converted PNGs.
 
 ### 12. Compare the complete pipeline and remove superseded machinery
 

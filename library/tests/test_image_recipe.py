@@ -206,6 +206,27 @@ def test_matching_target_skips_transformations(monkeypatch):
     assert result.operations == []
 
 
+@pytest.mark.parametrize("format", ["PNG", "JPEG"])
+def test_convert_image_ignores_size_and_quality_changes(format, monkeypatch):
+    content = image_bytes(format)
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("Matching mode and format must not convert, resize, or encode")
+
+    with ImageProcessingContext(compression=74) as context:
+        context.open_bytes_as_image(content)
+        original = context.image
+        context.target_image_info.size = (80, 50)
+        context.target_quality = 30
+        for method in ("convert", "resize", "save"):
+            monkeypatch.setattr(Image.Image, method, unexpected)
+        convert_image(context)
+        assert context.image is original and context.operations == []
+        assert context.target_image_info.size == (80, 50)
+        assert context.target_quality == 30
+    assert context.outcome()[0].skip == ImageSkipReason.NOT_OPTIMIZED
+
+
 @pytest.mark.parametrize("accept_conversion", [False, True])
 @pytest.mark.parametrize("accept_resize", [False, True])
 def test_stages_keep_only_accepted_image_and_record_attempts(monkeypatch, accept_conversion, accept_resize):
@@ -275,8 +296,10 @@ def test_resize_uses_accepted_format_and_measured_bpp(monkeypatch, accept_conver
     assert calls[1][1] == (ImageFormat.JPEG if accept_conversion else ImageFormat.PNG)
 
 
-def test_accepted_conversion_is_not_saved_again_when_no_resize_needed(monkeypatch):
-    content = image_bytes(mode="RGBA")
+@pytest.mark.parametrize("mode", ["RGB", "RGBA"])
+@pytest.mark.parametrize("compression", [74, 100])
+def test_accepted_conversion_is_not_saved_again_when_no_resize_needed(monkeypatch, mode, compression):
+    content = image_bytes(mode=mode)
     calls = []
 
     def save(image, buffer, **options):
@@ -284,7 +307,9 @@ def test_accepted_conversion_is_not_saved_again_when_no_resize_needed(monkeypatc
         buffer.write(b"converted image")
 
     monkeypatch.setattr(Image.Image, "save", save)
-    result, encoded = optimize_image_with_context(content, min_filesize=0, max_dimensions=(0, 0))
+    result, encoded = optimize_image_with_context(
+        content, min_filesize=0, max_dimensions=(0, 0), compression=compression
+    )
     assert result.success and encoded == b"converted image"
     assert calls == [(160, 100)]
 
@@ -356,8 +381,12 @@ def test_jpeg_zip_compression_policy(compression):
     result, _ = compare(image_bytes("JPEG", noisy=False), min_filesize=0, compression=compression)
     if compression >= 75:
         assert result.skip == ImageSkipReason.NOT_OPTIMIZED
+        assert result.operations == []
     else:
         assert result.success or result.skip == ImageSkipReason.WORSE_CONVERSION
+        assert len(result.operations) == 1
+        assert result.operations[0]["quality"] == 75
+        assert "convert" not in result.operations[0] and "reformat" not in result.operations[0]
 
 
 @pytest.mark.parametrize("size", [(1, 4000), (4000, 1), (400, 200)])

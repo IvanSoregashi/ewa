@@ -140,14 +140,14 @@ planned RGB mode and current density at least 0.5 bytes/pixel. Its public config
 remains on the recipe/adapter entry point and controls whether the decision is called.
 
 select_encoding selects quality independently: 85 for PNG-to-JPEG, 75 for JPEG input,
-85 for GIF, and no quality argument for PNG. needs_encoding is a boolean eligibility decision,
-not a recipe-ending verification: matching targets can still require JPEG recompression when
-density is at least 0.5 bytes/pixel or caller-provided compression is below 75.
+85 for GIF, and no quality argument for PNG. recompress_jpeg separately attempts recompression
+when the current format is JPEG and either density is at least 0.5 bytes/pixel or caller-provided
+compression is below 75. It runs before conversion so newly converted PNGs are not encoded twice.
 
-When encoding is needed, convert_image applies the target mode if different and passes the
-image to replace_image for encoding and acceptance. A format-only change or JPEG recompression
-passes the same Pillow object. Conversion is measured at unchanged dimensions, so percentage
-BPP improvement equals percentage byte savings.
+convert_image does nothing when both mode and format match the target. Otherwise it applies
+the target mode if different and passes the image to replace_image for encoding and acceptance.
+A format-only change passes the same Pillow object. Conversion is measured at unchanged
+dimensions, so percentage BPP improvement equals percentage byte savings.
 
 The recipe next calls select_dimensions using accepted current format and measured BPP.
 Explicit bounds take priority; defaults retain 2560 width for PNG below 0.2 bytes/pixel or

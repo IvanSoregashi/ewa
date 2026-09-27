@@ -70,16 +70,10 @@ def convert_inefficient_png_to_jpeg(context: ImageProcessingContext) -> None:
         context.target_image_info.format = ImageFormat.JPEG
 
 
-def needs_encoding(context: ImageProcessingContext) -> bool:
-    current = context.current_image_info
-    target = context.target_image_info
-    if target.size != current.size or target.mode != current.mode or target.format != current.format:
-        return True
-    if current.format == ImageFormat.JPEG and (
-        current.bytes_per_pixel >= BYTES_PER_PIXEL_05 or context.compression < 75
-    ):
-        return True
-    return False
+def recompress_jpeg(context: ImageProcessingContext) -> None:
+    info = context.current_image_info
+    if info.format == ImageFormat.JPEG and (info.bytes_per_pixel >= BYTES_PER_PIXEL_05 or context.compression < 75):
+        context.replace_image(context.image)
 
 
 def select_encoding(context: ImageProcessingContext) -> None:
@@ -98,10 +92,14 @@ def resize_image(context: ImageProcessingContext) -> None:
 
 
 def convert_image(context: ImageProcessingContext) -> None:
-    new_mode = context.target_image_info.mode
+    current = context.current_image_info
+    target = context.target_image_info
+    if current.mode == target.mode and current.format == target.format:
+        return
+
     image = context.image
-    if context.current_image_info.mode != new_mode:
-        image = image.convert(mode=new_mode)
+    if current.mode != target.mode:
+        image = image.convert(mode=target.mode)
     context.replace_image(image)
 
 
@@ -124,8 +122,8 @@ def optimize_image_with_context(
         if convert_png_to_jpeg:
             convert_inefficient_png_to_jpeg(context)
         select_encoding(context)
-        if needs_encoding(context):
-            convert_image(context)
+        recompress_jpeg(context)
+        convert_image(context)
         select_dimensions(context)
         select_encoding(context)
         resize_image(context)
