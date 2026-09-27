@@ -238,7 +238,7 @@ def test_perform_optimization_source_read_failure_returns_read_error(optimize_re
     assert result.original_image.format == "UNKNOWN"
 
 
-@pytest.mark.parametrize("encoded_size", [970, 979, 980, 1000, 1100])
+@pytest.mark.parametrize("encoded_size", [949, 950, 951, 970, 979, 980, 1000, 1100])
 def test_minimum_saving_gate_rejects_bytes_before_resource_mutation(monkeypatch, encoded_size, optimize_resource):
     buffer = BytesIO()
     Image.new("RGB", (8, 8)).save(buffer, format="PNG")
@@ -250,7 +250,8 @@ def test_minimum_saving_gate_rejects_bytes_before_resource_mutation(monkeypatch,
 
     monkeypatch.setattr(Image.Image, "save", encode)
     result = optimize_resource(resource, min_filesize=0)
-    accepted = encoded_size < 980  # Retain the existing whole-percent rounding policy.
+    cutoff = 950 if optimize_resource.keywords["use_context"] else 980
+    accepted = encoded_size < cutoff
     assert result.success == accepted
     assert result.skip == (None if accepted else ImageSkipReason.WORSE_CONVERSION)
     assert resource.filename == ("cover.jpg" if accepted else "cover.png")

@@ -12,15 +12,12 @@ from library.image.models import ImageErrorReason, ImageSkipReason
 from library.image.optimization import optimize_image
 from library.image.recipe import (
     convert_image,
-    needs_encoding,
     optimize_image_with_context,
     remove_useless_alpha,
     resize_image,
-    save_image,
     select_dimensions,
     select_encoding,
     convert_inefficient_png_to_jpeg,
-    worthwhile_savings,
 )
 
 
@@ -42,12 +39,39 @@ def image_bytes(format="PNG", mode="RGB", size=(160, 100), *, noisy=True, alpha=
 
 
 def compare(content, **options):
-    expected = optimize_image(content, **options)
-    actual = optimize_image_with_context(content, **options)
-    assert actual == expected
-    result, accepted = actual
+    expected, expected_bytes = optimize_image(content, **options)
+    result, accepted = optimize_image_with_context(content, **options)
+    assert (result.success, result.skip, result.error) == (expected.success, expected.skip, expected.error)
+    assert result.original_image == expected.original_image
+    assert accepted == expected_bytes
+    if result.success:
+        assert (result.new_image.size, result.new_image.mode, result.new_image.format, result.new_image.filesize) == (
+            expected.new_image.size,
+            expected.new_image.mode,
+            expected.new_image.format,
+            expected.new_image.filesize,
+        )
+    return result, accepted
+
+
+def check_output(content, **options):
+    result, accepted = optimize_image_with_context(content, **options)
+    assert result.error is None
     assert result.success == (accepted is not None)
-    return actual
+    if result.success:
+        assert len(accepted) * 100 < len(content) * 95
+        assert result.new_image.filesize == len(accepted)
+        with Image.open(BytesIO(accepted)) as image:
+            image.load()
+            assert (image.size, image.mode, image.format) == (
+                result.new_image.size,
+                result.new_image.mode,
+                result.new_image.format,
+            )
+    else:
+        assert result.skip in (ImageSkipReason.NOT_OPTIMIZED, ImageSkipReason.WORSE_CONVERSION)
+        assert result.new_image is None
+    return result, accepted
 
 
 @pytest.mark.parametrize(
@@ -67,8 +91,14 @@ def compare(content, **options):
 )
 @pytest.mark.parametrize("bounds", [None, (0, 0), (80, 0), (0, 40), (80, 30)])
 @pytest.mark.parametrize("convert", [False, True])
-def test_format_and_configuration_comparisons(format, mode, bounds, convert):
-    compare(image_bytes(format, mode), min_filesize=0, max_dimensions=bounds, convert_png_to_jpeg=convert)
+def test_format_and_configuration_round_trips(format, mode, bounds, convert):
+    result, _ = check_output(
+        image_bytes(format, mode), min_filesize=0, max_dimensions=bounds, convert_png_to_jpeg=convert
+    )
+    if result.success and not convert:
+        assert result.new_image.format == format
+    if bounds == (80, 30) and result.success:
+        assert result.new_image.size == (48, 30)
 
 
 @pytest.mark.parametrize(
@@ -81,14 +111,10 @@ def test_format_and_configuration_comparisons(format, mode, bounds, convert):
         ("GIF", "P", True, "GIF", 85),
     ],
 )
-def test_decisions_preserve_input_and_execution_follows_target(
-    format, mode, convert, output_format, quality, monkeypatch
-):
+def test_decisions_preserve_input(format, mode, convert, output_format, quality, monkeypatch):
     content = image_bytes(format, mode)
-    options = {"min_filesize": 0, "max_dimensions": (80, 30), "convert_png_to_jpeg": convert}
     with ImageProcessingContext(min_filesize=0, max_dimensions=(80, 30)) as context:
         context.open_bytes_as_image(content)
-        context.preserve_image()
         original_image = context.image
         pixels = original_image.tobytes()
         original_info = replace(context.original_image_info)
@@ -106,28 +132,10 @@ def test_decisions_preserve_input_and_execution_follows_target(
             select_encoding(context)
         assert context.image is original_image and original_image.tobytes() == pixels
         assert context.original_image_info == context.current_image_info == original_info
-        target = replace(context.target_image_info)
-        assert target.size == (48, 30)
-        assert target.mode == ("RGB" if mode == "RGBA" else mode)
-        assert target.format == output_format and context.target_quality == quality
-        assert context.candidate is None
-
-        context.verify(needs_encoding)
-        resize_image(context)
-        assert context.image.size == context.current_image_info.size == target.size
-        assert context.image.mode == context.current_image_info.mode == mode
-        convert_image(context)
-        assert context.image.size == context.current_image_info.size == target.size
-        assert context.image.mode == context.current_image_info.mode == target.mode
-        assert context.current_image_info.format == format
-        save_image(context)
-        assert context.current_image_info.format == output_format
-        assert context.current_image_info.filesize == len(context.candidate)
-        assert context.original_image_info == original_info
-        assert context.target_image_info == target and context.target_quality == quality
-        context.verify(worthwhile_savings)
-        context.succeed()
-    assert context.outcome() == optimize_image(content, **options)
+        assert context.target_image_info.size == (48, 30)
+        assert context.target_image_info.mode == ("RGB" if mode == "RGBA" else mode)
+        assert context.target_image_info.format == output_format and context.target_quality == quality
+        assert context.candidate is None and context.operations == []
 
 
 def test_explicit_target_format_does_not_reapply_recipe_eligibility():
@@ -137,18 +145,17 @@ def test_explicit_target_format_does_not_reapply_recipe_eligibility():
 
     with ImageProcessingContext() as context:
         context.open_bytes_as_image(content)
-        context.preserve_image()
+        original = context.image
         convert_inefficient_png_to_jpeg(context)
         assert context.target_image_info.format == ImageFormat.PNG
         context.target_image_info.format = ImageFormat.JPEG
         select_encoding(context)
-        save_image(context)
-        encoded = context.candidate
-        context.verify(worthwhile_savings)
-        context.succeed()
-    with Image.open(BytesIO(encoded)) as image:
-        assert image.format == "JPEG"
-    assert context.outcome()[0].new_image.format == "JPEG"
+        convert_image(context)
+        assert context.image is original  # A format change needs no pixel copy.
+    result, encoded = context.outcome()
+    assert result.operations[0]["reformat"] == ImageFormat.JPEG
+    assert result.operations[0]["new_size"] > len(content)
+    assert result.skip == ImageSkipReason.WORSE_CONVERSION and encoded is None
 
 
 def test_png_conversion_uses_current_density_before_resizing():
@@ -161,55 +168,47 @@ def test_png_conversion_uses_current_density_before_resizing():
         convert_inefficient_png_to_jpeg(context)
         assert context.target_image_info.format == ImageFormat.PNG
         assert context.current_image_info.size == context.original_image_info.size == (160, 100)
-        context.skip(ImageSkipReason.NOT_OPTIMIZED)
 
 
 def test_execution_uses_custom_target_without_policy_decisions():
     content = image_bytes()
     with ImageProcessingContext(target_quality=42) as context:
         context.open_bytes_as_image(content)
-        context.preserve_image()
-        context.target_image_info.size = (40, 25)
         context.target_image_info.mode = ImageMode.L
         context.target_image_info.format = ImageFormat.JPEG
-        resize_image(context)
         convert_image(context)
-        save_image(context)
-        context.verify(worthwhile_savings)
-        context.succeed()
+        context.target_image_info.size = (40, 25)
+        resize_image(context)
     result, encoded = context.outcome()
     assert result.success
     assert result.new_image.size == (40, 25) and result.new_image.mode == ImageMode.L
     with (
         Image.open(BytesIO(content)) as source,
-        source.resize((40, 25), Image.Resampling.LANCZOS) as resized,
-        resized.convert("L") as converted,
+        source.convert("L") as converted,
+        converted.resize((40, 25), Image.Resampling.LANCZOS) as resized,
         BytesIO() as buffer,
     ):
-        converted.save(buffer, format="JPEG", quality=42, optimize=True)
+        resized.save(buffer, format="JPEG", quality=42, optimize=True)
         assert encoded == buffer.getvalue()
+    assert [op["accepted"] for op in result.operations] == [True, True]
 
 
-def test_matching_target_reuses_working_image(monkeypatch):
+def test_matching_target_skips_transformations(monkeypatch):
     content = image_bytes()
 
     def unexpected(*args, **kwargs):
-        pytest.fail("Matching target dimensions and mode need no pixel transformation")
+        pytest.fail("An unchanged PNG should not transform or save pixels")
 
-    monkeypatch.setattr(Image.Image, "resize", unexpected)
-    monkeypatch.setattr(Image.Image, "convert", unexpected)
-    with ImageProcessingContext() as context:
-        context.open_bytes_as_image(content)
-        image = context.image
-        resize_image(context)
-        convert_image(context)
-        assert context.image is image
-        context.skip(ImageSkipReason.NOT_OPTIMIZED)
+    for method in ("resize", "convert", "save"):
+        monkeypatch.setattr(Image.Image, method, unexpected)
+    result, encoded = optimize_image_with_context(content, min_filesize=0, convert_png_to_jpeg=False)
+    assert result.skip == ImageSkipReason.NOT_OPTIMIZED and encoded is None
+    assert result.operations == []
 
 
 @pytest.mark.parametrize("accept_conversion", [False, True])
 @pytest.mark.parametrize("accept_resize", [False, True])
-def test_stages_restore_images_and_keep_attempt_metadata(monkeypatch, accept_conversion, accept_resize):
+def test_stages_keep_only_accepted_image_and_record_attempts(monkeypatch, accept_conversion, accept_resize):
     content = image_bytes(mode="RGBA")
     conversion_size = len(content) // 2 if accept_conversion else len(content) + 1
     before_resize = conversion_size if accept_conversion else len(content)
@@ -232,16 +231,20 @@ def test_stages_restore_images_and_keep_attempt_metadata(monkeypatch, accept_con
     monkeypatch.setattr(Image, "open", track_open)
     monkeypatch.setattr(Image.Image, "save", save)
     result, encoded = optimize_image_with_context(content, min_filesize=0, max_dimensions=(80, 30))
-    assert len(opens) == 1  # Rollback uses the retained Pillow image.
+    assert len(opens) == 1
     assert calls[0][0:2] == ("RGB", (160, 100))
     expected_mode = ImageMode.RGB if accept_conversion else ImageMode.RGBA
     expected_format = ImageFormat.JPEG if accept_conversion else ImageFormat.PNG
     assert calls[1][0:2] == (expected_mode, (48, 30))
     assert calls[1][2]["format"] == expected_format
     assert calls[1][2].get("quality") == (85 if accept_conversion else None)
-    assert context.image_info_history["conversion"].filesize == conversion_size
-    assert context.image_info_history["resize"].filesize == resize_size
-    assert context.image_info_history["resize"].size == (48, 30)
+    assert [op["new_size"] for op in result.operations] == [conversion_size, resize_size]
+    assert [op["old_size"] for op in result.operations] == [len(content), before_resize]
+    assert [op["accepted"] for op in result.operations] == [accept_conversion, accept_resize]
+    assert result.operations[0]["convert"] == "RGB"
+    assert result.operations[0]["reformat"] == ImageFormat.JPEG
+    assert result.operations[1]["resize"] == (48, 30)
+    assert all("after" not in op and "before" not in op for op in result.operations)
     assert context.current_image_info == context.target_image_info
     assert context.original_image_info.mode == ImageMode.RGBA
     if accept_conversion or accept_resize:
@@ -251,7 +254,7 @@ def test_stages_restore_images_and_keep_attempt_metadata(monkeypatch, accept_con
     else:
         assert result.skip == ImageSkipReason.WORSE_CONVERSION and encoded is None
         assert context.current_image_info == context.original_image_info
-        assert result.new_image == context.image_info_history["resize"]
+        assert result.new_image is None
 
 
 @pytest.mark.parametrize("accept_conversion,expected_width", [(True, 2560), (False, 1080)])
@@ -305,7 +308,7 @@ def test_dimension_thresholds_use_current_info(format, bpp, width):
 @pytest.mark.parametrize("format", ["PNG", "JPEG", "GIF"])
 @pytest.mark.parametrize("noisy", [False, True])
 def test_density_based_defaults(format, noisy):
-    compare(image_bytes(format, size=(2800, 40), noisy=noisy), min_filesize=0)
+    check_output(image_bytes(format, size=(2800, 40), noisy=noisy), min_filesize=0)
 
 
 @pytest.mark.parametrize("alpha", [0, 249, 250, 255])
@@ -315,20 +318,21 @@ def test_transparency_policy(alpha, convert):
 
 
 @pytest.mark.parametrize("convert", [False, True])
-def test_alpha_decision_uses_original_pixels_before_resizing(convert):
+def test_alpha_decision_uses_original_pixels_before_resizing(convert, monkeypatch):
     with Image.new("RGBA", (16, 16), (120, 80, 40, 255)) as image, BytesIO() as buffer:
         image.putpixel((8, 8), (120, 80, 40, 249))
         image.save(buffer, format="PNG")
         content = buffer.getvalue()
         with image.resize((2, 2), Image.Resampling.LANCZOS) as resized:
             assert resized.getextrema()[3][0] >= 250
-    options = {"min_filesize": 0, "max_dimensions": (2, 2), "convert_png_to_jpeg": convert}
-    result, _ = optimize_image_with_context(content, **options)
-    previous, _ = optimize_image(content, **options)
-    assert result.error is None and previous.error is None
-    assert result.new_image.mode == ImageMode.RGBA and result.new_image.format == ImageFormat.PNG
-    assert previous.new_image.mode == ImageMode.RGB
-    assert previous.new_image.format == (ImageFormat.JPEG if convert else ImageFormat.PNG)
+    context = ImageProcessingContext(min_filesize=0, max_dimensions=(2, 2))
+    monkeypatch.setattr(recipe, "ImageProcessingContext", lambda **options: context)
+    result, _ = optimize_image_with_context(content, convert_png_to_jpeg=convert)
+    assert result.error is None
+    assert context.current_image_info.mode == ImageMode.RGBA
+    assert context.current_image_info.format == ImageFormat.PNG
+    assert len(result.operations) == 1 and result.operations[0]["resize"] == (2, 2)
+    assert "convert" not in result.operations[0] and "reformat" not in result.operations[0]
 
 
 @pytest.mark.parametrize("format", ["PNG", "GIF"])
@@ -371,22 +375,6 @@ def test_truncated_pixel_data_matches():
     content = image_bytes()
     result, _ = compare(content[: len(content) // 2], min_filesize=0, max_dimensions=(80, 30))
     assert result.error is not None and result.original_image.size == (160, 100)
-
-
-@pytest.mark.parametrize("percentage", [97.0, 97.9, 98.0, 100.0])
-def test_encoded_size_boundary_matches_original(percentage, monkeypatch):
-    content = image_bytes()
-    size = int(len(content) * percentage / 100)
-
-    def save(image, buffer, **options):
-        buffer.write(bytes(size))
-
-    monkeypatch.setattr(Image.Image, "save", save)
-    result, accepted = compare(content, min_filesize=0)
-    assert result.new_image.filesize == size
-    assert result.success == (int(size / len(content) * 100) <= 97)
-    if not result.success:
-        assert result.skip == ImageSkipReason.WORSE_CONVERSION and accepted is None
 
 
 @pytest.mark.parametrize(
@@ -444,20 +432,3 @@ def test_ordered_checks_stop_at_first_failure():
         pytest.fail("A failed check must stop the recipe")
     assert calls == ["pass", "skip"]
     assert context.outcome()[0].skip == ImageSkipReason.NOT_OPTIMIZED
-
-
-@pytest.mark.parametrize("output_size,accepted", [(970, True), (979, True), (980, False), (1000, False)])
-def test_savings_gate_keeps_candidate_evidence(output_size, accepted):
-    with ImageProcessingContext() as context:
-        context.original_image_info.filesize = 1000
-        context.preserved_image_info = replace(context.original_image_info)
-        context.current_image_info = replace(context.original_image_info, filesize=output_size)
-        context.candidate = bytes(output_size)
-        context.verify(worthwhile_savings)
-        context.succeed()
-    result, content = context.outcome()
-    assert result.success == accepted
-    assert (content is not None) == accepted
-    assert result.new_image.filesize == output_size
-    if not accepted:
-        assert result.skip == ImageSkipReason.WORSE_CONVERSION

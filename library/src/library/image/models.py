@@ -28,14 +28,17 @@ class ImageInfo:
     has_icc_profile: bool = False
 
     @classmethod
-    def from_image(cls, image: Image.Image, filesize: int) -> ImageInfo:
+    def from_image(
+        cls, image: Image.Image, filesize: int, *, format: ImageFormat | Literal["UNKNOWN"] | None = None
+    ) -> ImageInfo:
         info = image.info or {}
         n_frames = getattr(image, "n_frames", 1)
 
         return cls(
             size=image.size,
             filesize=filesize,
-            format=ImageFormat(image.format),
+            # Transformed pixels have no format; the encoder supplies it.
+            format=format if format is not None else ImageFormat(image.format),
             mode=ImageMode(image.mode),
             is_animated=bool(getattr(image, "is_animated", False)),
             n_frames=int(n_frames),
@@ -122,4 +125,4 @@ class ImageErrorReason(IntEnum):
 class ImageOptimizationResult(OperationResult):
     original_image: ImageInfo
     new_image: ImageInfo | None = None
-    operations: list = field(default_factory=list)
+    operations: list[dict] = field(default_factory=list)

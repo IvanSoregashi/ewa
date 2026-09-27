@@ -1,4 +1,3 @@
-from library.utils import remove_none_values
 import logging
 from collections.abc import Callable
 from contextlib import ExitStack
@@ -9,8 +8,8 @@ from types import TracebackType
 from PIL import Image
 
 from library.asserts import require
-from library.image.constants import ImageMode, ImageFormat
 from library.image.models import ImageErrorReason, ImageInfo, ImageOptimizationResult, ImageSkipReason
+from library.utils import remove_none_values
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +32,13 @@ class ImageProcessingContext:
         self.min_filesize = min_filesize
         self.max_dimensions = max_dimensions
         self.target_quality = target_quality
+        self.current_quality: int | None = None
 
         self.original_image_info = ImageInfo.failed()
         self.current_image_info = ImageInfo.failed()
         self.target_image_info = ImageInfo.failed()
-        self.verifications = list()
-        self.operations = list()
+        self.verifications: list[dict] = []
+        self.operations: list[dict] = []
 
         self.candidate: bytes | None = None
         self.skip_reason: int | None = None
@@ -58,48 +58,53 @@ class ImageProcessingContext:
         self.original_image_info = ImageInfo.failed(filesize=len(content))
         source = self.exit_stack.enter_context(BytesIO(content))
         image = Image.open(source)
-        self.replace_image(image)
+        self.exit_stack.callback(image.close)
+        self._image = image
         self.original_image_info = ImageInfo.from_image(image, len(content))
         self.current_image_info = replace(self.original_image_info)
         self.target_image_info = replace(self.original_image_info)
 
     def replace_image(self, image: Image.Image) -> None:
-        """Take ownership of an opened or transformed image until the block exits."""
-        if image is self._image:
-            return
+        """Encode and retain the replacement only when it saves more than 5%."""
+        current = self.image
+        if image is not current:
+            # Own the replacement before encoding or closing can fail.
+            self.exit_stack.callback(image.close)
 
-        if self._image is not None:
-            with BytesIO() as buffer:
-                options = remove_none_values({"quality": self.target_quality})
-                image.save(buffer, format=self.target_image_info.format, optimize=True, **options)
-                candidate = buffer.getvalue()
-                new_info = ImageInfo.from_image(image, len(candidate))
-                if new_info.format is None:
-                    pass
-                worthwhile_change = self.current_image_info.filesize / new_info.filesize < 0.95
+        options = remove_none_values({"quality": self.target_quality})
+        operation = {"old_size": self.current_image_info.filesize} | options
+        if image.size != current.size:
+            operation["resize"] = image.size
+        if image.mode != current.mode:
+            operation["convert"] = image.mode
+        if self.target_image_info.format != self.current_image_info.format:
+            operation["reformat"] = self.target_image_info.format
+        self.operations.append(operation)
 
-            if not worthwhile_change:
-                image.close()
-                self.operations[-1].update({"accepted": False, "new_size": new_info.filesize} | options)
-                return
+        with BytesIO() as buffer:
+            image.save(buffer, format=self.target_image_info.format, optimize=True, **options)
+            candidate = buffer.getvalue()
+        new_info = ImageInfo.from_image(image, len(candidate), format=self.target_image_info.format)
+        worthwhile_change = new_info.filesize * 100 < self.current_image_info.filesize * 95
+        operation.update({"accepted": worthwhile_change, "new_size": new_info.filesize})
 
-            self.operations[-1].update({"accepted": True, "new_size": new_info.filesize} | options)
-            self._image.close()
+        if worthwhile_change:
+            self._image = image
+            self.current_image_info = new_info
+            self.current_quality = self.target_quality
             self.candidate = candidate
+            if image is not current:
+                current.close()
+        elif image is not current:
+            image.close()
 
-        self.exit_stack.callback(image.close)
-        self._image = image
-
-        self.current_image_info.size = image.size
-        self.current_image_info.mode = ImageMode(image.mode)
-
-        # Pillow transformations have no encoded format.
-        if image.format is not None:
-            self.current_image_info.format = ImageFormat(image.format)
+        self.target_image_info = replace(self.current_image_info)
+        self.target_quality = self.current_quality
 
     def verify(self, *checks: Callable[[ImageProcessingContext], ImageSkipReason | None]) -> None:
         for check in checks:
             reason = check(self)
+            self.verifications.append({"check": check, "skip": reason and reason.name})
             if reason is not None:
                 raise _ImageSkipped(reason)
 
@@ -110,6 +115,11 @@ class ImageProcessingContext:
             skip=self.skip_reason,
             error=self.error_reason,
             original_image=self.original_image_info,
+            new_image=(
+                replace(self.current_image_info)
+                if any(operation.get("accepted") for operation in self.operations)
+                else None
+            ),
             operations=self.operations,
         )
         return result, self.candidate if success else None
@@ -123,7 +133,7 @@ class ImageProcessingContext:
         outcome_error: Exception | None = None
         interrupt: BaseException | None = None
         if isinstance(processing_exception, _ImageSkipped):
-            # Skip outcome already recorded.
+            # Record the failed verification.
             self.skip_reason = processing_exception.skip_reason
         elif isinstance(processing_exception, Exception):
             # Record processing errors after cleanup.
@@ -149,7 +159,7 @@ class ImageProcessingContext:
             else:
                 logger.warning("Image cleanup failed: %s", cleanup_interrupt)
         finally:
-            # Drop image and backup references.
+            # Drop the working image reference.
             self._image = None
 
         # Discard output before propagating interrupts.
@@ -161,15 +171,16 @@ class ImageProcessingContext:
             # Re-raise the cleanup interrupt.
             raise interrupt
 
-        # Require explicit success or skip.
-        if outcome_error is None and self.candidate is None:
-            outcome_error = RuntimeError("Image processing exited without completion")
+        # An unchanged image is a skip, not a processing failure.
+        if outcome_error is None and self.candidate is None and self.skip_reason is None:
+            self.skip_reason = ImageSkipReason.WORSE_CONVERSION if self.operations else ImageSkipReason.NOT_OPTIMIZED
 
         # Record the error, retaining metadata.
         if outcome_error is not None:
             reason = ImageErrorReason.from_error(outcome_error)
             logger.warning("Image processing failed (%s): %s", reason.name, outcome_error)
             self.error_reason = reason
+            self.skip_reason = None
 
         # Discard unaccepted bytes.
         if self.error_reason or self.skip_reason:

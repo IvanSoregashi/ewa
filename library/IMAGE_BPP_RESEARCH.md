@@ -68,9 +68,9 @@ This is content-based guidance, not evidence for a single GIF or PNG BPP boundar
 Retain 0.1, 0.2, and 0.5 as explicit, provisional heuristics. No reviewed source justifies
 replacing them with another universal number. Conversion trials measure actual encoded size
 at unchanged dimensions; percentage BPP improvement then equals percentage byte savings.
-Keep the existing whole-percent acceptance rule: int(after_bytes / before_bytes × 100) <= 97.
-This preserves the existing cutoff, including acceptance of a 97.9% ratio; it is not a
-research-derived perceptual-quality threshold.
+The replacement requires strictly more than 5% savings: after_bytes * 100 < before_bytes * 95.
+The retained optimizer keeps its historical whole-percent cutoff. The new cutoff is a policy
+choice, not a research-derived perceptual-quality threshold.
 
 Resize decisions use the accepted current encoding's density. Resize acceptance compares
 byte counts against that accepted image, since changing pixel area makes a BPP-improvement

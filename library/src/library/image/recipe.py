@@ -1,6 +1,3 @@
-from dataclasses import replace
-from io import BytesIO
-
 from PIL import Image
 
 from library.asserts import require
@@ -71,20 +68,18 @@ def convert_inefficient_png_to_jpeg(context: ImageProcessingContext) -> None:
         and info.bytes_per_pixel >= BYTES_PER_PIXEL_05
     ):
         context.target_image_info.format = ImageFormat.JPEG
-        context.operations.append({"reformat": ImageFormat.JPEG})
 
 
-
-def needs_encoding(context: ImageProcessingContext) -> ImageSkipReason | None:
+def needs_encoding(context: ImageProcessingContext) -> bool:
     current = context.current_image_info
     target = context.target_image_info
     if target.size != current.size or target.mode != current.mode or target.format != current.format:
-        return None
+        return True
     if current.format == ImageFormat.JPEG and (
         current.bytes_per_pixel >= BYTES_PER_PIXEL_05 or context.compression < 75
     ):
-        return None
-    return ImageSkipReason.NOT_OPTIMIZED
+        return True
+    return False
 
 
 def select_encoding(context: ImageProcessingContext) -> None:
@@ -100,14 +95,14 @@ def resize_image(context: ImageProcessingContext) -> None:
     new_size = require(context.target_image_info.size, "Target image size")
     if context.current_image_info.size != new_size:
         context.replace_image(context.image.resize(new_size, Image.Resampling.LANCZOS))
-        context.operations.append({"resize": new_size})
 
 
 def convert_image(context: ImageProcessingContext) -> None:
-    new_mode = require(context.target_image_info.mode, "Target image mode")
+    new_mode = context.target_image_info.mode
+    image = context.image
     if context.current_image_info.mode != new_mode:
-        context.replace_image(context.image.convert(mode=new_mode))
-        context.operations.append({"convert": new_mode})
+        image = image.convert(mode=new_mode)
+    context.replace_image(image)
 
 
 def optimize_image_with_context(
@@ -129,7 +124,9 @@ def optimize_image_with_context(
         if convert_png_to_jpeg:
             convert_inefficient_png_to_jpeg(context)
         select_encoding(context)
-        convert_image(context)
+        if needs_encoding(context):
+            convert_image(context)
         select_dimensions(context)
+        select_encoding(context)
         resize_image(context)
     return context.outcome()

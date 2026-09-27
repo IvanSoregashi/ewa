@@ -94,7 +94,15 @@ Switch callers only after the replacement passes comparison for all important ca
 - [x] Research BPP thresholds and units using primary sources; document measurements and limits in [IMAGE_BPP_RESEARCH.md](IMAGE_BPP_RESEARCH.md). Keep current constants provisional rather than inventing universal cutoffs.
 - [x] Verify acceptance/rejection combinations, snapshot independence, image cleanup, threshold boundaries, and worker/adapter behavior with synthetic inputs.
 
-### 11. Compare the complete pipeline and remove superseded machinery
+### 11. Complete automatic replacement acceptance
+
+- [x] Keep saving and savings acceptance inside replace_image. Fix the reversed comparison and require strictly more than 5% savings relative to the current encoding.
+- [x] Support format-only conversion and JPEG recompression using the same live image; update accepted size, mode, format, and filesize before resizing decisions.
+- [x] Keep the current image live until acceptance, close rejected/obsolete images, reset targets after each attempt, and cover encoding/cleanup failures and interrupts.
+- [x] Record attempted changes, byte sizes, settings, and acceptance in operations. Discard rejected ImageInfo instead of retaining stage snapshots; this supersedes that part of step 10.
+- [x] Derive success/skip from accepted output and attempted operations, restore external new_image metadata for accepted states, and update tests for the simplified API.
+
+### 12. Compare the complete pipeline and remove superseded machinery
 
 - [ ] Evaluate density heuristics on representative image copies, grouped by content and format, with visual review. Apply the [research conclusions](IMAGE_BPP_RESEARCH.md#implementation-decision) before changing thresholds.
 - [ ] Compare synthetic success/skip/error outcomes, metadata, and output bytes under the same policy. Repeat the six-book comparison on copies, excluding the merged example; compare bytes and analytics without displaying book contents or changing originals.
