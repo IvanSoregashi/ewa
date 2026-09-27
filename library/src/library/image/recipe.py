@@ -1,5 +1,8 @@
 from dataclasses import replace
 from io import BytesIO
+from typing import cast
+
+from PIL import Image
 
 from library.image.constants import EXTRA_WIDTH_SIZE, MEDIUM_WIDTH_SIZE, ImageFormat, ImageMode
 from library.image.context import ImageProcessingContext
@@ -32,7 +35,6 @@ def static_image(context: ImageProcessingContext) -> ImageSkipReason | None:
 
 
 def resize_image(context: ImageProcessingContext) -> None:
-    assert context.image is not None
     dimensions = context.max_dimensions
     if dimensions is None:
         info = context.original_image_info
@@ -43,12 +45,11 @@ def resize_image(context: ImageProcessingContext) -> None:
             density = info.bytes_per_pixel
             if density is not None and density < 0.1:
                 dimensions = EXTRA_WIDTH_SIZE
-    image, _ = crop_image_dimensions(context.image, dimensions)
-    context.replace_image(image)
+    resized, _ = crop_image_dimensions(context.image, dimensions)
+    context.replace_image(resized)
 
 
 def remove_useless_alpha(context: ImageProcessingContext) -> None:
-    assert context.image is not None
     if (
         context.original_image_info.format == ImageFormat.PNG
         and context.image.mode == ImageMode.RGBA
@@ -57,38 +58,53 @@ def remove_useless_alpha(context: ImageProcessingContext) -> None:
         context.replace_image(context.image.convert(ImageMode.RGB))
 
 
-def encode_image(context: ImageProcessingContext) -> None:
-    assert context.image is not None
-    original = context.original_image_info
-    info = replace(original, size=context.image.size, mode=ImageMode(context.image.mode))
-    quality = None
-    if original.format == ImageFormat.PNG:
-        if context.convert_png_to_jpeg and not is_efficient(info) and info.mode == ImageMode.RGB:
-            info.format = ImageFormat.JPEG
-            quality = 85
-        elif info == original:
-            context.skip(ImageSkipReason.NOT_OPTIMIZED)
-    elif original.format == ImageFormat.JPEG:
-        if info.size == original.size and is_efficient(original) and context.compression >= 75:
-            context.skip(ImageSkipReason.NOT_OPTIMIZED)
-        quality = 75
-    elif original.format == ImageFormat.GIF:
-        if info.size == original.size:
-            context.skip(ImageSkipReason.NOT_OPTIMIZED)
-        quality = 85
+def convert_inefficient_png_to_jpeg(context: ImageProcessingContext) -> bool:
+    if context.original_image_info.format != ImageFormat.PNG:
+        return False
+    info = replace(context.original_image_info, size=context.image.size, mode=ImageMode(context.image.mode))
+    return not is_efficient(info) and info.mode == ImageMode.RGB
 
+
+def png_to_jpeg(context: ImageProcessingContext) -> None:
+    # The JPEG bytes are produced by save_image.
+    context.output_format = ImageFormat.JPEG
+
+
+def needs_encoding(context: ImageProcessingContext) -> ImageSkipReason | None:
+    original = context.original_image_info
+    if context.image.size != original.size or context.image.mode != original.mode or context.output_format != original.format:
+        return None
+    if original.format == ImageFormat.JPEG and (not is_efficient(original) or context.compression < 75):
+        return None
+    return ImageSkipReason.NOT_OPTIMIZED
+
+
+def select_encoding(context: ImageProcessingContext) -> None:
+    if context.output_format == ImageFormat.JPEG:
+        context.output_quality = 85 if context.original_image_info.format == ImageFormat.PNG else 75
+    elif context.output_format == ImageFormat.GIF:
+        context.output_quality = 85
+    else:
+        context.output_quality = None
+
+
+def save_image(context: ImageProcessingContext) -> None:
     with BytesIO() as buffer:
-        options = {} if quality is None else {"quality": quality}
-        context.image.save(buffer, format=info.format, optimize=True, **options)
+        options = {} if context.output_quality is None else {"quality": context.output_quality}
+        context.image.save(buffer, format=context.output_format, optimize=True, **options)
         context.candidate = buffer.getvalue()
-    info.filesize = len(context.candidate)
-    context.new_image_info = info
+    context.new_image_info = replace(
+        context.original_image_info,
+        size=context.image.size,
+        mode=ImageMode(context.image.mode),
+        format=cast(ImageFormat, context.output_format),
+        filesize=len(context.candidate),
+    )
 
 
 def worthwhile_savings(context: ImageProcessingContext) -> ImageSkipReason | None:
-    assert context.candidate is not None
     # Preserve the whole-percent cutoff: 97.9% counts as 97%.
-    if int(len(context.candidate) / context.original_image_info.filesize * 100) > 97:
+    if int(len(cast(bytes, context.candidate)) / context.original_image_info.filesize * 100) > 97:
         return ImageSkipReason.WORSE_CONVERSION
     return None
 
@@ -103,7 +119,6 @@ def optimize_image_with_context(
 ) -> tuple[ImageOptimizationResult, bytes | None]:
     with ImageProcessingContext(
         compression=compression,
-        convert_png_to_jpeg=convert_png_to_jpeg,
         min_filesize=min_filesize,
         max_dimensions=max_dimensions,
     ) as context:
@@ -111,7 +126,11 @@ def optimize_image_with_context(
         context.verify(minimum_filesize, supported_format, static_image)
         resize_image(context)
         remove_useless_alpha(context)
-        encode_image(context)
+        if convert_png_to_jpeg and convert_inefficient_png_to_jpeg(context):
+            png_to_jpeg(context)
+        context.verify(needs_encoding)
+        select_encoding(context)
+        save_image(context)
         context.verify(worthwhile_savings)
         context.succeed()
     return context.outcome()

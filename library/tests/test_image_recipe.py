@@ -8,7 +8,17 @@ from PIL import Image, PngImagePlugin
 from library.image.context import ImageProcessingContext
 from library.image.models import ImageErrorReason, ImageSkipReason
 from library.image.optimization import optimize_image
-from library.image.recipe import optimize_image_with_context, worthwhile_savings
+from library.image.recipe import (
+    needs_encoding,
+    optimize_image_with_context,
+    png_to_jpeg,
+    remove_useless_alpha,
+    resize_image,
+    save_image,
+    select_encoding,
+    convert_inefficient_png_to_jpeg,
+    worthwhile_savings,
+)
 
 
 def image_bytes(format="PNG", mode="RGB", size=(160, 100), *, noisy=True, alpha=255, animated=False):
@@ -56,6 +66,64 @@ def compare(content, **options):
 @pytest.mark.parametrize("convert", [False, True])
 def test_format_and_configuration_comparisons(format, mode, bounds, convert):
     compare(image_bytes(format, mode), min_filesize=0, max_dimensions=bounds, convert_png_to_jpeg=convert)
+
+
+@pytest.mark.parametrize(
+    "format,mode,convert,output_format,quality",
+    [
+        ("PNG", "RGB", True, "JPEG", 85),
+        ("PNG", "RGBA", True, "JPEG", 85),
+        ("PNG", "RGB", False, "PNG", None),
+        ("JPEG", "RGB", True, "JPEG", 75),
+        ("GIF", "P", True, "GIF", 85),
+    ],
+)
+def test_manipulations_conversion_and_encoding_are_independent(format, mode, convert, output_format, quality):
+    content = image_bytes(format, mode)
+    options = {"min_filesize": 0, "max_dimensions": (80, 30), "convert_png_to_jpeg": convert}
+    with ImageProcessingContext(min_filesize=0, max_dimensions=(80, 30)) as context:
+        context.open_bytes_as_image(content)
+        resize_image(context)
+        resized_size = context._image.size
+        assert resized_size == (48, 30)
+        assert context._image.mode == mode and context.output_format == format
+        remove_useless_alpha(context)
+        working_image = context._image
+        assert working_image.size == resized_size
+        assert working_image.mode == ("RGB" if mode == "RGBA" else mode)
+        assert context.output_format == format
+        if convert and convert_inefficient_png_to_jpeg(context):
+            png_to_jpeg(context)
+        assert context._image is working_image and context.output_quality is None
+        assert context.original_image_info.format == format
+        context.verify(needs_encoding)
+        select_encoding(context)
+        assert context._image is working_image
+        assert context.output_format == output_format and context.output_quality == quality
+        assert context.candidate is None and context.new_image_info is None
+        save_image(context)
+        context.verify(worthwhile_savings)
+        context.succeed()
+    assert context.outcome() == optimize_image(content, **options)
+
+
+def test_explicit_conversion_does_not_reapply_recipe_eligibility():
+    content = image_bytes(noisy=False)
+    result, _ = optimize_image_with_context(content, min_filesize=0)
+    assert result.skip == ImageSkipReason.NOT_OPTIMIZED
+
+    with ImageProcessingContext() as context:
+        context.open_bytes_as_image(content)
+        assert not convert_inefficient_png_to_jpeg(context)
+        png_to_jpeg(context)
+        select_encoding(context)
+        save_image(context)
+        encoded = context.candidate
+        context.verify(worthwhile_savings)
+        context.succeed()
+    with Image.open(BytesIO(encoded)) as image:
+        assert image.format == "JPEG"
+    assert context.outcome()[0].new_image.format == "JPEG"
 
 
 @pytest.mark.parametrize("format", ["PNG", "JPEG", "GIF"])

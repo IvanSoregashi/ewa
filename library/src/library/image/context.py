@@ -1,3 +1,4 @@
+from library.asserts import require
 import logging
 from collections.abc import Callable
 from contextlib import ExitStack
@@ -6,6 +7,7 @@ from types import TracebackType
 
 from PIL import Image
 
+from library.image.constants import ImageFormat
 from library.image.models import ImageErrorReason, ImageInfo, ImageOptimizationResult, ImageSkipReason
 
 logger = logging.getLogger(__name__)
@@ -19,22 +21,29 @@ class ImageProcessingContext:
     def __init__(
         self,
         *,
-        compression: int = 100,
-        convert_png_to_jpeg: bool = True,
         min_filesize: int = 50 * 1024,
+        compression: int = 100,
         max_dimensions: tuple[int, int] | None = None,
+        output_quality: int = 85,
     ):
         self.compression = compression
-        self.convert_png_to_jpeg = convert_png_to_jpeg
         self.min_filesize = min_filesize
         self.max_dimensions = max_dimensions
+        self.output_quality: int | None = output_quality
+        self.output_format: ImageFormat | None = None
 
         self.original_image_info = ImageInfo.failed()
-        self.image: Image.Image | None = None
-        self.candidate: bytes | None = None
         self.new_image_info: ImageInfo | None = None
+
+        self.candidate: bytes | None = None
         self.result: ImageOptimizationResult | None = None
+
+        self._image: Image.Image | None = None
         self.exit_stack = ExitStack()
+
+    @property
+    def image(self) -> Image.Image:
+        return require(self._image, "self._image")
 
     def __enter__(self) -> ImageProcessingContext:
         return self
@@ -48,11 +57,12 @@ class ImageProcessingContext:
 
     def replace_image(self, image: Image.Image) -> None:
         """Take ownership of an opened or transformed image until the block exits."""
-        if image is not self.image:
+        if image is not self._image:
             self.exit_stack.callback(image.close)
-            if self.image is not None:
-                self.image.close()
-            self.image = image
+            if self._image is not None:
+                self._image.close()
+            self._image = image
+            #self.new_image_info = ImageInfo.from_image(image, 0)
 
     def verify(self, *checks: Callable[[ImageProcessingContext], ImageSkipReason | None]) -> None:
         for check in checks:
@@ -119,7 +129,7 @@ class ImageProcessingContext:
                 logger.warning("Image cleanup failed: %s", cleanup_interrupt)
         finally:
             # Drop the working image reference.
-            self.image = None
+            self._image = None
 
         # Discard output before propagating interrupts.
         if interrupt is not None:

@@ -19,7 +19,7 @@ def content():
 def test_success_owns_input_and_transformed_images(content):
     with ImageProcessingContext(compression=80, min_filesize=0, max_dimensions=(0, 0)) as context:
         context.open_bytes_as_image(content)
-        original = context.image
+        original = context._image
         source = original.fp
         transformed = original.resize((10, 5))
         context.replace_image(transformed)
@@ -34,7 +34,7 @@ def test_success_owns_input_and_transformed_images(content):
     assert result.success and accepted
     assert result.original_image.size == (20, 10)
     assert result.new_image.size == (10, 5)
-    assert source.closed and context.image is None
+    assert source.closed and context._image is None
     for image in (original, transformed):
         with pytest.raises(ValueError):
             image.getpixel((0, 0))
@@ -124,8 +124,8 @@ def test_skip_stops_block_and_retains_candidate_metadata(content):
 def test_cleanup_failure_closes_remaining_resources(content, monkeypatch, processing_error):
     with ImageProcessingContext() as context:
         context.open_bytes_as_image(content)
-        source = context.image.fp
-        image = context.image
+        source = context._image.fp
+        image = context._image
         transformed = image.copy()
         close = transformed.close
 
@@ -151,9 +151,9 @@ def test_interrupt_propagates_after_cleanup(content, interrupt):
     with pytest.raises(interrupt):
         with ImageProcessingContext() as context:
             context.open_bytes_as_image(content)
-            source = context.image.fp
+            source = context._image.fp
             raise interrupt
-    assert source.closed and context.image is None
+    assert source.closed and context._image is None
 
 
 def test_missing_completion_and_independent_calls(content):
@@ -177,7 +177,7 @@ def test_success_requires_candidate(content):
 def test_replacement_is_owned_even_if_previous_close_fails(content, monkeypatch):
     with ImageProcessingContext() as context:
         context.open_bytes_as_image(content)
-        original = context.image
+        original = context._image
         close = original.close
         replacement = original.copy()
 
@@ -197,8 +197,8 @@ def test_cleanup_does_not_swallow_interrupt(content, monkeypatch, body_interrupt
     with pytest.raises(KeyboardInterrupt):
         with ImageProcessingContext() as context:
             context.open_bytes_as_image(content)
-            source = context.image.fp
-            transformed = context.image.copy()
+            source = context._image.fp
+            transformed = context._image.copy()
             close = transformed.close
 
             def fail_close():

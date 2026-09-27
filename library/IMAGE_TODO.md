@@ -45,14 +45,24 @@ Switch callers only after the replacement passes comparison for all important ca
 
 ### 5. Split format processing from saving
 
-- [ ] Split encode_image into a processing operation for each supported format, with each operation acting only when the input is its format.
-- [ ] Give PNG processing ownership of its conditional conversion and unchanged-image policy.
-- [ ] Give JPEG processing ownership of its density/compression decision and encoder settings.
-- [ ] Give static GIF processing ownership of its unchanged-image policy and encoder settings; retain the separate animation gate.
-- [ ] Extract saving into a separate operation that writes the selected format/settings and records candidate bytes/metadata. Keep savings acceptance and success after saving.
-- [ ] Compare outcomes, metadata, and bytes against the retained implementation after the split; introduce no per-operation classes unless they improve the recipe.
+- [x] Split encode_image into a processing operation for each supported format, with each operation acting only when the input is its format.
+- [x] Give PNG processing ownership of its conditional conversion and unchanged-image policy.
+- [x] Give JPEG processing ownership of its density/compression decision and encoder settings.
+- [x] Give static GIF processing ownership of its unchanged-image policy and encoder settings; retain the separate animation gate.
+- [x] Extract saving into a separate operation that writes the selected format/settings and records candidate bytes/metadata. Keep savings acceptance and success after saving.
+- [x] Compare outcomes, metadata, and bytes against the retained implementation after the split; introduce no per-operation classes unless they improve the recipe.
 
-### 6. Compare the complete pipeline and remove superseded machinery
+### 6. Separate image transformations and encoding decisions
+
+- [x] Keep resizing, alpha removal, format conversion, encoding selection, and saving as independent operations; supersede the per-format processing functions from step 5.
+- [x] Make resizing change dimensions only, alpha removal change pixel mode only, and format conversion select the target format without choosing quality or saving.
+- [x] Move unchanged-image and JPEG recompression eligibility into a needs_encoding check after transformations.
+- [x] Select encoder quality separately, preserving PNG-to-JPEG and JPEG-input quality differences. Record candidate metadata only after saving.
+- [x] Compare outcomes and bytes with the retained optimizer and verify stage independence; keep production defaults unchanged.
+- [x] Remove the PNG-conversion switch from the context. Keep eligibility in the recipe and make png_to_jpeg unconditional when invoked; retain the public recipe/adapter option for compatibility.
+- [x] Remove repeated operation readiness assertions; rely on recipe ordering while preserving lifecycle error handling.
+
+### 7. Compare the complete pipeline and remove superseded machinery
 
 - [ ] Compare synthetic success/skip/error outcomes, metadata, and output bytes under the same policy. Repeat the six-book comparison on copies, excluding the merged example; compare bytes and analytics without displaying book contents or changing originals.
 - [ ] Measure and compare read/decode work and runtime against the retained optimizer for cheap skips and larger images. Check avoidable image copies, retained buffers, and transport costs before claiming a performance benefit.
