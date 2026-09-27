@@ -1,5 +1,5 @@
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
 from typing import Literal
@@ -122,3 +122,4 @@ class ImageErrorReason(IntEnum):
 class ImageOptimizationResult(OperationResult):
     original_image: ImageInfo
     new_image: ImageInfo | None = None
+    operations: list = field(default_factory=list)

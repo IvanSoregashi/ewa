@@ -15,7 +15,7 @@ from library.epub.package import EpubPackage
 from library.epub.resources import ResourceIndex, IndexInfo
 from library.epub.sink import EpubZipSink
 from library.epub.source import DirectorySource, ZipFileSource, SourceProtocol
-from library.utils import verify_destination
+from library.utils_filepaths import verify_destination
 
 logger = logging.getLogger("epub")
 

@@ -1,3 +1,4 @@
+from library.utils import remove_none_values
 import logging
 from collections.abc import Callable
 from contextlib import ExitStack
@@ -15,7 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 class _ImageSkipped(Exception):
-    pass
+    def __init__(self, skip_reason: ImageSkipReason) -> None:
+        self.skip_reason = skip_reason
 
 
 class ImageProcessingContext:
@@ -35,15 +37,12 @@ class ImageProcessingContext:
         self.original_image_info = ImageInfo.failed()
         self.current_image_info = ImageInfo.failed()
         self.target_image_info = ImageInfo.failed()
+        self.verifications = list()
+        self.operations = list()
 
         self.candidate: bytes | None = None
-        self.result: ImageOptimizationResult | None = None
-        self.image_info_history: dict[str, ImageInfo] = {}
-
-        self.preserved_image: Image.Image | None = None
-        self.preserved_image_info = ImageInfo.failed()
-        self._preserved_candidate: bytes | None = None
-        self._preserved_quality = target_quality
+        self.skip_reason: int | None = None
+        self.error_reason: int | None = None
 
         self._image: Image.Image | None = None
         self.exit_stack = ExitStack()
@@ -66,72 +65,54 @@ class ImageProcessingContext:
 
     def replace_image(self, image: Image.Image) -> None:
         """Take ownership of an opened or transformed image until the block exits."""
-        if image is not self._image:
-            self.exit_stack.callback(image.close)
-            if self._image is not None and self._image is not self.preserved_image:
-                self._image.close()
-            self._image = image
-            self.candidate = None
+        if image is self._image:
+            return
+
+        if self._image is not None:
+            with BytesIO() as buffer:
+                options = remove_none_values({"quality": self.target_quality})
+                image.save(buffer, format=self.target_image_info.format, optimize=True, **options)
+                candidate = buffer.getvalue()
+                new_info = ImageInfo.from_image(image, len(candidate))
+                if new_info.format is None:
+                    pass
+                worthwhile_change = self.current_image_info.filesize / new_info.filesize < 0.95
+
+            if not worthwhile_change:
+                image.close()
+                self.operations[-1].update({"accepted": False, "new_size": new_info.filesize} | options)
+                return
+
+            self.operations[-1].update({"accepted": True, "new_size": new_info.filesize} | options)
+            self._image.close()
+            self.candidate = candidate
+
+        self.exit_stack.callback(image.close)
+        self._image = image
+
         self.current_image_info.size = image.size
         self.current_image_info.mode = ImageMode(image.mode)
+
         # Pillow transformations have no encoded format.
         if image.format is not None:
             self.current_image_info.format = ImageFormat(image.format)
-
-    def preserve_image(self) -> None:
-        self.preserved_image = self.image
-        self.preserved_image_info = replace(self.current_image_info)
-        self._preserved_candidate = self.candidate
-        self._preserved_quality = self.target_quality
-
-    def accept_image(self) -> None:
-        previous = self.preserved_image
-        self.preserved_image = None
-        self._preserved_candidate = None
-        self.target_image_info = replace(self.current_image_info)
-        if previous is not None and previous is not self._image:
-            previous.close()
-
-    def restore_image(self) -> None:
-        rejected = self._image
-        self._image = self.preserved_image
-        self.current_image_info = replace(self.preserved_image_info)
-        self.target_image_info = replace(self.current_image_info)
-        self.candidate = self._preserved_candidate
-        self.target_quality = self._preserved_quality
-        self.preserved_image = None
-        self._preserved_candidate = None
-        if rejected is not None and rejected is not self._image:
-            rejected.close()
 
     def verify(self, *checks: Callable[[ImageProcessingContext], ImageSkipReason | None]) -> None:
         for check in checks:
             reason = check(self)
             if reason is not None:
-                self.skip(reason)
-
-    def skip(self, reason: ImageSkipReason, *, new_image: ImageInfo | None = None) -> None:
-        self.result = ImageOptimizationResult(
-            skip=reason,
-            original_image=self.original_image_info,
-            new_image=self.current_image_info if self.candidate is not None else new_image,
-        )
-        raise _ImageSkipped
-
-    def succeed(self) -> None:
-        """Mark encoded, size-accepted candidate bytes as successful."""
-        if self.candidate is None:
-            raise RuntimeError("Image processing completed without an encoded candidate")
-        self.result = ImageOptimizationResult(
-            success=True,
-            original_image=self.original_image_info,
-            new_image=self.current_image_info,
-        )
+                raise _ImageSkipped(reason)
 
     def outcome(self) -> tuple[ImageOptimizationResult, bytes | None]:
-        if self.result is None:
-            raise RuntimeError("Image processing has not completed")
-        return self.result, self.candidate if self.result.success else None
+        success = self.candidate is not None and not self.skip_reason and not self.error_reason
+        result = ImageOptimizationResult(
+            success=success,
+            skip=self.skip_reason,
+            error=self.error_reason,
+            original_image=self.original_image_info,
+            operations=self.operations,
+        )
+        return result, self.candidate if success else None
 
     def __exit__(
         self,
@@ -143,7 +124,7 @@ class ImageProcessingContext:
         interrupt: BaseException | None = None
         if isinstance(processing_exception, _ImageSkipped):
             # Skip outcome already recorded.
-            pass
+            self.skip_reason = processing_exception.skip_reason
         elif isinstance(processing_exception, Exception):
             # Record processing errors after cleanup.
             outcome_error = processing_exception
@@ -170,13 +151,10 @@ class ImageProcessingContext:
         finally:
             # Drop image and backup references.
             self._image = None
-            self.preserved_image = None
-            self._preserved_candidate = None
 
         # Discard output before propagating interrupts.
         if interrupt is not None:
             self.candidate = None
-            self.result = None
             if interrupt is processing_exception:
                 # Preserve the original traceback.
                 return False
@@ -184,21 +162,17 @@ class ImageProcessingContext:
             raise interrupt
 
         # Require explicit success or skip.
-        if outcome_error is None and self.result is None:
+        if outcome_error is None and self.candidate is None:
             outcome_error = RuntimeError("Image processing exited without completion")
 
         # Record the error, retaining metadata.
         if outcome_error is not None:
             reason = ImageErrorReason.from_error(outcome_error)
             logger.warning("Image processing failed (%s): %s", reason.name, outcome_error)
-            self.result = ImageOptimizationResult(
-                error=reason,
-                original_image=self.original_image_info,
-                new_image=self.current_image_info if self.candidate is not None else None,
-            )
+            self.error_reason = reason
 
         # Discard unaccepted bytes.
-        if self.result is not None and not self.result.success:
+        if self.error_reason or self.skip_reason:
             self.candidate = None
 
         # Suppress recorded skips/errors.

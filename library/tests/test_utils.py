@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from library.utils import verify_destination
+from library.utils_filepaths import verify_destination
 
 
 def test_destination_parent_created_by_another_worker(tmp_path, monkeypatch):
