@@ -16,15 +16,15 @@ def test_failed_image_retains_only_known_dimensions_and_density():
     assert info.size is None
     assert info.width is None
     assert info.height is None
-    assert info.bytes_per_pixel is None
-    assert not is_efficient(info)
-    assert not is_extra_efficient(info)
+    with pytest.raises(ValueError):
+        _ = info.bytes_per_pixel
 
 
 @pytest.mark.parametrize("size", [(0, 0), (0, 10), (10, 0)])
 def test_old_zero_area_snapshots_have_no_density(size):
     info = ImageInfo(size=size, filesize=123, format="UNKNOWN", mode="UNKNOWN")
-    assert info.bytes_per_pixel is None
+    with pytest.raises(ValueError):
+        _ = info.bytes_per_pixel
 
 
 def test_density_uses_bytes_and_preserves_zero_file_size():

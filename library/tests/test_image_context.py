@@ -97,6 +97,69 @@ def test_metadata_copies_separate_planning_from_working_image(content):
     assert context.outcome()[0].new_image is None
 
 
+@pytest.mark.parametrize("accept", [False, True])
+def test_preserved_image_lives_until_stage_is_decided(content, accept):
+    with ImageProcessingContext(target_quality=70) as context:
+        context.open_bytes_as_image(content)
+        original = context.image
+        context.preserve_image()
+        original_info = replace(context.preserved_image_info)
+        context.target_image_info.mode = ImageMode.L
+        context.target_image_info.format = ImageFormat.JPEG
+        context.target_quality = 35
+        converted = original.convert("L")
+        context.replace_image(converted)
+        context.current_image_info.format = ImageFormat.JPEG
+        context.current_image_info.filesize = 10
+        context.candidate = b"conversion"
+        assert original.getpixel((0, 0)) == (255, 0, 0)
+        assert context.preserved_image_info == original_info
+        if accept:
+            context.accept_image()
+            assert context.image is converted and context.candidate == b"conversion"
+            assert context.target_image_info == context.current_image_info
+            with pytest.raises(ValueError):
+                original.getpixel((0, 0))
+            context.succeed()
+        else:
+            context.restore_image()
+            assert context.image is original and context.candidate is None
+            assert context.current_image_info == context.target_image_info == original_info
+            assert context.target_quality == 70
+            with pytest.raises(ValueError):
+                converted.getpixel((0, 0))
+            context.skip(ImageSkipReason.NOT_OPTIMIZED)
+    for image in (original, converted):
+        with pytest.raises(ValueError):
+            image.getpixel((0, 0))
+    assert context.preserved_image is None
+
+
+@pytest.mark.parametrize("error", [ValueError("encoder failed"), KeyboardInterrupt()])
+def test_failure_closes_preserved_and_attempted_images(content, error):
+    context = ImageProcessingContext()
+    try:
+        with context:
+            context.open_bytes_as_image(content)
+            original = context.image
+            context.preserve_image()
+            converted = original.convert("L")
+            context.replace_image(converted)
+            raise error
+    except KeyboardInterrupt:
+        assert isinstance(error, KeyboardInterrupt)
+    else:
+        assert isinstance(error, Exception)
+    if isinstance(error, Exception):
+        assert context.outcome()[0].error == ImageErrorReason.ENCODE_FAILED
+    else:
+        assert context.result is None
+    for image in (original, converted):
+        with pytest.raises(ValueError):
+            image.getpixel((0, 0))
+    assert context.preserved_image is None
+
+
 def test_failure_before_open_is_managed():
     with ImageProcessingContext() as context:
         raise OSError("input acquisition failed")

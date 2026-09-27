@@ -11,8 +11,8 @@ from library.image.constants import (
     ImageFormat,
     ImageMode,
     USELESS_ALPHA_THRESHOLD,
-    EFFICIENT_BYTES_PER_PIXEL,
-    EXTRA_EFFICIENT_BYTES_PER_PIXEL,
+    BYTES_PER_PIXEL_05,
+    BYTES_PER_PIXEL_02,
 )
 from library.image.models import (
     ImageErrorReason,
@@ -27,12 +27,12 @@ logger = logging.getLogger(__name__)
 
 def is_efficient(info: ImageInfo) -> bool:
     density = info.bytes_per_pixel
-    return density is not None and density < EFFICIENT_BYTES_PER_PIXEL
+    return density < BYTES_PER_PIXEL_05
 
 
 def is_extra_efficient(info: ImageInfo) -> bool:
     density = info.bytes_per_pixel
-    return density is not None and density < EXTRA_EFFICIENT_BYTES_PER_PIXEL
+    return density < BYTES_PER_PIXEL_02
 
 
 def crop_dimensions(image_dimensions: tuple[int, int], max_dimensions: tuple[int, int]) -> tuple[int, int]:

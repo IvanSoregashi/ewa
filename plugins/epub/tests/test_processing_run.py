@@ -145,7 +145,8 @@ def test_image_schema_preserves_info_and_numeric_reasons(engine, status):
         if status == "error":
             assert stored.original_image.width is None
             assert stored.original_image.height is None
-            assert stored.original_image.bytes_per_pixel is None
+            with pytest.raises(ValueError):
+                _ = stored.original_image.bytes_per_pixel
             assert stored.new_image is None
         else:
             assert require(stored.new_image).path == "image.jpg"

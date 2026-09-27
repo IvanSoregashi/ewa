@@ -3,8 +3,10 @@ from enum import StrEnum
 MEDIUM_WIDTH_SIZE = (1080, 0)
 EXTRA_WIDTH_SIZE = (2560, 0)
 USELESS_ALPHA_THRESHOLD = 250
-EFFICIENT_BYTES_PER_PIXEL = 0.5
-EXTRA_EFFICIENT_BYTES_PER_PIXEL = 0.2
+# Provisional policy thresholds, in bytes/pixel; see IMAGE_BPP_RESEARCH.md.
+BYTES_PER_PIXEL_05 = 0.5
+BYTES_PER_PIXEL_02 = 0.2
+BYTES_PER_PIXEL_01 = 0.1
 
 # Animations above this size are converted to MP4 instead of staying GIF
 ANIMATION_SIZE_LIMIT = 5 * 1024 * 1024

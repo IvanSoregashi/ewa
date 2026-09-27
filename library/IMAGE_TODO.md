@@ -1,7 +1,7 @@
 # Image processing TODO
 
-Work is ordered by dependency and intended execution. Complete one migration step per
-reviewable change while keeping affected callers working. Unscheduled image work stays in the backlog.
+Work is ordered by dependency and intended execution. Keep changes reviewable and affected
+callers working. Unscheduled image work stays in the backlog.
 
 This list owns unfinished library image processing and EPUB image-adapter work.
 Completed migration history remains in [EPUB_TODO.md](EPUB_TODO.md#image-optimization-checkpoint-not-the-finished-design);
@@ -12,7 +12,7 @@ Working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 ## ImageProcessingContext refactor
 
 Follow the [planned image-context contracts](IMAGE_SPECIFICATION.md#planned-imageprocessingcontext).
-Implement each step separately; this plan does not introduce a resource context or a shared base class.
+This plan does not introduce a resource context or a shared base class.
 Keep the current optimizer and its callers in place while building the replacement alongside it.
 Switch callers only after the replacement passes comparison for all important cases.
 
@@ -71,21 +71,32 @@ Switch callers only after the replacement passes comparison for all important ca
 
 ### 8. Express policy as target decisions
 
-- [ ] Extract dimension selection and sizing into a decision that sets target_image_info.size without resizing pixels. Preserve density-based defaults, configured bounds, no upscaling, and the shared rounding/minimum rules.
-- [ ] Characterize alpha-threshold cases affected by resizing and settle inspection order before moving alpha removal into a target-mode decision. The current optimizer checks resized pixels; inspecting only original pixels can change that decision.
-- [ ] Move mode and format decisions into ordinary functions accepting the context and modifying target_image_info. Preserve PNG-to-JPEG eligibility using original filesize and planned size/mode; an explicitly invoked conversion decision sets the target format directly.
-- [ ] Move encoding selection into the decision phase, setting target_quality before transformations. Keep encoder settings separate from saving and retain the public conversion option at the recipe boundary.
-- [ ] Test that decisions leave the working image, current metadata, and original metadata unchanged, including when later decisions use earlier target choices.
+- [x] Extract dimension selection and sizing into a decision that sets target_image_info.size without resizing pixels. Preserve density-based defaults, configured bounds, no upscaling, and the shared rounding/minimum rules.
+- [x] Decide alpha removal from original pixels before resizing. Cover the intentional difference from the retained optimizer when resizing hides an alpha value below the threshold; see [decision policy](IMAGE_SPECIFICATION.md#decisions-and-execution).
+- [x] Move mode and format decisions into ordinary functions accepting the context and modifying target_image_info. Preserve PNG-to-JPEG eligibility using original filesize and planned size/mode; custom recipes can set the target directly without this eligibility rule.
+- [x] Move encoding selection into the decision phase, setting target_quality before transformations. Keep encoder settings separate from saving and retain the public conversion option at the recipe boundary.
+- [x] Test that decisions leave the working image, current metadata, and original metadata unchanged, including when later decisions use earlier target choices.
 
 ### 9. Apply the target and assemble the planned recipe
 
-- [ ] Make independent resize and mode-conversion operations follow target size/mode, updating current metadata after each transformation. Keep encoding in save_image using target format/quality.
-- [ ] Order the recipe as input checks, target decisions, necessary transformations, saving, savings verification, and success. Keep save eligibility and savings acceptance as separate functions; unchanged dimensions/mode/format alone must not suppress eligible JPEG recompression.
-- [ ] Compare synthetic outcomes, metadata, and bytes with the retained optimizer, including conversion-disabled paths, rejected candidates, and processing failures. Preserve the agreed alpha policy and document any intentional differences.
-- [ ] Remove superseded decision/manipulation coupling from the replacement recipe once the target-driven path covers it.
+- [x] Make independent resize and mode-conversion operations follow target size/mode, updating current metadata after each transformation. Keep encoding in save_image using target format/quality.
+- [x] Order the recipe as input checks, target decisions, necessary transformations, saving, savings verification, and success. Keep save eligibility and savings acceptance as separate functions; unchanged dimensions/mode/format alone must not suppress eligible JPEG recompression.
+- [x] Compare synthetic outcomes, metadata, and bytes with the retained optimizer, including conversion-disabled paths, rejected candidates, and processing failures. Cover the agreed original-pixel alpha decision separately from equivalence cases.
+- [x] Remove superseded decision/manipulation coupling from the replacement recipe; verify custom targets work without calling the default policy functions.
 
-### 10. Compare the complete pipeline and remove superseded machinery
+### 10. Try conversions before deciding resize
 
+- [x] Preserve the live current image, metadata, and encoding settings at each stage boundary. Restore on rejection without reopening encoded bytes; close obsolete images on acceptance and all remaining images on exit.
+- [x] Decide and execute mode/format conversion or JPEG recompression, save at unchanged dimensions, and accept only worthwhile measured savings. Reset rejected conversion targets and continue to resize.
+- [x] Retain independent ImageInfo snapshots for attempted conversion and resize encodings, including rejected attempts.
+- [x] Finish select_dimensions using accepted current format and measured bytes/pixel. Honor explicit dimensions, and keep resize decisions separate from resize execution.
+- [x] Compare resized bytes with the accepted pre-resize encoding. Reuse accepted conversion bytes when resize is unnecessary or rejected; preserve final skip/error contracts.
+- [x] Research BPP thresholds and units using primary sources; document measurements and limits in [IMAGE_BPP_RESEARCH.md](IMAGE_BPP_RESEARCH.md). Keep current constants provisional rather than inventing universal cutoffs.
+- [x] Verify acceptance/rejection combinations, snapshot independence, image cleanup, threshold boundaries, and worker/adapter behavior with synthetic inputs.
+
+### 11. Compare the complete pipeline and remove superseded machinery
+
+- [ ] Evaluate density heuristics on representative image copies, grouped by content and format, with visual review. Apply the [research conclusions](IMAGE_BPP_RESEARCH.md#implementation-decision) before changing thresholds.
 - [ ] Compare synthetic success/skip/error outcomes, metadata, and output bytes under the same policy. Repeat the six-book comparison on copies, excluding the merged example; compare bytes and analytics without displaying book contents or changing originals.
 - [ ] Measure and compare read/decode work and runtime against the retained optimizer for cheap skips and larger images. Check avoidable image copies, retained buffers, and transport costs before claiming a performance benefit.
 - [ ] After all important cases pass comparison, switch callers and remove the temporary use_context switch, superseded optimizer path, and unused helpers, keeping public callers working. Review the concrete context for unnecessary layers; leave a resource context and generic context base deferred unless a concrete need emerges.

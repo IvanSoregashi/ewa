@@ -1,14 +1,22 @@
 from dataclasses import replace
 from io import BytesIO
-from typing import cast
 
-from library.image.constants import EXTRA_WIDTH_SIZE, MEDIUM_WIDTH_SIZE, ImageFormat, ImageMode
+from PIL import Image
+
+from library.asserts import require
+from library.image.constants import (
+    EXTRA_WIDTH_SIZE,
+    MEDIUM_WIDTH_SIZE,
+    ImageFormat,
+    ImageMode,
+    BYTES_PER_PIXEL_01,
+    BYTES_PER_PIXEL_02,
+    BYTES_PER_PIXEL_05,
+)
 from library.image.context import ImageProcessingContext
 from library.image.models import ImageOptimizationResult, ImageSkipReason
 from library.image.optimization import (
-    crop_image_dimensions,
-    is_efficient,
-    is_extra_efficient,
+    crop_dimensions,
     useless_transparency_mode,
 )
 
@@ -32,46 +40,47 @@ def static_image(context: ImageProcessingContext) -> ImageSkipReason | None:
     return None
 
 
-def resize_image(context: ImageProcessingContext) -> None:
+def select_dimensions(context: ImageProcessingContext) -> None:
     dimensions = context.max_dimensions
+    info = context.current_image_info
     if dimensions is None:
-        info = context.original_image_info
-        dimensions = MEDIUM_WIDTH_SIZE
-        if info.format == ImageFormat.PNG and is_extra_efficient(info):
-            dimensions = EXTRA_WIDTH_SIZE
-        elif info.format == ImageFormat.JPEG:
-            density = info.bytes_per_pixel
-            if density is not None and density < 0.1:
+        match info.format:
+            case ImageFormat.PNG if info.bytes_per_pixel < BYTES_PER_PIXEL_02:
                 dimensions = EXTRA_WIDTH_SIZE
-    resized, _ = crop_image_dimensions(context.image, dimensions)
-    context.replace_image(resized)
+            case ImageFormat.JPEG if info.bytes_per_pixel < BYTES_PER_PIXEL_01:
+                dimensions = EXTRA_WIDTH_SIZE
+            case _:
+                dimensions = MEDIUM_WIDTH_SIZE
+    context.target_image_info.size = crop_dimensions(require(info.size, "Current image size"), dimensions)
 
 
 def remove_useless_alpha(context: ImageProcessingContext) -> None:
     if (
-        context.original_image_info.format == ImageFormat.PNG
-        and context.image.mode == ImageMode.RGBA
+        context.current_image_info.format == ImageFormat.PNG
+        and context.current_image_info.mode == ImageMode.RGBA
         and useless_transparency_mode(context.image)
     ):
-        context.replace_image(context.image.convert(ImageMode.RGB))
+        context.target_image_info.mode = ImageMode.RGB
 
 
 def convert_inefficient_png_to_jpeg(context: ImageProcessingContext) -> None:
-    info = context.original_image_info
-    if info.format == ImageFormat.PNG and info.mode == ImageMode.RGB and not is_efficient(info):
+    info = context.current_image_info
+    if (
+        info.format == ImageFormat.PNG
+        and context.target_image_info.mode == ImageMode.RGB
+        and info.bytes_per_pixel >= BYTES_PER_PIXEL_05
+    ):
         context.target_image_info.format = ImageFormat.JPEG
 
 
 def needs_encoding(context: ImageProcessingContext) -> ImageSkipReason | None:
-    original = context.original_image_info
     current = context.current_image_info
-    if (
-        current.size != original.size
-        or current.mode != original.mode
-        or context.target_image_info.format != original.format
-    ):
+    target = context.target_image_info
+    if target.size != current.size or target.mode != current.mode or target.format != current.format:
         return None
-    if original.format == ImageFormat.JPEG and (not is_efficient(original) or context.compression < 75):
+    if current.format == ImageFormat.JPEG and (
+        current.bytes_per_pixel >= BYTES_PER_PIXEL_05 or context.compression < 75
+    ):
         return None
     return ImageSkipReason.NOT_OPTIMIZED
 
@@ -83,6 +92,17 @@ def select_encoding(context: ImageProcessingContext) -> None:
         context.target_quality = 85
     else:
         context.target_quality = None
+
+
+def resize_image(context: ImageProcessingContext) -> None:
+    if context.current_image_info.size != context.target_image_info.size:
+        size = require(context.target_image_info.size, "Target image size")
+        context.replace_image(context.image.resize(size, Image.Resampling.LANCZOS))
+
+
+def convert_image(context: ImageProcessingContext) -> None:
+    if context.current_image_info.mode != context.target_image_info.mode:
+        context.replace_image(context.image.convert(context.target_image_info.mode))
 
 
 def save_image(context: ImageProcessingContext) -> None:
@@ -99,9 +119,17 @@ def save_image(context: ImageProcessingContext) -> None:
 
 def worthwhile_savings(context: ImageProcessingContext) -> ImageSkipReason | None:
     # Preserve the whole-percent cutoff: 97.9% counts as 97%.
-    if int(len(cast(bytes, context.candidate)) / context.original_image_info.filesize * 100) > 97:
+    if int(context.current_image_info.filesize / context.preserved_image_info.filesize * 100) > 97:
         return ImageSkipReason.WORSE_CONVERSION
     return None
+
+
+def accept_savings(context: ImageProcessingContext, step: str) -> None:
+    context.image_info_history[step] = replace(context.current_image_info)
+    if worthwhile_savings(context) is None:
+        context.accept_image()
+    else:
+        context.restore_image()
 
 
 def optimize_image_with_context(
@@ -119,13 +147,33 @@ def optimize_image_with_context(
     ) as context:
         context.open_bytes_as_image(content)
         context.verify(minimum_filesize, supported_format, static_image)
-        resize_image(context)
+        context.preserve_image()
         remove_useless_alpha(context)
         if convert_png_to_jpeg:
             convert_inefficient_png_to_jpeg(context)
-        context.verify(needs_encoding)
         select_encoding(context)
-        save_image(context)
-        context.verify(worthwhile_savings)
+        if needs_encoding(context) is None:
+            convert_image(context)
+            save_image(context)
+            accept_savings(context, "conversion")
+        else:
+            context.restore_image()
+
+        context.preserve_image()
+        select_dimensions(context)
+        if context.target_image_info.size != context.current_image_info.size:
+            select_encoding(context)
+            resize_image(context)
+            save_image(context)
+            accept_savings(context, "resize")
+        else:
+            context.restore_image()
+
+        if context.candidate is None:
+            if context.image_info_history:
+                context.skip(
+                    ImageSkipReason.WORSE_CONVERSION, new_image=next(reversed(context.image_info_history.values()))
+                )
+            context.skip(ImageSkipReason.NOT_OPTIMIZED)
         context.succeed()
     return context.outcome()

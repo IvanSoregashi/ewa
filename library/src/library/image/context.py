@@ -38,6 +38,12 @@ class ImageProcessingContext:
 
         self.candidate: bytes | None = None
         self.result: ImageOptimizationResult | None = None
+        self.image_info_history: dict[str, ImageInfo] = {}
+
+        self.preserved_image: Image.Image | None = None
+        self.preserved_image_info = ImageInfo.failed()
+        self._preserved_candidate: bytes | None = None
+        self._preserved_quality = target_quality
 
         self._image: Image.Image | None = None
         self.exit_stack = ExitStack()
@@ -62,12 +68,41 @@ class ImageProcessingContext:
         """Take ownership of an opened or transformed image until the block exits."""
         if image is not self._image:
             self.exit_stack.callback(image.close)
-            if self._image is not None:
+            if self._image is not None and self._image is not self.preserved_image:
                 self._image.close()
             self._image = image
+            self.candidate = None
         self.current_image_info.size = image.size
         self.current_image_info.mode = ImageMode(image.mode)
-        self.current_image_info.format = ImageFormat(image.format)
+        # Pillow transformations have no encoded format.
+        if image.format is not None:
+            self.current_image_info.format = ImageFormat(image.format)
+
+    def preserve_image(self) -> None:
+        self.preserved_image = self.image
+        self.preserved_image_info = replace(self.current_image_info)
+        self._preserved_candidate = self.candidate
+        self._preserved_quality = self.target_quality
+
+    def accept_image(self) -> None:
+        previous = self.preserved_image
+        self.preserved_image = None
+        self._preserved_candidate = None
+        self.target_image_info = replace(self.current_image_info)
+        if previous is not None and previous is not self._image:
+            previous.close()
+
+    def restore_image(self) -> None:
+        rejected = self._image
+        self._image = self.preserved_image
+        self.current_image_info = replace(self.preserved_image_info)
+        self.target_image_info = replace(self.current_image_info)
+        self.candidate = self._preserved_candidate
+        self.target_quality = self._preserved_quality
+        self.preserved_image = None
+        self._preserved_candidate = None
+        if rejected is not None and rejected is not self._image:
+            rejected.close()
 
     def verify(self, *checks: Callable[[ImageProcessingContext], ImageSkipReason | None]) -> None:
         for check in checks:
@@ -75,11 +110,11 @@ class ImageProcessingContext:
             if reason is not None:
                 self.skip(reason)
 
-    def skip(self, reason: ImageSkipReason) -> None:
+    def skip(self, reason: ImageSkipReason, *, new_image: ImageInfo | None = None) -> None:
         self.result = ImageOptimizationResult(
             skip=reason,
             original_image=self.original_image_info,
-            new_image=self.current_image_info if self.candidate is not None else None,
+            new_image=self.current_image_info if self.candidate is not None else new_image,
         )
         raise _ImageSkipped
 
@@ -133,8 +168,10 @@ class ImageProcessingContext:
             else:
                 logger.warning("Image cleanup failed: %s", cleanup_interrupt)
         finally:
-            # Drop the working image reference.
+            # Drop image and backup references.
             self._image = None
+            self.preserved_image = None
+            self._preserved_candidate = None
 
         # Discard output before propagating interrupts.
         if interrupt is not None:

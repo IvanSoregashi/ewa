@@ -67,13 +67,13 @@ class ImageInfo:
         return self.size[1] if self.size is not None else None
 
     @property
-    def bytes_per_pixel(self) -> float | None:
-        """Unknown dimensions, including old zero-area snapshots, have no density."""
+    def bytes_per_pixel(self) -> float:
+        """Encoded bytes per pixel; requires known, positive dimensions."""
         if self.size is None:
-            return None
+            raise ValueError
         width, height = self.size
         if width <= 0 or height <= 0:
-            return None
+            raise ValueError
         return self.filesize / (width * height)
 
     @property
