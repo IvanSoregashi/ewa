@@ -10,6 +10,7 @@ import pytest
 from PIL import Image
 
 from library.image.optimize_gif import (
+    convert_to_mp4,
     convert_to_webp,
     downscale_frames,
     downscale_then_webp,
@@ -47,6 +48,8 @@ OPTIMIZERS = {
     "downscale_half": lambda im, size, src: downscale_frames(im, size, factor=0.5),
     "convert_to_webp_q80": lambda im, size, src: convert_to_webp(im, size, quality=80),
     "downscale_webp": lambda im, size, src: downscale_then_webp(im, size, factor=0.5, quality=80),
+    "ffmpeg_mp4_crf23": lambda im, size, src: convert_to_mp4(im, size, crf=23, source_bytes=src),
+    "ffmpeg_mp4_crf30": lambda im, size, src: convert_to_mp4(im, size, crf=30),
     "gifsicle_lossy80": lambda im, size, src: gifsicle_optimize(im, size, lossy=80, colors=128, source_bytes=src),
 }
 
@@ -75,7 +78,9 @@ def test_optimize_all_samples():
                         }
                     )
                     continue
-                suffix = ".webp" if info.get("format") == "webp" else ".gif"
+                suffix = (
+                    ".mp4" if info.get("format") == "mp4" else (".webp" if info.get("format") == "webp" else ".gif")
+                )
                 (out_dir / (path.stem + suffix)).write_bytes(new_bytes)
                 rows.append(
                     {

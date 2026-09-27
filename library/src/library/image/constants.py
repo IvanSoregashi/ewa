@@ -8,11 +8,19 @@ BYTES_PER_PIXEL_05 = 0.5
 BYTES_PER_PIXEL_02 = 0.2
 BYTES_PER_PIXEL_01 = 0.1
 
+# Size gate for the separate GIF-to-MP4 recipe.
+ANIMATION_SIZE_LIMIT = 5 * 1024 * 1024
+# ffmpeg crf for the GIF -> MP4 transcode (experiment winner: crf 30)
+ANIMATION_CRF = 30
+
 
 class ImageFormat(StrEnum):
-    """Pillow format strings and persisted historical values."""
+    """All format strings Pillow's plugin registry reports (Image.init()).
 
-    MP4 = "MP4"  # Retained for existing analytics.
+    MP4 is the one non-Pillow member: the conversion target for oversized
+    animations (see optimize_gif.convert_to_mp4)."""
+
+    MP4 = "MP4"
     AVIF = "AVIF"
     BLP = "BLP"
     BMP = "BMP"

@@ -5,7 +5,9 @@ Pillow-based strategies share the contract:
     optimize_<name>(image: Image.Image, original_size: int, **params)
         -> (bytes, dict)
 
-The gifsicle strategy uses subprocess and returns a skip when the tool is unavailable.
+External-tool strategies (ffmpeg, gifsicle) operate on file paths via
+subprocess and are guarded by shutil.which, so the module works on machines
+without them (functions return None + skip note in that case).
 """
 
 import io
@@ -20,6 +22,20 @@ def _savings_percent(original_size: int, new_bytes: bytes) -> float:
     if original_size <= 0:
         return 0.0
     return round(100.0 * (1 - len(new_bytes) / original_size), 1)
+
+
+def generate_poster(source_bytes: bytes, quality: int = 85) -> tuple[bytes, tuple[int, int]]:
+    """Extract the first frame of an animation as a JPEG poster.
+
+    Returns (jpeg_bytes, (width, height) of the source). Raises on undecodable
+    sources - callers decide whether that is fatal.
+    """
+    with io.BytesIO(source_bytes) as source, Image.open(source) as image, io.BytesIO() as poster:
+        width, height = image.size
+        image.seek(0)
+        with image.convert("RGB") as frame:
+            frame.save(poster, format="JPEG", quality=quality)
+        return poster.getvalue(), (width, height)
 
 
 def resave_optimized(image: Image.Image, original_size: int) -> tuple[bytes, dict]:
@@ -196,6 +212,62 @@ def downscale_then_webp(
 
 def _tool_available(name: str) -> bool:
     return shutil.which(name) is not None
+
+
+def convert_to_mp4(
+    image: Image.Image,
+    original_size: int,
+    crf: int = 26,
+    preset: str = "medium",
+    source_bytes: bytes | None = None,
+) -> tuple[bytes | None, dict]:
+    """Transcode the animation to MP4 (h264) via system ffmpeg.
+
+    When source_bytes are given they are written to disk directly (fast,
+    byte-identical to the original); otherwise the open image is re-encoded
+    to GIF first (slower). Returns (None, {...skip...}) when ffmpeg is absent.
+    """
+    if not _tool_available("ffmpeg"):
+        return None, {"skipped": "ffmpeg not found"}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        source_path = f"{tmp}/source.gif"
+        if source_bytes is not None:
+            with open(source_path, "wb") as f:
+                f.write(source_bytes)
+        else:
+            image.save(source_path, format="GIF", save_all=True)
+        # yuv420p for reader compatibility; even dimensions required by h264
+        command = [
+            "ffmpeg",
+            "-y",
+            "-loglevel",
+            "error",
+            "-i",
+            source_path,
+            "-movflags",
+            "+faststart",
+            "-crf",
+            str(crf),
+            "-preset",
+            preset,
+            "-pix_fmt",
+            "yuv420p",
+            "-vf",
+            "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+            f"{tmp}/out.mp4",
+        ]
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode != 0:
+            return None, {"skipped": f"ffmpeg failed: {result.stderr[-200:]}"}
+        with open(f"{tmp}/out.mp4", "rb") as output:
+            new_bytes = output.read()
+        return new_bytes, {
+            "format": "mp4",
+            "crf": crf,
+            "preset": preset,
+            "savings_percent": _savings_percent(original_size, new_bytes),
+        }
 
 
 def gifsicle_optimize(

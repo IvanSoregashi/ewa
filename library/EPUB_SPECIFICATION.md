@@ -86,6 +86,13 @@ the existing declaration's href/media type through ReplaceLinks, preserving its 
 and dependent references such as cover metadata and fallbacks. Creating a replacement resource
 would require rebuilding these relationships without a demonstrated benefit.
 
+convert_giant_gifs is a separate, opt-in video operation: oversized declared animated GIFs
+are encoded by FFmpeg at CRF 30, with a JPEG poster. Apply video/poster output only if their
+combined size saves strictly more than 5%. Missing/failed encoding, poster failure, or
+insufficient savings preserves the GIF; path/ID collisions raise before changing it.
+Successful conversion updates the existing manifest entry and adds the poster declaration;
+rewrite_gif_chapters applies the returned mapping. Normal image optimization still skips animation.
+
 Image decode/optimization errors remain per-image evidence; inventory rename collisions
 stop the book without overwriting the existing resource. ReplaceLinks consumes the mapping
 in HTML and then OPF, clearing it after both passes complete. It records missing old paths
