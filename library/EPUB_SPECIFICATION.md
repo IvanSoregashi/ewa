@@ -68,10 +68,8 @@ An empty replacement mapping means no work; no separate “not run” state is n
 
 OptimizeImages appends image records and publishes only successful path changes.
 It forwards image configuration to the library optimizer; Panda keeps the current defaults.
-OptimizeImages and perform_image_optimization accept a temporary use_context=False switch.
-True selects the parallel image recipe for comparison; both paths share the same resource
-updates and analytics. This switch does not create worker processes or change default callers.
-Image policy, metadata, and the planned library context belong to
+OptimizeImages and perform_image_optimization use the library context recipe; the temporary
+comparison switch has been removed after validation. Image policy, metadata, and context belong to
 [IMAGE_SPECIFICATION.md](IMAGE_SPECIFICATION.md).
 Disabling PNG-to-JPEG conversion keeps optimized resources at their existing paths,
 so this operation needs no ReplaceLinks step. Existing replacements from other operations
@@ -82,6 +80,11 @@ plain ZIP compression data, call the image optimizer, then apply accepted bytes 
 inventory rename. Resource changes, link mappings, and database analytics stay in the plugin.
 No resource is modified for an image skip/error; collisions still stop the book.
 No resource context is introduced by the image refactor.
+
+Conversions retain Resource and manifest-item identity. Rename the indexed resource and update
+the existing declaration's href/media type through ReplaceLinks, preserving its ID, properties,
+and dependent references such as cover metadata and fallbacks. Creating a replacement resource
+would require rebuilding these relationships without a demonstrated benefit.
 
 Image decode/optimization errors remain per-image evidence; inventory rename collisions
 stop the book without overwriting the existing resource. ReplaceLinks consumes the mapping

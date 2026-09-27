@@ -15,7 +15,6 @@ from library.epub.resources import Resource, ResourceIndex
 from library.image.constants import ImageFormat
 from library.image.models import ImageErrorReason, ImageInfo, ImageOptimizationResult
 from library.image.optimization import optimize_image
-from library.image.recipe import optimize_image_with_context
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +30,6 @@ class OptimizeImages(EpubOperation):
     convert_png_to_jpeg: bool = True
     min_filesize: int = 50 * 1024
     max_dimensions: tuple[int, int] | None = None
-    use_context: bool = False  # Temporary comparison path; keep the current optimizer as default.
 
     def perform(self, context: ProcessingContext) -> None:
         resources = context.epub.resources
@@ -45,7 +43,6 @@ class OptimizeImages(EpubOperation):
                 convert_png_to_jpeg=self.convert_png_to_jpeg,
                 min_filesize=self.min_filesize,
                 max_dimensions=self.max_dimensions,
-                use_context=self.use_context,
             )
             context.analytics.append(ImageOptimizationRecord.from_result(context.run_id, result))
             if result.success and resource.filename != old_path:
@@ -59,7 +56,6 @@ def perform_image_optimization(
     convert_png_to_jpeg: bool = True,
     min_filesize: int = 50 * 1024,
     max_dimensions: tuple[int, int] | None = None,
-    use_context: bool = False,
 ) -> ImageOptimizationResult:
     """Optimize bytes; supply the owning index to keep renames indexed."""
     try:
@@ -73,8 +69,7 @@ def perform_image_optimization(
         )
 
     percent_comp = int(resource.info.compress_size / len(content) * 100) if content else 100
-    optimizer = optimize_image_with_context if use_context else optimize_image
-    result, optimized = optimizer(
+    result, optimized = optimize_image(
         content,
         compression=percent_comp,
         convert_png_to_jpeg=convert_png_to_jpeg,

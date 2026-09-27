@@ -7,11 +7,11 @@ of EPUB workflows. Implementation order lives in [IMAGE_TODO.md](IMAGE_TODO.md);
 contributor instructions live in [AGENTS.md](../AGENTS.md).
 EPUB resource integration belongs to [EPUB_SPECIFICATION.md](EPUB_SPECIFICATION.md#state-and-ownership).
 
-The existing optimize_image implementation remains active. ImageProcessingContext now provides
-a concrete lifetime API, and recipe.optimize_image_with_context implements the replacement recipe
-alongside it. The EPUB adapter can opt into the replacement for comparison; existing callers
-still default to optimization.optimize_image.
-The replacement context separates original, current, and target metadata. It first attempts
+recipe.optimize_image is the active implementation, also exported through the existing
+optimization.optimize_image import. The EPUB adapter uses it without a comparison switch.
+[Migration validation](IMAGE_VALIDATION.md) records comparisons, intentional differences,
+visual review, and performance measurements; the superseded optimizer has been removed.
+The context separates original, current, and target metadata. It first attempts
 conversion/recompression, keeps the image only if worthwhile, then decides resizing from the
 accepted current encoding's density. Each stage has its own save and savings decision.
 
@@ -25,13 +25,12 @@ Options include convert_png_to_jpeg=True, min_filesize=50 * 1024 (bytes), and
 max_dimensions=None (the existing density-based limits). Explicit dimensions are intended
 to bound resizing without upscaling; zero leaves an axis unconstrained, so (0, 0) disables
 resizing. The committed resize baseline applies the height limit to the already narrowed width
-and keeps the user-restored one-pixel minimum for thin images. Both recipes share this helper.
+and keeps the user-restored one-pixel minimum for thin images.
 
 Preserve PNG/JPEG/static-GIF policies, encoder quality, transparency handling, and animation
 skips. Unchanged PNGs are skipped rather than re-encoded solely to attempt compression.
-The historical savings gate accepts int(output_size / input_size * 100) <= 97.
-The retained optimizer reports rejected candidate metadata. The replacement records rejected
-attempts in operations and retains ImageInfo only for accepted states.
+Acceptance requires strictly more than 5% savings relative to the current encoding.
+Rejected attempts are recorded in operations; ImageInfo is retained only for accepted states.
 ZIP compression information used by JPEG policy is plain additional data from the caller;
 the image library has no dependency on EPUB resources.
 
@@ -44,15 +43,15 @@ see [BPP research and published measurements](IMAGE_BPP_RESEARCH.md).
 DPI is captured as a pair of floats: Pillow EXIF rational values otherwise cannot serialize to JSON,
 and integer typing would reject fractional resolutions when reading stored snapshots.
 
-## Planned ImageProcessingContext
+## ImageProcessingContext
 
-The lifetime API and parallel replacement recipe are implemented; caller migration remains planned. `optimize_image` remains the image
+The lifetime API and caller migration are implemented. `optimize_image` is the image
 recipe entry point; a concrete `ImageProcessingContext` in `library.image` owns one image's
 working state, lifetime, and automatic outcome. Reuse `ImageInfo` and `ImageOptimizationResult`.
 Keep pixel helpers as functions; adapters remain outside the image library.
 No common context base is needed for this step.
 
-Initially keep the current optimize_image contract: bytes input, existing configuration arguments
+Keep the optimize_image contract: bytes input, existing configuration arguments
 and defaults, plain compression data, and the existing result/accepted-bytes return shape.
 Create the Pillow image through the context's opening method inside the with block so opening
 failures reach __exit__. The context owns the buffers and Pillow objects it creates.
@@ -60,11 +59,9 @@ len(bytes) gives the encoded size in constant time; header inspection can avoid 
 but the caller has already acquired the encoded bytes. Stream/opener support can be added later
 and is not a prerequisite for the context. Keep ZIP compression data independent of EPUB resources.
 
-Build the context and replacement recipe alongside the current optimizer. Keep existing callers
-on the current implementation until comparisons cover all important cases. Establish synthetic
-comparisons during migration and measure both implementations before switching callers; baseline
-work does not block introducing the context. Document intentional policy changes and cover
-their differences separately from equivalence comparisons; keep the original optimizer as the baseline.
+The completed migration compared both recipes before switching callers. Tests cover agreed
+ordering/policy differences separately from equivalence cases; byte assertions now use
+independent Pillow encodings. The original implementation remains available in Git history.
 
 Checks stop on failure; decisions select targets and transformations apply them. The context retains known
 metadata on failure, releases its owned resources, and returns one detached outcome with accepted
@@ -73,8 +70,7 @@ renaming, link replacement, and persistence remain outside this context.
 
 Create each context and its live inputs inside its worker. Input API flexibility does not imply
 that live streams or arbitrary opener functions can cross process boundaries: transport bytes or
-a serializable source description and return detached data. Preserve processing policy during the
-refactor and compare behavior and costs before retiring the current implementation.
+a serializable source description and return detached data.
 
 ## Implemented context lifetime
 
@@ -84,8 +80,7 @@ current, and target ImageInfo objects. Entering performs no input opening.
 
 replace_image(image) owns the proposed image, saves it using target format/quality, and compares
 its encoded size against the current image. Acceptance requires strictly more than 5% savings:
-after_bytes * 100 < before_bytes * 95. This is the replacement recipe's policy; the retained
-optimizer keeps its historical whole-percent cutoff.
+after_bytes * 100 < before_bytes * 95. This supersedes the old whole-percent cutoff.
 
 Until acceptance, the current Pillow image remains live. Acceptance updates current metadata,
 candidate bytes, and current_quality, then closes the previous image. Rejection closes only the
@@ -134,9 +129,10 @@ operation. Reuse ImageInfo for original/current/target without another metadata 
 
 The default recipe verifies minimum filesize, supported format, and static-image policy.
 remove_useless_alpha selects RGB when the original PNG RGBA pixels have minimum alpha >= 250.
-This intentionally differs from the retained optimizer's post-resize inspection: resizing can
+This intentionally differs from the old optimizer's post-resize inspection: resizing can
 hide an original alpha value of 249. convert_inefficient_png_to_jpeg selects JPEG for PNG with
-planned RGB mode and current density at least 0.5 bytes/pixel. Its public configuration switch
+planned RGB mode and current density at least 0.5 bytes/pixel. This density is measured before
+resizing; the old optimizer divided original bytes by resized pixel area. Its public configuration switch
 remains on the recipe/adapter entry point and controls whether the decision is called.
 
 select_encoding selects quality independently: 85 for PNG-to-JPEG, 75 for JPEG input,
@@ -164,5 +160,5 @@ decisions. Exceptions produce an error outcome rather than returning earlier acc
 Synthetic tests cover supported formats/modes, target independence, strict savings boundaries,
 all conversion/resize acceptance combinations, current-density sizing, original-pixel alpha
 decisions, ownership, skips, processing/cleanup failures, and interrupts. Worker tests transport
-only bytes/configuration and detached outcomes. The retained optimizer and the adapter's
-opt-in use_context switch remain until the complete comparison and performance work is done.
+only bytes/configuration and detached outcomes. [Migration validation](IMAGE_VALIDATION.md)
+records the completed real-book, visual, and performance checks.

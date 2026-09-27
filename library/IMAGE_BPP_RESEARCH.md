@@ -69,7 +69,7 @@ Retain 0.1, 0.2, and 0.5 as explicit, provisional heuristics. No reviewed source
 replacing them with another universal number. Conversion trials measure actual encoded size
 at unchanged dimensions; percentage BPP improvement then equals percentage byte savings.
 The replacement requires strictly more than 5% savings: after_bytes * 100 < before_bytes * 95.
-The retained optimizer keeps its historical whole-percent cutoff. The new cutoff is a policy
+The pre-context optimizer used a whole-percent cutoff. The new cutoff is a policy
 choice, not a research-derived perceptual-quality threshold.
 
 Resize decisions use the accepted current encoding's density. Resize acceptance compares
@@ -77,8 +77,8 @@ byte counts against that accepted image, since changing pixel area makes a BPP-i
 comparison unsuitable. Retain working Pillow pixels across the trial so a second encode
 after resizing does not require decoding the intermediate JPEG.
 
-Before changing the heuristic values, collect per-format and per-content measurements from
-representative copies of our images: original/converted/resized dimensions, bytes/pixel,
-byte savings, encoder settings, runtime, and visual quality. Examine distributions and
-text/edge preservation rather than selecting a cutoff from an average. That calibration,
-and the final real-book comparison, remain separate work; this research used no book files.
+[Migration validation](IMAGE_VALIDATION.md) evaluates image copies grouped by content/format,
+with dimensions, BPP, savings, encoder settings, runtime, and visual review. It also records
+the six-book comparison. Those samples did not justify changing the thresholds. A future
+threshold change needs broader calibration and review of text/edge preservation, rather
+than a cutoff selected from an average; this literature research itself used no book files.

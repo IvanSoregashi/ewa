@@ -6,7 +6,6 @@ from PIL import Image
 from library.epub.epub import EpubInfo
 from library.image.constants import ImageFormat, ImageMode
 from library.image.models import ImageInfo
-from library.image.optimization import is_efficient, is_extra_efficient
 
 
 def test_failed_image_retains_only_known_dimensions_and_density():
@@ -34,16 +33,6 @@ def test_density_uses_bytes_and_preserves_zero_file_size():
     assert info.bytes_per_pixel == 2
     info.filesize = 0
     assert info.bytes_per_pixel == 0
-
-
-@pytest.mark.parametrize(
-    "filesize, efficient, extra_efficient",
-    [(19, True, True), (20, True, False), (49, True, False), (50, False, False)],
-)
-def test_optimizer_preserves_strict_density_thresholds(filesize, efficient, extra_efficient):
-    info = ImageInfo(size=(10, 10), filesize=filesize, format=ImageFormat.PNG, mode=ImageMode.RGB)
-    assert is_efficient(info) is efficient
-    assert is_extra_efficient(info) is extra_efficient
 
 
 @pytest.mark.parametrize("fail_read", [False, True])

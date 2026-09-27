@@ -11,10 +11,10 @@ Working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
 ## ImageProcessingContext refactor
 
-Follow the [planned image-context contracts](IMAGE_SPECIFICATION.md#planned-imageprocessingcontext).
+Follow the [image-context contracts](IMAGE_SPECIFICATION.md#imageprocessingcontext).
 This plan does not introduce a resource context or a shared base class.
-Keep the current optimizer and its callers in place while building the replacement alongside it.
-Switch callers only after the replacement passes comparison for all important cases.
+The migration is complete. Steps 1–11 retain implementation history, including intermediate
+designs superseded by later steps. Step 12 records the validation and caller switch.
 
 ### 1. Introduce the concrete library context and its lifetime
 
@@ -105,14 +105,16 @@ Switch callers only after the replacement passes comparison for all important ca
 
 ### 12. Compare the complete pipeline and remove superseded machinery
 
-- [ ] Evaluate density heuristics on representative image copies, grouped by content and format, with visual review. Apply the [research conclusions](IMAGE_BPP_RESEARCH.md#implementation-decision) before changing thresholds.
-- [ ] Compare synthetic success/skip/error outcomes, metadata, and output bytes under the same policy. Repeat the six-book comparison on copies, excluding the merged example; compare bytes and analytics without displaying book contents or changing originals.
-- [ ] Measure and compare read/decode work and runtime against the retained optimizer for cheap skips and larger images. Check avoidable image copies, retained buffers, and transport costs before claiming a performance benefit.
-- [ ] After all important cases pass comparison, switch callers and remove the temporary use_context switch, superseded optimizer path, and unused helpers, keeping public callers working. Review the concrete context for unnecessary layers; leave a resource context and generic context base deferred unless a concrete need emerges.
+- [x] Evaluate density heuristics on photo, graphic, diagram, and text image copies with visual review. Retain provisional thresholds; [measurements](IMAGE_VALIDATION.md#density-and-visual-review) do not justify changing them.
+- [x] Compare synthetic outcomes, metadata, and bytes. Repeat the six-book comparison on copies, excluding the merged example; verify analytics and original hashes. Account for four current-BPP resize differences rather than requiring identical decisions from changed inputs; see [results](IMAGE_VALIDATION.md#six-book-comparison).
+- [x] Measure opens/decodes/encodes, cheap skips, larger-image runtime, and peak memory. Check image/buffer ownership and worker transport. Record the extra encoding work and skip overhead without claiming a performance benefit; see [measurements and limits](IMAGE_VALIDATION.md#work-time-and-memory).
+- [x] Switch callers after comparison, remove use_context and the superseded implementation/helpers, and preserve the optimize_image public import and arguments. Keep independent encoding expectations in regression tests. Retain the concrete context without a resource context or generic base.
+
+## Completed adapter follow-ups
+
+- [x] Consider replacement resources for path-changing conversions. Retain indexed rename and update the existing manifest declaration: resource/item identity preserves IDs, cover properties, and dependent references. Verify export/reopen in regression tests; see [adapter ownership](EPUB_SPECIFICATION.md#state-and-ownership).
+- [x] Remove dedicated GIF-to-MP4 conversion, poster/video markup helpers, and related tests. Image optimization continues to skip animated images.
 
 ## Backlog after the migration
 
-These tasks are unscheduled; their order is not an implementation commitment.
-
-- [ ] Consider creating a new resource for image conversions that change the path, removing the original, and synchronizing the manifest with the final inventory; settle preservation of IDs, properties, and dependent references before replacing the current rename/link-update flow.
-- [ ] Reconcile convert_giant_gifs with animation handling: the regular optimizer skips animated images, while the dedicated GIF-to-MP4 recipe still assumes it converts and renames them. Keep video conversion separate from format-preserving image optimization.
+No unfinished items currently scheduled here.

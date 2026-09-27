@@ -1,4 +1,3 @@
-from functools import partial
 import json
 import random
 from io import BytesIO
@@ -18,12 +17,13 @@ from epub.verification import NoUnmatchedLinks
 from library.asserts import require
 from library.epub.epub import EPUB
 from library.epub.media_type import MediaType
+from library.epub.metadata import MetadataType
 from library.image.models import ImageErrorReason, ImageSkipReason
 
 
-@pytest.fixture(params=[False, True], ids=["current", "context"])
-def optimize_images(request):
-    return partial(OptimizeImages, use_context=request.param)
+@pytest.fixture
+def optimize_images():
+    return OptimizeImages
 
 
 @pytest.fixture
@@ -101,6 +101,32 @@ def test_conversion_updates_inventory_html_manifest_and_export(tmp_path, image_b
     assert item.media_type == "image/jpeg"
     assert output.package.resource_for_href(item.href) is resource
     assert path.read_bytes() == original
+
+
+def test_conversion_preserves_resource_identity_and_manifest_dependents(tmp_path, image_bytes, optimize_images):
+    path = make_book(tmp_path, {"cover.png": image_bytes})
+    with ProcessingContext() as context:
+        context.open_epub(path)
+        package = context.epub.package
+        resource = context.epub.resources.by_path("OEBPS/images/cover.png")
+        item = package.manifest_item_by_path(resource.filename)
+        item.properties = "cover-image"
+        chapter = package.document.manifest.find_item(id="chapter")
+        chapter.fallback = item.id
+        metadata = package.document.metadata
+        metadata.add_metadata(MetadataType.META, "", dc=False, name="cover", content=item.id)
+        context.perform(optimize_images()).perform(ReplaceLinks())
+        assert context.epub.resources.by_path("OEBPS/images/cover.jpg") is resource
+        assert package.manifest_item_by_path(resource.filename) is item
+        assert item.id == "image0" and item.properties == "cover-image"
+        assert chapter.fallback == item.id
+        assert package.document.metadata.referencing({item.id})
+        output = export(context, tmp_path)
+    assert context.result.success, context.result.details
+    saved_item = output.package.manifest_item_by_path("OEBPS/images/cover.jpg")
+    assert saved_item.id == "image0" and saved_item.properties == "cover-image"
+    assert output.package.document.manifest.find_item(id="chapter").fallback == "image0"
+    assert output.package.document.metadata.referencing({"image0"})
 
 
 @pytest.mark.parametrize("referenced", [False, True])

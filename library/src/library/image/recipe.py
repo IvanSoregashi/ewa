@@ -12,7 +12,7 @@ from library.image.constants import (
 )
 from library.image.context import ImageProcessingContext
 from library.image.models import ImageOptimizationResult, ImageSkipReason
-from library.image.optimization import (
+from library.image.utils import (
     crop_dimensions,
     useless_transparency_mode,
 )
@@ -103,7 +103,7 @@ def convert_image(context: ImageProcessingContext) -> None:
     context.replace_image(image)
 
 
-def optimize_image_with_context(
+def optimize_image(
     content: bytes,
     *,
     compression: int = 100,
@@ -111,6 +111,11 @@ def optimize_image_with_context(
     min_filesize: int = 50 * 1024,
     max_dimensions: tuple[int, int] | None = None,
 ) -> tuple[ImageOptimizationResult, bytes | None]:
+    """Return accepted bytes, or None for a skip/error; never mutate the input.
+
+    max_dimensions=None uses density-based limits; (0, 0) disables resizing.
+    A zero width or height leaves that axis unconstrained. min_filesize is in bytes.
+    """
     with ImageProcessingContext(
         compression=compression,
         min_filesize=min_filesize,

@@ -7,12 +7,12 @@ import random
 from PIL import Image
 
 from library.image.models import ImageErrorReason, ImageSkipReason
-from library.image.recipe import optimize_image_with_context
+from library.image.recipe import optimize_image
 
 
 def process_image(content, options):
     # Only bytes/configuration enter the worker; its recipe creates all live objects.
-    return os.getpid(), optimize_image_with_context(content, **options)
+    return os.getpid(), optimize_image(content, **options)
 
 
 def test_spawned_worker_returns_detached_outcomes_and_has_no_cross_call_state():
@@ -26,7 +26,7 @@ def test_spawned_worker_returns_detached_outcomes_and_has_no_cross_call_state():
         (content, {"min_filesize": 0, "convert_png_to_jpeg": False, "max_dimensions": (64, 32)}),
         (content, {"min_filesize": 0}),
     ]
-    expected = [optimize_image_with_context(data, **options) for data, options in cases]
+    expected = [optimize_image(data, **options) for data, options in cases]
     with ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context("spawn")) as pool:
         actual = [pool.submit(process_image, data, options).result(timeout=60) for data, options in cases]
     assert all(pid != os.getpid() for pid, _ in actual)

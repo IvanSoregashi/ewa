@@ -1,4 +1,3 @@
-from functools import partial
 from io import BytesIO
 from zipfile import ZipInfo
 import pytest
@@ -10,9 +9,9 @@ from library.image.models import ImageErrorReason, ImageSkipReason
 from library.test_utils.utils_image import counted_resource, generate_image
 
 
-@pytest.fixture(params=[False, True], ids=["current", "context"])
-def optimize_resource(request):
-    return partial(perform_image_optimization, use_context=request.param)
+@pytest.fixture
+def optimize_resource():
+    return perform_image_optimization
 
 
 def test_optimization_skips_small_images(optimize_resource):
@@ -202,7 +201,7 @@ def test_no_rename_when_png_stays_png(optimize_resource):
 
 
 def test_perform_optimization_garbage_payload_returns_error_result(optimize_resource):
-    """Bytes that Image.open rejects entirely (before optimization_machine)."""
+    """Bytes that Image.open rejects before reading image metadata."""
     resource, _ = counted_resource(b"this is not an image" * 100, "OEBPS/images/garbage.png")
 
     result = optimize_resource(resource)
@@ -250,8 +249,7 @@ def test_minimum_saving_gate_rejects_bytes_before_resource_mutation(monkeypatch,
 
     monkeypatch.setattr(Image.Image, "save", encode)
     result = optimize_resource(resource, min_filesize=0)
-    cutoff = 950 if optimize_resource.keywords["use_context"] else 980
-    accepted = encoded_size < cutoff
+    accepted = encoded_size < 950
     assert result.success == accepted
     assert result.skip == (None if accepted else ImageSkipReason.WORSE_CONVERSION)
     assert resource.filename == ("cover.jpg" if accepted else "cover.png")
@@ -273,14 +271,3 @@ def test_adapter_supplies_zip_compression(compression, optimize_resource):
     else:
         assert result.success
         assert resource.content != content
-
-
-def test_default_adapter_keeps_current_optimizer(monkeypatch):
-    import epub.recipe_image as adapter
-
-    def unexpected(*args, **kwargs):
-        pytest.fail("The replacement must remain opt-in during comparison")
-
-    monkeypatch.setattr(adapter, "optimize_image_with_context", unexpected)
-    resource = Resource.from_bytes("broken.png", b"invalid")
-    assert perform_image_optimization(resource).error == ImageErrorReason.DECODE_FAILED
