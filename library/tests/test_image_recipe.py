@@ -86,22 +86,28 @@ def test_manipulations_conversion_and_encoding_are_independent(format, mode, con
         resize_image(context)
         resized_size = context._image.size
         assert resized_size == (48, 30)
-        assert context._image.mode == mode and context.output_format == format
+        assert context._image.mode == mode and context.target_image_info.format == format
+        assert context.current_image_info.size == resized_size
         remove_useless_alpha(context)
         working_image = context._image
         assert working_image.size == resized_size
         assert working_image.mode == ("RGB" if mode == "RGBA" else mode)
-        assert context.output_format == format
+        assert context.target_image_info.format == format
+        assert context.current_image_info.mode == working_image.mode
         if convert and convert_inefficient_png_to_jpeg(context):
             png_to_jpeg(context)
-        assert context._image is working_image and context.output_quality is None
+        assert context._image is working_image and context.target_quality == 85
         assert context.original_image_info.format == format
+        assert context.current_image_info.format == format
         context.verify(needs_encoding)
         select_encoding(context)
         assert context._image is working_image
-        assert context.output_format == output_format and context.output_quality == quality
-        assert context.candidate is None and context.new_image_info is None
+        assert context.target_image_info.format == output_format and context.target_quality == quality
+        assert context.candidate is None
         save_image(context)
+        assert context.current_image_info.format == output_format
+        assert context.current_image_info.filesize == len(context.candidate)
+        assert context.target_image_info.filesize == context.original_image_info.filesize == len(content)
         context.verify(worthwhile_savings)
         context.succeed()
     assert context.outcome() == optimize_image(content, **options)
@@ -250,7 +256,7 @@ def test_ordered_checks_stop_at_first_failure():
 def test_savings_gate_keeps_candidate_evidence(output_size, accepted):
     with ImageProcessingContext() as context:
         context.original_image_info.filesize = 1000
-        context.new_image_info = replace(context.original_image_info, filesize=output_size)
+        context.current_image_info = replace(context.original_image_info, filesize=output_size)
         context.candidate = bytes(output_size)
         context.verify(worthwhile_savings)
         context.succeed()

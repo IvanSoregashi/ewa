@@ -11,6 +11,8 @@ The existing optimize_image implementation remains active. ImageProcessingContex
 a concrete lifetime API, and recipe.optimize_image_with_context implements the replacement recipe
 alongside it. The EPUB adapter can opt into the replacement for comparison; existing callers
 still default to optimization.optimize_image.
+The replacement context now separates original, current, and target metadata. Moving all
+policy decisions ahead of image transformations is the next migration stage.
 
 ## Current optimizer contract and policy
 
@@ -74,8 +76,8 @@ refactor and compare behavior and costs before retiring the current implementati
 ## Implemented context lifetime
 
 Create ImageProcessingContext with compression, min_filesize, and max_dimensions, then call
-open_bytes_as_image(content) inside its with block. Opening initializes output_format to the
-input format. Entering performs no input opening.
+open_bytes_as_image(content) inside its with block. Opening initializes independent current
+and target copies of the original ImageInfo. Entering performs no input opening.
 The context owns its input buffer and opened image; replace_image(image) also takes ownership
 of a transformed image and immediately closes the previous image to release its pixel buffer.
 The replacement is registered before closing the previous image so cleanup also covers close failures.
@@ -83,10 +85,15 @@ All registered resources are closed on exit, including when another
 close fails. Use a fresh context per call, without re-entry guards.
 
 original_image_info retains captured metadata (or known byte size if metadata capture fails).
-image is the working Pillow object; output_format and output_quality hold the selected encoder
-settings. candidate and new_image_info hold encoded candidate bytes
-and their metadata. skip(reason) stops the block, retaining metadata but discarding candidate
-bytes on exit. succeed() requires candidate bytes and metadata; the recipe performs encoding and size acceptance before calling it.
+image is the working Pillow object; current_image_info tracks its size and mode through
+replace_image. Its format and filesize describe the last encoded representation, initially the
+input, and are updated by save_image. Other captured metadata remains inherited from the input.
+target_image_info holds the requested size, mode, and format; target_quality holds encoder quality.
+Copied target fields such as filesize and extrema are not instructions or predicted output values.
+candidate holds encoded bytes. The external ImageOptimizationResult.new_image is populated from
+current_image_info only when candidate bytes exist, preserving the result contract.
+skip(reason) stops the block, retaining metadata but discarding candidate bytes on exit.
+succeed() requires candidate bytes; the recipe performs encoding and size acceptance before calling it.
 Encoding and savings policy live in recipe functions, outside the context.
 
 After the block, outcome() returns the existing (ImageOptimizationResult, accepted bytes or None)
@@ -95,6 +102,20 @@ becomes UNKNOWN. Cleanup failure overrides success or skip, while a processing f
 its classification if cleanup also fails. Diagnostics are logged. Interrupts propagate after
 cleanup and leave no completed result. The working image reference is cleared on exit.
 
+## Planned decisions and execution
+
+Decision functions accept the context, read original information and earlier target choices,
+and modify target_image_info or target_quality without transforming the working image.
+Execution then applies target dimensions and mode, saves using the target format and quality,
+checks savings, and accepts the candidate through separate functions. Reuse ImageInfo for all
+three roles without another metadata class. Original metadata remains unchanged.
+
+PNG-to-JPEG density policy uses original encoded filesize divided by planned pixel area.
+JPEG recompression can be eligible even when target dimensions, mode, and format match the input;
+save eligibility is a separate decision. Quality is an output setting, not inferred input metadata.
+Alpha inspection order remains to be settled during migration: current policy examines resized
+pixels, so moving inspection to original pixels can change decisions near the threshold.
+
 ## Parallel image recipe
 
 recipe.optimize_image_with_context accepts the same bytes and keyword arguments as
@@ -102,22 +123,24 @@ optimization.optimize_image. It opens inside the context and verifies minimum si
 format, and animation policy. Independent operations then resize, remove useless PNG alpha,
 and select a format conversion. The needs_encoding check skips unchanged images unless JPEG
 density or ZIP compression warrants re-encoding. Encoding selection and saving follow that
-check; savings acceptance and success follow saving.
+check; savings acceptance and success follow saving. Until the decision/execution migration,
+resize and alpha removal still act directly on the working image; target size/mode are initialized
+but do not yet drive those operations.
 
 resize_image changes dimensions only. remove_useless_alpha changes pixel mode only.
 png_to_jpeg unconditionally selects JPEG output when called; save_image produces the JPEG bytes.
-The default recipe decides whether to invoke it using should_convert_png_to_jpeg (PNG, RGB,
+The default recipe decides whether to invoke it using convert_inefficient_png_to_jpeg (PNG, RGB,
 and post-resize density). The convert_png_to_jpeg keyword remains only on recipe/adapter entry
 points for compatibility; it controls invocation, not context state.
-select_encoding chooses quality without manipulating the image or deciding eligibility:
+select_encoding sets target_quality without manipulating the image or deciding eligibility:
 PNG-to-JPEG uses 85, JPEG input uses 75, GIF uses 85, and PNG has no quality argument.
-save_image encodes the working image using the selected format and quality, then records
-candidate bytes and metadata. Metadata survives rejected savings.
+save_image encodes the working image using target format and quality, then records
+candidate bytes and current metadata. Metadata survives rejected savings.
 
 verify(*checks) takes ordinary functions returning None on success or an ImageSkipReason on
 failure; the first failure stops the recipe. Operations keep their conditional behavior inside
 ordinary functions, without operation classes. Operations rely on recipe ordering instead of
-repeated image/candidate readiness assertions; type casts only inform static checking.
+repeated image/candidate readiness assertions; the image property provides the working image.
 The earlier per-format process_png/jpeg/gif functions are superseded by these independent
 operations and the needs_encoding check.
 

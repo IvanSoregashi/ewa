@@ -1,13 +1,14 @@
-from library.asserts import require
 import logging
 from collections.abc import Callable
 from contextlib import ExitStack
+from dataclasses import replace
 from io import BytesIO
 from types import TracebackType
 
 from PIL import Image
 
-from library.image.constants import ImageFormat
+from library.asserts import require
+from library.image.constants import ImageMode, ImageFormat
 from library.image.models import ImageErrorReason, ImageInfo, ImageOptimizationResult, ImageSkipReason
 
 logger = logging.getLogger(__name__)
@@ -24,16 +25,16 @@ class ImageProcessingContext:
         min_filesize: int = 50 * 1024,
         compression: int = 100,
         max_dimensions: tuple[int, int] | None = None,
-        output_quality: int = 85,
+        target_quality: int | None = 85,
     ):
         self.compression = compression
         self.min_filesize = min_filesize
         self.max_dimensions = max_dimensions
-        self.output_quality: int | None = output_quality
-        self.output_format: ImageFormat | None = None
+        self.target_quality = target_quality
 
         self.original_image_info = ImageInfo.failed()
-        self.new_image_info: ImageInfo | None = None
+        self.current_image_info = ImageInfo.failed()
+        self.target_image_info = ImageInfo.failed()
 
         self.candidate: bytes | None = None
         self.result: ImageOptimizationResult | None = None
@@ -54,6 +55,8 @@ class ImageProcessingContext:
         image = Image.open(source)
         self.replace_image(image)
         self.original_image_info = ImageInfo.from_image(image, len(content))
+        self.current_image_info = replace(self.original_image_info)
+        self.target_image_info = replace(self.original_image_info)
 
     def replace_image(self, image: Image.Image) -> None:
         """Take ownership of an opened or transformed image until the block exits."""
@@ -62,7 +65,9 @@ class ImageProcessingContext:
             if self._image is not None:
                 self._image.close()
             self._image = image
-            #self.new_image_info = ImageInfo.from_image(image, 0)
+        self.current_image_info.size = image.size
+        self.current_image_info.mode = ImageMode(image.mode)
+        self.current_image_info.format = ImageFormat(image.format)
 
     def verify(self, *checks: Callable[[ImageProcessingContext], ImageSkipReason | None]) -> None:
         for check in checks:
@@ -74,18 +79,18 @@ class ImageProcessingContext:
         self.result = ImageOptimizationResult(
             skip=reason,
             original_image=self.original_image_info,
-            new_image=self.new_image_info,
+            new_image=self.current_image_info if self.candidate is not None else None,
         )
         raise _ImageSkipped
 
     def succeed(self) -> None:
         """Mark encoded, size-accepted candidate bytes as successful."""
-        if self.candidate is None or self.new_image_info is None:
-            raise RuntimeError("Image processing completed without an encoded candidate and metadata")
+        if self.candidate is None:
+            raise RuntimeError("Image processing completed without an encoded candidate")
         self.result = ImageOptimizationResult(
             success=True,
             original_image=self.original_image_info,
-            new_image=self.new_image_info,
+            new_image=self.current_image_info,
         )
 
     def outcome(self) -> tuple[ImageOptimizationResult, bytes | None]:
@@ -150,7 +155,9 @@ class ImageProcessingContext:
             reason = ImageErrorReason.from_error(outcome_error)
             logger.warning("Image processing failed (%s): %s", reason.name, outcome_error)
             self.result = ImageOptimizationResult(
-                error=reason, original_image=self.original_image_info, new_image=self.new_image_info
+                error=reason,
+                original_image=self.original_image_info,
+                new_image=self.current_image_info if self.candidate is not None else None,
             )
 
         # Discard unaccepted bytes.

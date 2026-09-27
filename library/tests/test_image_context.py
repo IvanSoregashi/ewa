@@ -5,6 +5,7 @@ import pickle
 import pytest
 from PIL import Image
 
+from library.image.constants import ImageFormat, ImageMode
 from library.image.context import ImageProcessingContext
 from library.image.models import ImageErrorReason, ImageInfo, ImageSkipReason
 
@@ -28,7 +29,7 @@ def test_success_owns_input_and_transformed_images(content):
         with BytesIO() as output:
             transformed.save(output, format="PNG")
             context.candidate = output.getvalue()
-        context.new_image_info = replace(context.original_image_info, size=(10, 5), filesize=len(context.candidate))
+        context.current_image_info.filesize = len(context.candidate)
         context.succeed()
     result, accepted = pickle.loads(pickle.dumps(context.outcome()))
     assert result.success and accepted
@@ -67,6 +68,35 @@ def test_open_failure_closes_acquired_buffer(content, monkeypatch):
     assert result.original_image.filesize == len(content) and accepted is None
 
 
+def test_metadata_copies_separate_planning_from_working_image(content):
+    with ImageProcessingContext(target_quality=70) as context:
+        context.open_bytes_as_image(content)
+        original = context.original_image_info
+        current = context.current_image_info
+        target = context.target_image_info
+        assert original == current == target
+        assert len({id(original), id(current), id(target)}) == 3
+        target.size = (10, 5)
+        target.mode = ImageMode.L
+        target.format = ImageFormat.JPEG
+        assert context.image.size == original.size == current.size == (20, 10)
+        assert context.image.mode == original.mode == current.mode == "RGB"
+        assert original.format == current.format == "PNG"
+
+        context.replace_image(context.image.resize(target.size))
+        assert current.size == target.size
+        assert original.size == (20, 10)
+        context.replace_image(context.image.convert(target.mode))
+        assert current.mode == target.mode
+        assert original.mode == "RGB"
+        # Encoded properties change only after saving.
+        assert current.format == "PNG" and current.filesize == len(content)
+        assert target.filesize == original.filesize == len(content)
+        assert context.target_quality == 70
+        context.skip(ImageSkipReason.NOT_OPTIMIZED)
+    assert context.outcome()[0].new_image is None
+
+
 def test_failure_before_open_is_managed():
     with ImageProcessingContext() as context:
         raise OSError("input acquisition failed")
@@ -100,7 +130,7 @@ def test_metadata_failure_closes_input(content, monkeypatch):
 def test_processing_failure_retains_metadata(content, error, reason):
     with ImageProcessingContext() as context:
         context.open_bytes_as_image(content)
-        context.new_image_info = replace(context.original_image_info, filesize=1)
+        context.current_image_info = replace(context.current_image_info, filesize=1)
         context.candidate = b"candidate"
         raise error
     result, accepted = context.outcome()
@@ -111,7 +141,7 @@ def test_processing_failure_retains_metadata(content, error, reason):
 def test_skip_stops_block_and_retains_candidate_metadata(content):
     with ImageProcessingContext() as context:
         context.open_bytes_as_image(content)
-        context.new_image_info = replace(context.original_image_info, filesize=999)
+        context.current_image_info = replace(context.current_image_info, filesize=999)
         context.candidate = b"rejected"
         context.skip(ImageSkipReason.WORSE_CONVERSION)
         pytest.fail("Skip must stop the block")
@@ -136,7 +166,7 @@ def test_cleanup_failure_closes_remaining_resources(content, monkeypatch, proces
         monkeypatch.setattr(transformed, "close", fail_close)
         context.replace_image(transformed)
         context.candidate = b"encoded"
-        context.new_image_info = replace(context.original_image_info, filesize=7)
+        context.current_image_info = replace(context.current_image_info, filesize=7)
         context.succeed()
         if processing_error:
             raise processing_error
