@@ -15,7 +15,7 @@ from epub.recipe_package import PackageEpub
 from epub.verification import NoUnmatchedLinks, OPFPath, SerenePanda
 from library.asserts import require
 from library.epub.epub import EPUB
-from library.epub.media_type import EpubRole
+from library.epub.media_type import EpubRole, FileName
 
 logger = logging.getLogger(__name__)
 sp_dictionary_path: Path = settings.serene_panda_dir / "translator.json"
@@ -57,6 +57,36 @@ def _fully_process_encrypted_panda(path: str, *, dry_run: bool = False) -> Proce
         context.perform(CleanupPandaCSS())
         context.perform(OptimizeImages())
         context.perform(ReplaceLinks()).verify(NoUnmatchedLinks())
+        context.perform(TextTranslator(sp_dictionary))
+        context.perform(PackageEpub(destination_path))
+
+    run = require(context.result)
+    if not run.success:
+        if run.error is not None:
+            try:
+                destination_path.unlink(missing_ok=True)
+            except OSError as error:
+                run.details += f"\nRemoving failed output: {error!r}"
+            logger.error("EPUB FAIL %s: %s", path, run.details)
+        else:
+            logger.warning("SKIP %s: %s", path, run.details)
+        return run
+
+    move_the_files(current_path, processed_path, destination_path, dry_run=dry_run)
+    return run
+
+
+def _process_encrypted_panda_no_relink(path: str, *, dry_run: bool = False) -> ProcessingRun:
+    current_path = Path(path)
+    relative_path = current_path.relative_to(settings.encrypted_epub_dir)
+    destination_path = settings.decrypted_epub_dir / relative_path
+    processed_path = settings.processed_epub_dir / relative_path
+
+    with ProcessingContext() as context:
+        context.open_epub(current_path).verify(SerenePanda())
+        context.perform(RemoveResourceAndManifest(path=FileName.SP_FONT_LOWER_ENDSWITH, flush=False))
+        context.perform(CleanupPandaCSS())
+        context.perform(OptimizeImages(convert_png_to_jpeg=False))
         context.perform(TextTranslator(sp_dictionary))
         context.perform(PackageEpub(destination_path))
 
