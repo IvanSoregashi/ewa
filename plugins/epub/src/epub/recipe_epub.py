@@ -88,6 +88,7 @@ def _fully_process_encrypted_panda(path: str, *, dry_run: bool = False) -> Proce
 
 def _process_encrypted_panda_no_relink(path: str, *, dry_run: bool = False) -> ProcessingRun:
     current_path = Path(path)
+    logger.info(f"starting on {path!s} {dry_run=}")
     relative_path = current_path.relative_to(settings.encrypted_epub_dir)
     destination_path = settings.decrypted_epub_dir / relative_path
     processed_path = settings.processed_epub_dir / relative_path
@@ -102,6 +103,7 @@ def _process_encrypted_panda_no_relink(path: str, *, dry_run: bool = False) -> P
 
     run = require(context.result)
     if not run.success:
+        logger.info(f"failed {path!s} {dry_run=}")
         if run.error is not None:
             try:
                 destination_path.unlink(missing_ok=True)
@@ -112,6 +114,7 @@ def _process_encrypted_panda_no_relink(path: str, *, dry_run: bool = False) -> P
             logger.warning("SKIP %s: %s", path, run.details)
         return run
 
+    logger.info(f"success {path!s} {dry_run=}")
     move_the_files(current_path, processed_path, destination_path, dry_run=dry_run)
     return run
 

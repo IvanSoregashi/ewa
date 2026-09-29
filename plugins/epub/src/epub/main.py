@@ -120,7 +120,7 @@ def decrypt_no_relink(
     result.report()
 
 
-@app.command("dd-no-relink")
+@app.command("dd-nr")
 def decrypt_dir_no_relink(
     epub_dir: DirectoryPath = typer.Argument(exists=True),
     dry_run: bool = typer.Option(
@@ -134,8 +134,7 @@ def decrypt_dir_no_relink(
     start = time.time()
     results = recipe_epubs.process_encrypted_pandas_no_relink(
         directory=epub_dir,
-        max_workers=8,
-        flush_size=32,
+        flush_size=8,
         dry_run=dry_run,
     )
     for result in results:

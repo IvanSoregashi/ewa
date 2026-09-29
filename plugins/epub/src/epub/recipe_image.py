@@ -4,6 +4,7 @@ Updates bytes and optional inventory paths; the caller coordinates document link
 """
 
 import logging
+import time
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from epub.image_analytics import ImageOptimizationRecord
@@ -32,11 +33,13 @@ class OptimizeImages(EpubOperation):
     max_dimensions: tuple[int, int] | None = None
 
     def perform(self, context: ProcessingContext) -> None:
+        logger.info("OptimizeImages perform")
         resources = context.epub.resources
         for resource in resources.by_role(EpubRole.IMAGE):
             if resource.media_type is MediaType.IMAGE_SVG:
                 continue
             old_path = resource.filename
+            start_time = time.time()
             result = perform_image_optimization(
                 resource,
                 resources=resources,
@@ -44,6 +47,8 @@ class OptimizeImages(EpubOperation):
                 min_filesize=self.min_filesize,
                 max_dimensions=self.max_dimensions,
             )
+            elapsed_time = time.time() - start_time
+            logger.info(f"perform_image_optimization performed {old_path} in {elapsed_time:.2f} seconds")
             context.analytics.append(ImageOptimizationRecord.from_result(context.run_id, result))
             if result.success and resource.filename != old_path:
                 context.replacements[old_path] = resource.filename

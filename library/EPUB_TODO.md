@@ -121,3 +121,16 @@ These tasks are unscheduled; their order is not an implementation commitment.
 - [ ] Support incremental chapter updates and EPUB assembly from internet articles.
 - [ ] Revisit navigation across spine, NCX, guide/tours, and EPUB 3 NAV.
 - [ ] Define proper EPUB output validation beyond reopening and metadata reading: agree on validation scope and tooling for archive/package integrity, content references, and EPUB conformance.
+
+
+# Another issue with useless text, watermarks?
+```css
+.calibre5 {
+  height: 0.01em;
+  font-size: 0.01em !important;
+}
+```
+```html
+  <p class="calibre5">watermark</p>
+```
+

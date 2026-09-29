@@ -15,7 +15,9 @@ from epub.errors import EpubErrorReason, EpubSkipReason, InvalidEpubOutput
 from epub.protocols import EpubOperation, EpubVerification
 from epub.processing_run import ProcessingRun
 from library.epub.epub import EPUB, EpubInfo
+import logging
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class _SkipBook(Exception):
@@ -57,6 +59,7 @@ class ProcessingContext:
         Register cleanup before reading metadata so even a malformed package
         releases the source. The input path survives failures without more I/O.
         """
+        logger.info(f"context.open_epub({path})")
         if self.input_path is not None:
             raise RuntimeError("A ProcessingContext can only open one book.")
         self.input_path = Path(path)
@@ -79,6 +82,7 @@ class ProcessingContext:
         exc: BaseException | None,
         traceback: TracebackType | None,
     ) -> bool:
+        logger.info(f"context.__exit__({self.input_path})")
         try:
             self._exit_stack.close()
         except Exception as cleanup_error:
