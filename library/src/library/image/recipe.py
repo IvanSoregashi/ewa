@@ -12,10 +12,7 @@ from library.image.constants import (
 )
 from library.image.context import ImageProcessingContext
 from library.image.models import ImageOptimizationResult, ImageSkipReason
-from library.image.utils import (
-    crop_dimensions,
-    useless_transparency_mode,
-)
+from library.image.utils import useless_transparency_mode, crop_dimensions
 
 
 def minimum_filesize(context: ImageProcessingContext) -> ImageSkipReason | None:

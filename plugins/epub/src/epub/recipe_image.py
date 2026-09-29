@@ -14,7 +14,7 @@ from library.epub.media_type import EpubRole, MediaType
 from library.epub.resources import Resource, ResourceIndex
 from library.image.constants import ImageFormat
 from library.image.models import ImageErrorReason, ImageInfo, ImageOptimizationResult
-from library.image.optimization import optimize_image
+from library.image.recipe import optimize_image
 
 logger = logging.getLogger(__name__)
 

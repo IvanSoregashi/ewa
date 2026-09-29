@@ -107,6 +107,10 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 - [x] Add coverage for format-preserving optimization/export, configurable thresholds, resizing, and the existing savings cutoff. Later edits removed the rejected thin-image precautions; reconcile resizing code and expectations before establishing the next baseline.
 - [x] Compare that initial checkpoint's default settings on isolated copies of the six supplied books: output bytes and all 6,755 image records matched the previous results; originals remained unchanged. This historical comparison does not validate subsequent edits.
 
+## Completed recipe follow-ups
+
+- [x] Expose the no-relink Panda recipe through single-book and batch Python entry points and `decrypt-no-relink` / `dd-no-relink` CLI commands. Share batch orchestration; retain filtering, parent-side analytics, and dry-run handling. Validate CLI dispatch and synchronous/spawned execution with synthetic books and temporary databases.
+
 ## Backlog after the migration
 
 These tasks are unscheduled; their order is not an implementation commitment.

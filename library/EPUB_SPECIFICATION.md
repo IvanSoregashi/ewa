@@ -141,12 +141,20 @@ destinations before calling the processing functions. These paths produce no out
 The single-book processing wrapper always returns ProcessingRun; the worker recipe assumes paths
 have passed the caller's filter. The persisted skip codes remain for history.
 
-_fully_process_encrypted_panda is the sole worker recipe used by single-book and batch callers.
+_fully_process_encrypted_panda remains the default worker recipe used by single-book and batch callers.
 It completes HTML/OPF updates before non-manifest unmatched-link verification and translation,
 and validates output before closing the input context. Checks use only verify(context).
 recipe_package.replace_links returns missing manifest entries without adding declarations or failing
 on their absence. A referenced image can succeed without its manifest entry; an image absent from
 HTML still yields UNMATCHED_LINKS.
+
+The alternative _process_encrypted_panda_no_relink recipe preserves image formats/paths, omits
+ReplaceLinks/NoUnmatchedLinks and the root-OPF restriction, and removes all matching Panda fonts.
+SerenePanda still requires all detected fonts to satisfy its Panda filename rule. The public
+process_encrypted_panda_no_relink wrapper records one run; process_encrypted_pandas_no_relink
+uses the shared batch dispatcher and parent-side persistence. Both retain existing path-filtering
+ownership and dry-run behavior. CLI commands `decrypt-no-relink` (one book) and `dd-no-relink`
+(recursive batch) expose `-d` / `--dry_run`; existing `decrypt` and `dd` keep the default recipe.
 
 Before retiring the legacy recipe, synthetic comparisons checked outcomes, metadata, image evidence
 (excluding generated UUIDs), and exported resource contents under the same processing policy.

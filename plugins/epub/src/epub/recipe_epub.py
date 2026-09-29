@@ -43,6 +43,16 @@ def fully_process_encrypted_panda(path: str, *, dry_run: bool = False) -> Proces
     return result
 
 
+def process_encrypted_panda_no_relink(path: str, *, dry_run: bool = False) -> ProcessingRun:
+    start = time.time()
+    result = _process_encrypted_panda_no_relink(path, dry_run=dry_run)
+    print(f"ELAPSED _process_encrypted_panda_no_relink: {time.time() - start:.2f} s")
+    start = time.time()
+    recipe_analytics.record_analytics([result], settings.database_url)
+    print(f"ELAPSED record_analytics: {time.time() - start:.2f} s")
+    return result
+
+
 def _fully_process_encrypted_panda(path: str, *, dry_run: bool = False) -> ProcessingRun:
     current_path = Path(path)
     relative_path = current_path.relative_to(settings.encrypted_epub_dir)

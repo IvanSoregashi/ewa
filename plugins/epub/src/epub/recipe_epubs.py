@@ -5,6 +5,7 @@ flushes analytics to the database in batches while conversions continue.
 
 import logging
 import time
+from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -12,7 +13,7 @@ from epub.config import settings
 from epub.errors import EpubErrorReason
 from epub.recipe_analytics import record_analytics
 from epub.processing_run import ProcessingRun
-from epub.recipe_epub import _fully_process_encrypted_panda, should_process_path
+from epub.recipe_epub import _fully_process_encrypted_panda, _process_encrypted_panda_no_relink, should_process_path
 from ewa.ui import print_success
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,32 @@ def fully_process_encrypted_pandas(
     before dispatch, without analytics. Process-pool submission/result exceptions
     become error outcomes; unreturned worker evidence cannot be recovered.
     """
+    return _process_encrypted_pandas(
+        directory, _fully_process_encrypted_panda, max_workers, flush_size, dry_run=dry_run
+    )
+
+
+def process_encrypted_pandas_no_relink(
+    directory: Path,
+    max_workers: int | None = None,
+    flush_size: int = 8,
+    *,
+    dry_run: bool = False,
+) -> list[ProcessingRun]:
+    """Use the no-relink recipe with the same batching, filtering, and persistence."""
+    return _process_encrypted_pandas(
+        directory, _process_encrypted_panda_no_relink, max_workers, flush_size, dry_run=dry_run
+    )
+
+
+def _process_encrypted_pandas(
+    directory: Path,
+    processor: Callable[..., ProcessingRun],
+    max_workers: int | None,
+    flush_size: int,
+    *,
+    dry_run: bool,
+) -> list[ProcessingRun]:
     paths = [path for path in sorted(directory.rglob("*.epub")) if should_process_path(path)]
     if not paths:
         return []
@@ -66,7 +93,7 @@ def fully_process_encrypted_pandas(
 
     if not max_workers:
         for path in paths:
-            buffer.append(_fully_process_encrypted_panda(str(path), dry_run=dry_run))
+            buffer.append(processor(str(path), dry_run=dry_run))
             if len(buffer) >= flush_size:
                 flush()
     else:
@@ -74,7 +101,7 @@ def fully_process_encrypted_pandas(
             futures = {}
             for path in paths:
                 try:
-                    future = pool.submit(_fully_process_encrypted_panda, str(path), dry_run=dry_run)
+                    future = pool.submit(processor, str(path), dry_run=dry_run)
                 except Exception as error:
                     buffer.append(worker_failure(path, error))
                     if len(buffer) >= flush_size:

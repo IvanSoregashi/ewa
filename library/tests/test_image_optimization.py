@@ -6,7 +6,7 @@ from PIL import Image
 
 from library.image.constants import ImageFormat
 from library.image.models import ImageErrorReason, ImageSkipReason
-from library.image.optimization import optimize_image
+from library.image.recipe import optimize_image
 
 
 def image_bytes(format="PNG", size=(256, 256)):

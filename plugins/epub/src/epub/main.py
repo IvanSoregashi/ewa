@@ -101,6 +101,48 @@ def decrypt_dir(
     print(f"ELAPSED {elapsed:.2f}s")
 
 
+@app.command("decrypt-no-relink")
+def decrypt_no_relink(
+    epub_path: Path = typer.Argument(exists=True),
+    dry_run: bool = typer.Option(
+        False,
+        "-d",
+        "--dry_run",
+        help="Process and record analytics, discard output, and leave originals in place.",
+    ),
+):
+    """Decrypt one Panda book while preserving image formats and paths."""
+    if not recipe_epub.should_process_path(epub_path):
+        return
+    start = time.time()
+    result = recipe_epub.process_encrypted_panda_no_relink(str(epub_path), dry_run=dry_run)
+    print(f"ELAPSED {time.time() - start:.2f}s")
+    result.report()
+
+
+@app.command("dd-no-relink")
+def decrypt_dir_no_relink(
+    epub_dir: DirectoryPath = typer.Argument(exists=True),
+    dry_run: bool = typer.Option(
+        False,
+        "-d",
+        "--dry_run",
+        help="Process and record analytics, discard output, and leave originals in place.",
+    ),
+):
+    """Decrypt Panda books recursively while preserving image formats and paths."""
+    start = time.time()
+    results = recipe_epubs.process_encrypted_pandas_no_relink(
+        directory=epub_dir,
+        max_workers=8,
+        flush_size=32,
+        dry_run=dry_run,
+    )
+    for result in results:
+        result.report()
+    print(f"ELAPSED {time.time() - start:.2f}s")
+
+
 @app.command("il")
 def image_log(epub_path: Path = typer.Argument(exists=True)):
     start = time.time()

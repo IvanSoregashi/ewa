@@ -1,6 +1,6 @@
 import pytest
 
-from library.image.optimization import crop_dimensions
+from library.image.utils import crop_dimensions
 
 
 @pytest.mark.parametrize(
