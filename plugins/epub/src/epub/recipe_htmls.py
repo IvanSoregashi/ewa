@@ -30,7 +30,6 @@ class ReplaceLinks(EpubOperation):
     """Update HTML/OPF and report their unmatched paths separately for verification."""
 
     def perform(self, context: ProcessingContext) -> None:
-        logger.info("ReplaceLinks start")
         if not context.replacements:
             return
         epub = context.epub
@@ -44,7 +43,6 @@ class TextTranslator(EpubOperation):
         self.replacement_dict = replacement_dict
 
     def perform(self, context: ProcessingContext) -> None:
-        logger.info("TextTranslator start")
         for resource in context.epub.resources.by_role(EpubRole.HTML):
             translate_text(resource, self.replacement_dict)
 
@@ -65,7 +63,6 @@ class RemoveResourceAndManifest(EpubOperation):
         self.flush = flush
 
     def perform(self, context: ProcessingContext) -> None:
-        logger.info("RemoveResourceAndManifest start")
         epub = context.epub
         resources = epub.resources
 

@@ -100,7 +100,6 @@ def _process_encrypted_pandas(
         with ProcessPoolExecutor(max_workers=max_workers) as pool:
             futures = {}
             for path in paths:
-                logger.info(f"passing in {path}")
                 try:
                     future = pool.submit(processor, str(path), dry_run=dry_run)
                 except Exception as error:

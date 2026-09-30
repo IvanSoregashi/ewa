@@ -1,4 +1,3 @@
-import logging
 from pathlib import Path
 
 from epub.errors import InvalidEpubOutput
@@ -10,15 +9,11 @@ from library.epub.media_type import FileName
 from library.epub.package_urls import path_url
 from library.epub.utils_href import posix_relative_href
 
-logger = logging.getLogger(__name__)
-
-
 class PackageEpub(EpubOperation):
     def __init__(self, destination: str | Path) -> None:
         self.destination = destination
 
     def perform(self, context: ProcessingContext) -> None:
-        logger.info(f"PackageEpub {self.destination}")
         context.epub.package_into(self.destination, sort_by_role=True)
         context.succeed(validate_epub_output(self.destination))
 

@@ -1,6 +1,3 @@
-import logging
-import time
-
 from PIL import Image
 
 from library.asserts import require
@@ -17,7 +14,6 @@ from library.image.context import ImageProcessingContext
 from library.image.models import ImageOptimizationResult, ImageSkipReason
 from library.image.utils import useless_transparency_mode, crop_dimensions
 
-logger = logging.getLogger(__name__)
 
 
 def minimum_filesize(context: ImageProcessingContext) -> ImageSkipReason | None:
@@ -123,7 +119,6 @@ def optimize_image(
         min_filesize=min_filesize,
         max_dimensions=max_dimensions,
     ) as context:
-        start_time = time.time()
         context.open_bytes_as_image(content)
         context.verify(minimum_filesize, supported_format, static_image)
         remove_useless_alpha(context)
@@ -132,12 +127,7 @@ def optimize_image(
         select_encoding(context)
         recompress_jpeg(context)
         convert_image(context)
-        elapsed_time = time.time() - start_time
-        logger.info(f"converted image in {elapsed_time:.2f} seconds {context.operations}")
-        start_time = time.time()
         select_dimensions(context)
         select_encoding(context)
         resize_image(context)
-        elapsed_time = time.time() - start_time
-        logger.info(f"resized image in {elapsed_time:.2f} seconds {context.operations}")
     return context.outcome()
