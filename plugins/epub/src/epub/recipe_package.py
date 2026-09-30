@@ -9,7 +9,9 @@ from library.epub.epub import EPUB, EpubInfo
 from library.epub.media_type import FileName
 from library.epub.package_urls import path_url
 from library.epub.utils_href import posix_relative_href
+
 logger = logging.getLogger(__name__)
+
 
 class PackageEpub(EpubOperation):
     def __init__(self, destination: str | Path) -> None:

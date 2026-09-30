@@ -111,7 +111,7 @@ def decrypt_no_relink(
         help="Process and record analytics, discard output, and leave originals in place.",
     ),
 ):
-    """Decrypt one Panda book while preserving image formats and paths."""
+    """Decrypt one Panda book, allowing nested packages and multiple Panda fonts."""
     if not recipe_epub.should_process_path(epub_path):
         return
     start = time.time()
@@ -130,7 +130,7 @@ def decrypt_dir_no_relink(
         help="Process and record analytics, discard output, and leave originals in place.",
     ),
 ):
-    """Decrypt Panda books recursively while preserving image formats and paths."""
+    """Decrypt Panda books recursively, allowing nested packages and multiple Panda fonts."""
     start = time.time()
     results = recipe_epubs.process_encrypted_pandas_no_relink(
         directory=epub_dir,

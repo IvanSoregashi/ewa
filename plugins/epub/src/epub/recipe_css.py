@@ -5,6 +5,7 @@ from epub.processing import ProcessingContext
 from epub.protocols import EpubOperation
 from library.epub.media_type import EpubRole
 from library.epub.resources import Resource
+
 logger = logging.getLogger(__name__)
 
 FONT_FACE = re.compile(r"@font-face\s*\{[^}]*\}")

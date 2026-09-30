@@ -97,7 +97,9 @@ def _process_encrypted_panda_no_relink(path: str, *, dry_run: bool = False) -> P
         context.open_epub(current_path).verify(SerenePanda())
         context.perform(RemoveResourceAndManifest(path=FileName.SP_FONT_LOWER_ENDSWITH, flush=False))
         context.perform(CleanupPandaCSS())
-        context.perform(OptimizeImages(convert_png_to_jpeg=False))
+        context.perform(OptimizeImages())
+        context.perform(ReplaceLinks())
+        save_unmatched_links(context, relative_path)
         context.perform(TextTranslator(sp_dictionary))
         context.perform(PackageEpub(destination_path))
 
@@ -117,6 +119,23 @@ def _process_encrypted_panda_no_relink(path: str, *, dry_run: bool = False) -> P
     logger.info(f"success {path!s} {dry_run=}")
     move_the_files(current_path, processed_path, destination_path, dry_run=dry_run)
     return run
+
+
+def save_unmatched_links(context: ProcessingContext, relative_path: Path) -> None:
+    report_path = settings.epub_settings_dir / "unmatched_links" / (relative_path.name + ".json")
+    try:
+        if context.unmatched_links or context.unmatched_manifest_links:
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            json_dict = {
+                "unmatched_links": context.unmatched_links,
+                "unmatched_manifest_links": context.unmatched_manifest_links,
+            }
+            report_path.write_text(json.dumps(json_dict, ensure_ascii=False, indent=2), encoding="utf-8")
+            logger.warning("Unmatched links saved to %s", report_path)
+        else:
+            report_path.unlink(missing_ok=True)
+    except OSError as error:
+        logger.warning("Could not update unmatched-link report %s: %s", report_path, error)
 
 
 def move_the_files(current_path: Path, processed_path: Path, destination_path: Path, *, dry_run: bool) -> None:

@@ -19,6 +19,7 @@ from library.image.utils import useless_transparency_mode, crop_dimensions
 
 logger = logging.getLogger(__name__)
 
+
 def minimum_filesize(context: ImageProcessingContext) -> ImageSkipReason | None:
     if context.original_image_info.filesize < context.min_filesize:
         return ImageSkipReason.SMALL_IMAGE

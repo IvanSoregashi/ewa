@@ -23,6 +23,7 @@ from library.epub.utils_href import posix_relative_href
 @pytest.fixture
 def recipe(tmp_path, monkeypatch):
     settings = SimpleNamespace(
+        profile_dir=tmp_path / "profile",
         encrypted_epub_dir=tmp_path / "input",
         decrypted_epub_dir=tmp_path / "output",
         processed_epub_dir=tmp_path / "processed",

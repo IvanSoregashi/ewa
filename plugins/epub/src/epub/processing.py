@@ -19,6 +19,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class _SkipBook(Exception):
     reason: EpubSkipReason

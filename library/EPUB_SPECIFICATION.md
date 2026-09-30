@@ -148,12 +148,19 @@ recipe_package.replace_links returns missing manifest entries without adding dec
 on their absence. A referenced image can succeed without its manifest entry; an image absent from
 HTML still yields UNMATCHED_LINKS.
 
-The alternative _process_encrypted_panda_no_relink recipe preserves image formats/paths, omits
-ReplaceLinks/NoUnmatchedLinks and the root-OPF restriction, and removes all matching Panda fonts.
+The alternative _process_encrypted_panda_no_relink recipe allows nested OPF paths and removes
+all matching Panda fonts. It now uses default image optimization, including PNG-to-JPEG conversion,
+then ReplaceLinks for HTML/manifest updates. Unmatched links do not skip this alternative recipe:
+it saves separate `unmatched_links` and `unmatched_manifest_links` mappings to
+`profile_dir/epub/unmatched_links/<relative-book-path>.json` before translation/export.
+Input subdirectories are mirrored to avoid collisions between same-named books. Reports are
+kept during dry runs; a clean retry removes the previous report. Report I/O failures only log a
+warning. The default _fully_process_encrypted_panda recipe retains its NoUnmatchedLinks gate.
+The no_relink names are retained for existing callers; they no longer describe the recipe's behavior.
 SerenePanda still requires all detected fonts to satisfy its Panda filename rule. The public
 process_encrypted_panda_no_relink wrapper records one run; process_encrypted_pandas_no_relink
 uses the shared batch dispatcher and parent-side persistence. Both retain existing path-filtering
-ownership and dry-run behavior. CLI commands `decrypt-no-relink` (one book) and `dd-no-relink`
+ownership and dry-run behavior. CLI commands `decrypt-no-relink` (one book) and `dd-nr`
 (recursive batch) expose `-d` / `--dry_run`; existing `decrypt` and `dd` keep the default recipe.
 
 Before retiring the legacy recipe, synthetic comparisons checked outcomes, metadata, image evidence

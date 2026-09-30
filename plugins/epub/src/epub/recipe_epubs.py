@@ -48,7 +48,7 @@ def process_encrypted_pandas_no_relink(
     *,
     dry_run: bool = False,
 ) -> list[ProcessingRun]:
-    """Use the no-relink recipe with the same batching, filtering, and persistence."""
+    """Use the alternative Panda recipe with the same batching, filtering, and persistence."""
     return _process_encrypted_pandas(
         directory, _process_encrypted_panda_no_relink, max_workers, flush_size, dry_run=dry_run
     )

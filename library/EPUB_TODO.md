@@ -111,6 +111,10 @@ working conventions and validation commands are in [AGENTS.md](../AGENTS.md).
 
 - [x] Expose the no-relink Panda recipe through single-book and batch Python entry points and `decrypt-no-relink` / `dd-no-relink` CLI commands. Share batch orchestration; retain filtering, parent-side analytics, and dry-run handling. Validate CLI dispatch and synchronous/spawned execution with synthetic books and temporary databases.
 
+- [x] Restore PNG-to-JPEG conversion and HTML/manifest link replacement in the alternative Panda recipe, followed by NoUnmatchedLinks before export. Retain nested-OPF/multiple-font support, existing entry-point names, and current CLI batch settings. Verify converted output references, unmatched-link skips, collisions, persistence, and synchronous/spawned callers.
+
+- [x] Let the alternative Panda recipe continue after unmatched links, saving separate HTML/manifest mappings under `profile_dir/epub/unmatched_links` with the input's relative path. Preserve reports in dry runs, remove stale reports on clean retries, and treat report I/O failures as nonfatal. Keep the default recipe's unmatched-link gate.
+
 ## Backlog after the migration
 
 These tasks are unscheduled; their order is not an implementation commitment.
