@@ -7,10 +7,10 @@ requires-python = ">=3.14"
 dependencies = []
 
 [project.optional-dependencies]
-database_work = ["sqlitedict>=2.1.0", "sqlmodel>=0.0.37", "pandas==3.0.1", ]
-document_work = ["beautifulsoup4>=4.14.3", "ebooklib>=0.20", "lxml>=6.0.2", "pydantic-xml>=2.19.0", ]
+database_work = ["sqlitedict>=2.1.0", "sqlmodel>=0.0.47", "pandas==3.0.6", ]
+document_work = ["beautifulsoup4>=4.14.3", "ebooklib>=0.20", "lxml>=6.1.3", "pydantic-xml>=2.21.1", ]
 image_work = ["pillow>=12.1.1", "pytesseract", ]
-strings_work = ["numpy==2.4.2", "pandas==3.0.1", "sparse-dot-topn==1.2.0", "scipy==1.17.1", "scikit-learn", "rapidfuzz", "thefuzz", ]
+strings_work = ["numpy==2.5.3", "pandas==3.0.6", "sparse-dot-topn==1.2.0", "scipy==1.18.1", "scikit-learn", "rapidfuzz", "thefuzz", ]
 all = ["sqlitedict", "sqlmodel", "pandas", "beautifulsoup4","lxml","ebooklib", "pillow", "pytesseract", "numpy", "sparse-dot-topn", "scipy", "scikit-learn", "rapidfuzz", "thefuzz", "pydantic-xml"]
 
 [build-system]

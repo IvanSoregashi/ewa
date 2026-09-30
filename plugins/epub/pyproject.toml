@@ -24,6 +24,4 @@ packages = ["src/epub"]
 epub = "epub.main:app"
 
 [dependency-groups]
-dev = [
-    "ruff>=0.14.7",
-]
+dev = ["ruff"]
