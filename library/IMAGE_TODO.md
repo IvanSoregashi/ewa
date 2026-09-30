@@ -115,6 +115,8 @@ designs superseded by later steps. Step 12 records the validation and caller swi
 - [x] Consider replacement resources for path-changing conversions. Retain indexed rename and update the existing manifest declaration: resource/item identity preserves IDs, cover properties, and dependent references. Verify export/reopen in regression tests; see [adapter ownership](EPUB_SPECIFICATION.md#state-and-ownership).
 - [x] Save GIF-to-MP4 conversion, poster/video markup, remaining experimental GIF helpers, and their tests on `codex/gif-experiments`. Remove them from this branch; image optimization continues to skip animated images.
 
+- [x] Resolve occupied PNG-to-JPEG output paths in the EPUB adapter with the first free numbered filename in the same directory. Preserve existing resources and propagate the selected name through analytics, HTML/manifest updates, and unmatched-link reports; keep ResourceIndex.rename strict.
+
 ## Backlog after the migration
 
 No unfinished items currently scheduled here.

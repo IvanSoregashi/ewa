@@ -127,7 +127,7 @@ These tasks are unscheduled; their order is not an implementation commitment.
 - [ ] Define proper EPUB output validation beyond reopening and metadata reading: agree on validation scope and tooling for archive/package integrity, content references, and EPUB conformance.
 
 
-# Another issue with useless text, watermarks?
+# Another issue with useless text, watermarks? waste of space.
 ```css
 .calibre5 {
   height: 0.01em;

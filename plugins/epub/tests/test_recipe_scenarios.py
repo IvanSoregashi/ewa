@@ -100,7 +100,7 @@ def test_recipe_outcomes_and_exported_contents(recipe, monkeypatch, scenario, dr
     run = recipe._fully_process_encrypted_panda(str(path), dry_run=dry_run)
     destination = recipe.settings.decrypted_epub_dir / path.name
     processed = recipe.settings.processed_epub_dir / path.name
-    success = scenario in {"conversion", "multiple_fonts", "small_image", "broken_image"}
+    success = scenario in {"conversion", "multiple_fonts", "small_image", "broken_image", "collision"}
     expected_skip = {
         "unmatched_links": EpubSkipReason.UNMATCHED_LINKS,
         "wrong_opf": EpubSkipReason.NON_DEFAULT_OPF,
@@ -115,8 +115,8 @@ def test_recipe_outcomes_and_exported_contents(recipe, monkeypatch, scenario, dr
     assert run.skip == expected_skip
     assert run.error == expected_error
     assert all(record.run_id == run.id for record in run.analytics)
-    early_failure = scenario in {"wrong_opf", "no_font", "missing_source", "bad_archive", "bad_metadata", "collision"}
-    assert len(run.analytics) == (0 if early_failure else 1)
+    early_failure = scenario in {"wrong_opf", "no_font", "missing_source", "bad_archive", "bad_metadata"}
+    assert len(run.analytics) == (0 if early_failure else 2 if scenario == "collision" else 1)
     assert (run.new_epub is not None) == success
     if success and not dry_run:
         assert destination.exists()
@@ -131,6 +131,12 @@ def test_recipe_outcomes_and_exported_contents(recipe, monkeypatch, scenario, dr
     if scenario in {"conversion", "multiple_fonts"}:
         chapter = dict(exports[0])["chapter.xhtml"]
         assert b"Dext" in chapter and b"cover.jpg" in chapter
+    elif scenario == "collision":
+        contents = dict(exports[0])
+        assert contents["cover.jpg"] == b"existing resource"
+        assert b"cover_1.jpg" in contents["chapter.xhtml"]
+        assert b"cover_1.jpg" in contents["content.opf"]
+        assert "cover_1.jpg" in contents and "cover.png" not in contents
 
 
 @pytest.mark.parametrize("referenced", [False, True])

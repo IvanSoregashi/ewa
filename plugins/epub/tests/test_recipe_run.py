@@ -24,6 +24,7 @@ from library.epub.utils_href import posix_relative_href
 def recipe(tmp_path, monkeypatch):
     settings = SimpleNamespace(
         profile_dir=tmp_path / "profile",
+        epub_settings_dir=tmp_path / "profile" / "epub",
         encrypted_epub_dir=tmp_path / "input",
         decrypted_epub_dir=tmp_path / "output",
         processed_epub_dir=tmp_path / "processed",

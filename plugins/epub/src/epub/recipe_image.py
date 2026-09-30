@@ -80,12 +80,17 @@ def perform_image_optimization(
     if result.success:
         new_image_info = require(result.new_image)
         if new_image_info.format is ImageFormat.JPEG and result.original_image.format is ImageFormat.PNG:
-            new_path = str(PurePosixPath(resource.filename).with_suffix(".jpg"))
-            new_image_info.path = new_path
+            jpeg_path = PurePosixPath(resource.filename).with_suffix(".jpg")
+            new_path = str(jpeg_path)
             if resources is not None:
+                number = 1
+                while resources.by_path(new_path) is not None:
+                    new_path = str(jpeg_path.with_name(f"{jpeg_path.stem}_{number}.jpg"))
+                    number += 1
                 resources.rename(resource, new_path)
             else:
                 resource.filename = new_path
+            new_image_info.path = new_path
         resource.content = require(optimized)
 
     return result

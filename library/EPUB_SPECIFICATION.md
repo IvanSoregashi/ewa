@@ -78,7 +78,10 @@ remain the recipe's responsibility.
 perform_image_optimization remains a short EPUB resource recipe: acquire resource bytes and
 plain ZIP compression data, call the image optimizer, then apply accepted bytes and any
 inventory rename. Resource changes, link mappings, and database analytics stay in the plugin.
-No resource is modified for an image skip/error; collisions still stop the book.
+No resource is modified for an image skip/error. When a PNG-to-JPEG target already exists,
+the adapter tries numbered names in the same directory (`cover_1.jpg`, `cover_2.jpg`, ...),
+choosing the first unused path in the current resource index. Existing targets are not overwritten.
+The selected path is used in image analytics and the replacement mapping.
 No resource context is introduced by the image refactor.
 
 Conversions retain Resource and manifest-item identity. Rename the indexed resource and update
@@ -86,8 +89,8 @@ the existing declaration's href/media type through ReplaceLinks, preserving its 
 and dependent references such as cover metadata and fallbacks. Creating a replacement resource
 would require rebuilding these relationships without a demonstrated benefit.
 
-Image decode/optimization errors remain per-image evidence; inventory rename collisions
-stop the book without overwriting the existing resource. ReplaceLinks consumes the mapping
+Image decode/optimization errors remain per-image evidence. ResourceIndex.rename still rejects
+collisions; image conversion chooses a free filename before calling it. ReplaceLinks consumes the mapping
 in HTML and then OPF, clearing it after both passes complete. It records missing old paths
 separately: context.unmatched_links for non-manifest files (currently HTML), and
 context.unmatched_manifest_links for manifest entries. Both retain old-to-new path mappings.
@@ -152,8 +155,8 @@ The alternative _process_encrypted_panda_no_relink recipe allows nested OPF path
 all matching Panda fonts. It now uses default image optimization, including PNG-to-JPEG conversion,
 then ReplaceLinks for HTML/manifest updates. Unmatched links do not skip this alternative recipe:
 it saves separate `unmatched_links` and `unmatched_manifest_links` mappings to
-`profile_dir/epub/unmatched_links/<relative-book-path>.json` before translation/export.
-Input subdirectories are mirrored to avoid collisions between same-named books. Reports are
+`epub_settings_dir/unmatched_links/<book-filename>.json` before translation/export (for example,
+`book.epub.json`). Reports use the basename, so equal filenames share a report path. Reports are
 kept during dry runs; a clean retry removes the previous report. Report I/O failures only log a
 warning. The default _fully_process_encrypted_panda recipe retains its NoUnmatchedLinks gate.
 The no_relink names are retained for existing callers; they no longer describe the recipe's behavior.

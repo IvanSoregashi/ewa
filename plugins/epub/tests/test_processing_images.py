@@ -201,34 +201,75 @@ def test_success_without_rename_does_not_require_html_match(tmp_path, image_byte
     assert require(output.resources.by_path("OEBPS/images/cover.jpg")).content != buffer.getvalue()
 
 
-@pytest.mark.parametrize("collision", ["cover.jpg", "cover.PNG"])
-def test_collision_stops_book_without_overwrite_and_retains_earlier_evidence(
-    tmp_path, image_bytes, collision, optimize_images
+@pytest.mark.parametrize(
+    "occupied,expected",
+    [
+        ([], "cover.jpg"),
+        (["cover.jpg"], "cover_1.jpg"),
+        (["cover.jpg", "cover_1.jpg"], "cover_2.jpg"),
+        (["cover.jpg", "cover_2.jpg"], "cover_1.jpg"),
+        (["cover.jpg", "cover_1.jpg", "cover_2.jpg"], "cover_3.jpg"),
+    ],
+)
+def test_conversion_chooses_free_name_and_preserves_existing_resources(
+    tmp_path, image_bytes, occupied, expected, optimize_images
 ):
-    images = {"first.png": image_bytes, "cover.png": image_bytes, collision: image_bytes}
+    buffer = BytesIO()
+    with Image.new("RGB", (8, 8)) as image:
+        image.save(buffer, format="JPEG")
+    existing = buffer.getvalue()
+    images = {"first.png": image_bytes, "cover.png": image_bytes, **dict.fromkeys(occupied, existing)}
     path = make_book(tmp_path, images)
     original = path.read_bytes()
+    destination = f"OEBPS/images/{expected}"
     with ProcessingContext() as context:
         context.open_epub(path).perform(optimize_images())
-        pytest.fail("Rename collision must stop processing")
-
+        assert context.replacements == {
+            "OEBPS/images/first.png": "OEBPS/images/first.jpg",
+            "OEBPS/images/cover.png": destination,
+        }
+        context.perform(ReplaceLinks()).verify(NoUnmatchedLinks())
+        output = export(context, tmp_path)
     run = require(context.result)
-    assert run.error == EpubErrorReason.UNKNOWN
-    assert "Resource already exists" in run.details
-    expected_count = 1 if collision == "cover.jpg" else 2
-    assert len(run.analytics) == expected_count
-    assert all(isinstance(record, ImageOptimizationRecord) and record.success for record in run.analytics)
-    failed_name = "cover.png" if collision == "cover.jpg" else "cover.PNG"
-    assert require(context.epub.resources.by_path(f"OEBPS/images/{failed_name}")).content == image_bytes
-    target = require(context.epub.resources.by_path("OEBPS/images/cover.jpg"))
-    if collision == "cover.jpg":
-        assert target.content == image_bytes
-    else:
-        with Image.open(BytesIO(target.content)) as image:
-            assert image.format == "JPEG"
-    assert "OEBPS/images/first.png" in context.replacements
-    assert f"OEBPS/images/{failed_name}" not in context.replacements
+    assert run.success, run.details
+    assert len(run.analytics) == len(images)
+    converted = next(record for record in run.analytics if record.original_image.path.endswith("/cover.png"))
+    assert converted.success and require(converted.new_image).path == destination
+    with Image.open(BytesIO(require(output.resources.by_path(destination)).content)) as image:
+        image.load()
+        assert image.format == "JPEG"
+    for name in occupied:
+        resource = require(output.resources.by_path(f"OEBPS/images/{name}"))
+        assert resource.content == existing
+        assert require(output.package.manifest_item_by_path(resource.filename)).href == f"images/{name}"
+    item = require(output.package.manifest_item_by_path(destination))
+    assert item.id == "image1" and item.media_type == "image/jpeg" and item.href == f"images/{expected}"
+    chapter = require(output.resources.by_path("OEBPS/text/chapter.xhtml"))
+    assert etree.fromstring(chapter.content).xpath("//img/@src") == [
+        "../images/first.jpg",
+        f"../images/{expected}",
+        *[f"../images/{name}" for name in occupied],
+    ]
     assert path.read_bytes() == original
+
+
+def test_two_pngs_with_same_stem_get_distinct_jpeg_paths(tmp_path, image_bytes, optimize_images):
+    path = make_book(tmp_path, {"cover.png": image_bytes, "cover.PNG": image_bytes})
+    with ProcessingContext() as context:
+        context.open_epub(path).perform(optimize_images())
+        assert context.replacements == {
+            "OEBPS/images/cover.png": "OEBPS/images/cover.jpg",
+            "OEBPS/images/cover.PNG": "OEBPS/images/cover_1.jpg",
+        }
+        context.perform(ReplaceLinks()).verify(NoUnmatchedLinks())
+        output = export(context, tmp_path)
+    assert context.result.success, context.result.details
+    assert all(record.success for record in context.result.analytics)
+    for name in ("cover.jpg", "cover_1.jpg"):
+        assert output.resources.by_path(f"OEBPS/images/{name}") is not None
+        assert output.package.manifest_item_by_path(f"OEBPS/images/{name}") is not None
+    chapter = require(output.resources.by_path("OEBPS/text/chapter.xhtml"))
+    assert etree.fromstring(chapter.content).xpath("//img/@src") == ["../images/cover.jpg", "../images/cover_1.jpg"]
 
 
 @pytest.mark.parametrize("verify_links", [False, True])

@@ -49,9 +49,13 @@ def test_spawn_matches_synchronous_outcomes_bytes_and_persistence(recipe, batch,
     write_book(root / "success.epub")
     write_book(root / "skip.epub", referenced=False)
     error = write_book(root / "error.epub")
-    with ZipFile(error, "a") as archive:
-        archive.writestr("second.png", archive.read("cover.png"))
-        archive.writestr("second.jpg", b"existing resource")
+    # Fail link rewriting after image processing so earlier analytics survive.
+    with ZipFile(error) as archive:
+        files = {name: archive.read(name) for name in archive.namelist()}
+    files["chapter.xhtml"] = b""
+    with ZipFile(error, "w") as archive:
+        for name, content in files.items():
+            archive.writestr(name, content)
     # Preserve an existing container's timestamp instead of generating one per run.
     for path in root.glob("*.epub"):
         with ZipFile(path, "a") as archive:

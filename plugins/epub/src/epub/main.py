@@ -134,6 +134,7 @@ def decrypt_dir_no_relink(
     start = time.time()
     results = recipe_epubs.process_encrypted_pandas_no_relink(
         directory=epub_dir,
+        max_workers=8,
         flush_size=8,
         dry_run=dry_run,
     )

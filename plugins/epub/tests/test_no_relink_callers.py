@@ -153,7 +153,7 @@ def test_alternative_recipe_reports_unmatched_conversion(recipe, dry_run):
     run = recipe._process_encrypted_panda_no_relink(str(path), dry_run=dry_run)
     assert run.success and run.skip is None
     assert len(run.analytics) == 1 and run.analytics[0].success
-    report = recipe.settings.profile_dir / "epub/unmatched_links/orphan.json"
+    report = recipe.settings.profile_dir / "epub/unmatched_links/orphan.epub.json"
     assert json.loads(report.read_text(encoding="utf-8")) == {
         "unmatched_links": {"cover.png": "cover.jpg"},
         "unmatched_manifest_links": {},
@@ -166,16 +166,25 @@ def test_alternative_recipe_reports_unmatched_conversion(recipe, dry_run):
 
 
 @pytest.mark.parametrize("dry_run", [False, True])
-def test_alternative_recipe_rejects_image_rename_collision(recipe, dry_run):
+def test_alternative_recipe_resolves_image_rename_collision(recipe, dry_run):
     path = write_book(recipe.settings.encrypted_epub_dir / "collision.epub", opf_path="OEBPS/package.opf")
     with ZipFile(path, "a") as archive:
         archive.writestr("cover.jpg", b"existing resource")
     original = path.read_bytes()
     run = recipe._process_encrypted_panda_no_relink(str(path), dry_run=dry_run)
-    assert run.error == EpubErrorReason.UNKNOWN and not run.success
-    assert path.read_bytes() == original
-    assert not (recipe.settings.decrypted_epub_dir / path.name).exists()
-    assert not (recipe.settings.processed_epub_dir / path.name).exists()
+    assert run.success, run.details
+    converted = next(record for record in run.analytics if record.original_image.path == "cover.png")
+    assert converted.success and converted.new_image.path == "cover_1.jpg"
+    processed = recipe.settings.processed_epub_dir / path.name
+    assert (path if dry_run else processed).read_bytes() == original
+    output = recipe.settings.decrypted_epub_dir / path.name
+    assert output.exists() == (not dry_run)
+    if not dry_run:
+        with ZipFile(output) as archive:
+            assert archive.read("cover.jpg") == b"existing resource"
+            assert "cover_1.jpg" in archive.namelist() and "cover.png" not in archive.namelist()
+            assert b"cover_1.jpg" in archive.read("chapter.xhtml")
+            assert b"../cover_1.jpg" in archive.read("OEBPS/package.opf")
 
 
 def test_alternative_recipe_reports_manifest_only_misses(recipe):
@@ -193,7 +202,7 @@ def test_alternative_recipe_reports_manifest_only_misses(recipe):
             archive.writestr(name, data)
     run = recipe._process_encrypted_panda_no_relink(str(path), dry_run=True)
     assert run.success
-    report = recipe.settings.profile_dir / "epub/unmatched_links/missing-manifest.json"
+    report = recipe.settings.profile_dir / "epub/unmatched_links/missing-manifest.epub.json"
     assert json.loads(report.read_text(encoding="utf-8")) == {
         "unmatched_links": {},
         "unmatched_manifest_links": {"cover.png": "cover.jpg"},
@@ -202,7 +211,7 @@ def test_alternative_recipe_reports_manifest_only_misses(recipe):
 
 def test_clean_retry_removes_previous_unmatched_report(recipe):
     path = write_book(recipe.settings.encrypted_epub_dir / "retry.epub", referenced=False)
-    report = recipe.settings.profile_dir / "epub/unmatched_links/retry.json"
+    report = recipe.settings.profile_dir / "epub/unmatched_links/retry.epub.json"
     assert recipe._process_encrypted_panda_no_relink(str(path), dry_run=True).success
     assert report.exists()
     write_book(path, referenced=True)
@@ -226,21 +235,34 @@ def test_report_write_failure_does_not_block_processing(recipe, monkeypatch, cap
     assert path.exists()
 
 
-def test_spawned_reports_keep_same_named_books_separate(recipe, batch):
+def test_spawned_reports_are_written_for_each_book(recipe, batch):
     root = recipe.settings.encrypted_epub_dir
     for folder in ("first", "second"):
         parent = root / folder
         parent.mkdir()
-        write_book(parent / "book.epub", referenced=False)
+        write_book(parent / f"{folder}.epub", referenced=False)
     runs = batch.process_encrypted_pandas_no_relink(root, max_workers=2, flush_size=1, dry_run=True)
     assert len(runs) == 2 and all(run.success for run in runs)
     reports = recipe.settings.profile_dir / "epub/unmatched_links"
     assert sorted(path.relative_to(reports).as_posix() for path in reports.rglob("*.json")) == [
-        "first/book.json",
-        "second/book.json",
+        "first.epub.json",
+        "second.epub.json",
     ]
     for report in reports.rglob("*.json"):
         assert json.loads(report.read_text(encoding="utf-8")) == {
             "unmatched_links": {"cover.png": "cover.jpg"},
             "unmatched_manifest_links": {},
         }
+
+
+def test_unmatched_report_uses_selected_conversion_filename(recipe):
+    path = write_book(recipe.settings.encrypted_epub_dir / "orphan.epub", referenced=False)
+    with ZipFile(path, "a") as archive:
+        archive.writestr("cover.jpg", b"existing resource")
+    run = recipe._process_encrypted_panda_no_relink(str(path), dry_run=True)
+    assert run.success, run.details
+    report = recipe.settings.profile_dir / "epub/unmatched_links/orphan.epub.json"
+    assert json.loads(report.read_text(encoding="utf-8")) == {
+        "unmatched_links": {"cover.png": "cover_1.jpg"},
+        "unmatched_manifest_links": {},
+    }
