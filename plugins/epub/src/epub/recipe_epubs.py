@@ -1,22 +1,83 @@
-"""Parent-side multiprocessing orchestration: workers run the pure conversion
-(str in, unsaved run out, no DB access), the parent accumulates results and
-flushes analytics to the database in batches while conversions continue.
-"""
+"""Batch recipes: workers return records; the caller persists them in batches."""
 
 import logging
 import time
-from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from collections.abc import Callable, Iterable
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from epub.config import settings
 from epub.errors import EpubErrorReason
-from epub.recipe_analytics import record_analytics
 from epub.processing_run import ProcessingRun
-from epub.recipe_epub import _fully_process_encrypted_panda, _process_encrypted_panda_no_relink, should_process_path
+from epub.recipe_analytics import record_analytics
+from epub.recipe_epub import (
+    _fully_process_encrypted_panda,
+    _process_encrypted_panda_no_relink,
+    should_process_path,
+    trying_to_get_stats,
+)
+from epub.schema_stats import EpubSchemaStats, EpubSchemaStatsTable
 from ewa.ui import print_success
 
 logger = logging.getLogger(__name__)
+
+
+def collect_schema_stats(
+    directory: Path,
+    max_workers: int | None = 8,
+    flush_size: int = 32,
+    *,
+    database_url: str | None = None,
+) -> list[EpubSchemaStats]:
+    """Survey EPUBs recursively without changing books. None/0 workers runs synchronously.
+
+    One row per absolute path is replaced on reruns. Failed reads have an error;
+    exclude those rows from statistics. Database failures propagate.
+    """
+    directory = directory.expanduser().resolve()
+    if not directory.is_dir():
+        raise NotADirectoryError(directory)
+    if max_workers is not None and max_workers < 0:
+        raise ValueError("max_workers must be nonnegative")
+    if flush_size < 1:
+        raise ValueError("flush_size must be positive")
+
+    paths = (path for path in directory.rglob("*") if path.suffix.lower() == ".epub" and path.is_file())
+    results: list[EpubSchemaStats] = []
+    buffer: list[EpubSchemaStats] = []
+
+    def scan(path: Path) -> EpubSchemaStats:
+        try:
+            return trying_to_get_stats(path)
+        except Exception as error:
+            logger.error("Schema stats failed for %s: %r", path, error, exc_info=True)
+            return EpubSchemaStats(filepath=str(path), error=repr(error))
+
+    with EpubSchemaStatsTable(database_url or settings.database_url) as table:
+
+        def save(rows: Iterable[EpubSchemaStats]) -> None:
+            for row in rows:
+                buffer.append(row)
+                if len(buffer) >= flush_size:
+                    flush()
+            flush()
+
+        def flush() -> None:
+            if not buffer:
+                return
+            table.upsert_many(buffer)
+            results.extend(buffer)
+            buffer.clear()
+            print_success(f"Schema stats: {len(results)} EPUBs saved")
+
+        if max_workers:
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                # Keep the queued work bounded even for very large libraries.
+                save(pool.map(scan, paths, buffersize=max_workers * 2))
+        else:
+            save(map(scan, paths))
+
+    return results
 
 
 def fully_process_encrypted_pandas(

@@ -1,19 +1,18 @@
 import logging
 import time
+from pathlib import Path
+from typing import Annotated
 
 import typer
-from pathlib import Path
-
+from library.epub.epub import EPUB
+from library.epub.media_type import EpubRole, FileName
+from library.epub.utils import to_hex_hash
 from pydantic import DirectoryPath
 
 from epub import recipe_epub, recipe_epubs
-from epub.serene_panda.orchestration import move_file_preserving_hierarchy
-from ewa.ui import print_success, print_error
-from library.epub.media_type import FileName, EpubRole
-from library.epub.utils import to_hex_hash
-from library.epub.epub import EPUB
 from epub.config import settings
-
+from epub.serene_panda.orchestration import move_file_preserving_hierarchy
+from ewa.ui import print_error, print_success
 
 app = typer.Typer(help="Epub Plugin")
 logger = logging.getLogger("EPUB")
@@ -149,6 +148,34 @@ def image_log(epub_path: Path = typer.Argument(exists=True)):
     recipe_epub.image_stats(str(epub_path))
     elapsed = time.time() - start
     print(f"ELAPSED {elapsed:.2f}s")
+
+
+@app.command("stats")
+def schema_stats(
+    directory: Annotated[Path, typer.Argument(exists=True, file_okay=False, readable=True)],
+    workers: Annotated[int, typer.Option("--workers", "-w", min=0, help="Reader threads; 0 runs synchronously.")] = 8,
+    batch_size: Annotated[int, typer.Option("--batch-size", "-b", min=1)] = 32,
+    database: Annotated[
+        Path | None, typer.Option("--database", "-d", help="SQLite file; defaults to the configured database.")
+    ] = None,
+):
+    """Collect EPUB schema statistics recursively and save them in SQLite."""
+    database_url = settings.database_url
+    if database is not None:
+        database = database.expanduser().resolve()
+        database.parent.mkdir(parents=True, exist_ok=True)
+        database_url = f"sqlite:///{database}"
+    start = time.time()
+    results = recipe_epubs.collect_schema_stats(
+        directory, max_workers=workers, flush_size=batch_size, database_url=database_url
+    )
+    failed = sum(row.error is not None for row in results)
+    print_success(
+        f"Schema stats: {len(results) - failed} successful, {failed} failed; "
+        f"table epub_schema_stats in {database_url}; elapsed {time.time() - start:.2f}s"
+    )
+    if failed:
+        raise typer.Exit(1)
 
 
 @app.command("move-sp")
