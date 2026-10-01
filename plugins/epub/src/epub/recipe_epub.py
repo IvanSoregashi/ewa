@@ -1,26 +1,34 @@
-from dataclasses import dataclass
 import json
 import logging
 import shutil
 import time
 from pathlib import Path
 
-from epub.config import settings
-from epub.processing import ProcessingContext
-from epub.processing_run import ProcessingRun
-from epub import recipe_analytics
-from epub.recipe_css import CleanupPandaCSS
-from epub.recipe_htmls import RemoveResourceAndManifest, ReplaceLinks, TextTranslator
-from epub.recipe_image import OptimizeImages
-from epub.recipe_package import PackageEpub
-from epub.verification import NoUnmatchedLinks, OPFPath, SerenePanda
 from library.asserts import require
 from library.epub.epub import EPUB
 from library.epub.media_type import EpubRole, FileName
 
+from epub import recipe_analytics
+from epub.config import settings
+from epub.processing import ProcessingContext
+from epub.processing_run import ProcessingRun
+from epub.recipe_css import CleanupPandaCSS
+from epub.recipe_htmls import RemoveResourceAndManifest, ReplaceLinks, TextTranslator
+from epub.recipe_image import OptimizeImages
+from epub.recipe_package import PackageEpub
+from epub.schema_stats import EpubSchemaStats
+from epub.verification import NoUnmatchedLinks, OPFPath, SerenePanda
+
 logger = logging.getLogger(__name__)
 sp_dictionary_path: Path = settings.serene_panda_dir / "translator.json"
-sp_dictionary = str.maketrans(json.loads(sp_dictionary_path.read_text(encoding="utf-8")))
+sp_dictionary: dict[int, str | int | None] | None = None
+
+
+def get_sp_dictionary() -> dict[int, str | int | None]:
+    global sp_dictionary
+    if sp_dictionary is None:
+        sp_dictionary = str.maketrans(json.loads(sp_dictionary_path.read_text(encoding="utf-8")))
+    return sp_dictionary
 
 
 def should_process_path(path: Path) -> bool:
@@ -68,7 +76,7 @@ def _fully_process_encrypted_panda(path: str, *, dry_run: bool = False) -> Proce
         context.perform(CleanupPandaCSS())
         context.perform(OptimizeImages())
         context.perform(ReplaceLinks()).verify(NoUnmatchedLinks())
-        context.perform(TextTranslator(sp_dictionary))
+        context.perform(TextTranslator(get_sp_dictionary()))
         context.perform(PackageEpub(destination_path))
 
     run = require(context.result)
@@ -100,7 +108,7 @@ def _process_encrypted_panda_no_relink(path: str, *, dry_run: bool = False) -> P
         context.perform(OptimizeImages())
         context.perform(ReplaceLinks())
         save_unmatched_links(context, relative_path)
-        context.perform(TextTranslator(sp_dictionary))
+        context.perform(TextTranslator(get_sp_dictionary()))
         context.perform(PackageEpub(destination_path))
 
     run = require(context.result)
@@ -170,39 +178,10 @@ def image_stats(path: str) -> None:
     for size, list_percent in sorted(images.items()):
         logger.info(f"{size} KB files={len(list_percent)}, avg_percent={sum(list_percent) // len(list_percent)}")
 
-@dataclass
-class EpubSchemaStats:
-    has_titlepage: bool = False
-    has_stylesheet: bool = False
-    has_page_styles: bool = False
-    has_content: bool = False
-    has_toc: bool = False
 
-    fonts: int = 0
-    len_creators: int = 0
-    len_contributors: int = 0
-    len_identifiers: int = 0
-
-    guide_type: str | None = None
-    guide_href: str | None = None
-    guide_title: str | None = None
-
-    creator_file: str | None = None
-    creator_role: str | None = None
-    creator_text: str | None = None
-
-    contributor_role: str | None = None
-    contributor_text: str | None = None
-
-    identifier_id: str | None = None
-    identifier_scheme: str | None = None
-
-    has_calibre_ts: bool = False
-    has_cover_cover: bool = False
-
-def trying_to_get_stats(path: str):
-    current_path = Path(path)
-    ess = EpubSchemaStats()
+def trying_to_get_stats(path: str | Path) -> EpubSchemaStats:
+    current_path = Path(path).expanduser().resolve()
+    ess = EpubSchemaStats(filepath=str(current_path))
 
     with EPUB(current_path).keep_open() as epub:
         ess.has_titlepage = epub.resources.by_path("titlepage.xhtml") is not None
@@ -220,28 +199,30 @@ def trying_to_get_stats(path: str):
         ess.len_identifiers = len(metadata.identifiers)
 
         guide = package.guide
-        if guide is not None:
+        if guide is not None and guide.references:
             first_reference = guide.references[0]
             # <reference type="cover" href="titlepage.xhtml" title="Cover"/>
             ess.guide_type = first_reference.type
             ess.guide_href = first_reference.href
             ess.guide_title = first_reference.title
 
-        if len(metadata.creators):
+        if metadata.creators:
             first_creator = metadata.creators[0]
             ess.creator_file = first_creator.file_as or first_creator.file_as_ns
             ess.creator_role = first_creator.role or first_creator.role_ns
             ess.creator_text = first_creator.text
 
-        if len(metadata.contributors):
-            first_contributer = metadata.contributors[0]
-            ess.contributor_role = first_contributer.role or first_contributer.role_ns
-            ess.contributor_text = first_contributer.text
+        if metadata.contributors:
+            first_contributor = metadata.contributors[0]
+            ess.contributor_role = first_contributor.role or first_contributor.role_ns
+            ess.contributor_text = first_contributor.text
 
-        if len(metadata.identifiers):
+        if metadata.identifiers:
             first_identifier = metadata.identifiers[0]
             ess.identifier_id = first_identifier.id
-            ess.identifier_scheme = first_identifier.scheme
+            ess.identifier_scheme = first_identifier.scheme or first_identifier.scheme_ns
 
-        ess.has_calibre_ts = any(meta.name=="calibre:timestamp" for meta in metadata.metas)
-        ess.has_cover_cover = any(meta.name=="cover" and meta.content=="cover" for meta in metadata.metas)
+        ess.has_calibre_ts = any(meta.name == "calibre:timestamp" for meta in metadata.metas)
+        ess.has_cover_cover = any(meta.name == "cover" and meta.content == "cover" for meta in metadata.metas)
+
+    return ess
