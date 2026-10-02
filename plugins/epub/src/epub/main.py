@@ -152,7 +152,7 @@ def image_log(epub_path: Path = typer.Argument(exists=True)):
 
 @app.command("stats")
 def schema_stats(
-    directory: Annotated[Path, typer.Argument(exists=True, file_okay=False, readable=True)],
+    directories: Annotated[list[Path], typer.Argument(exists=True, file_okay=False, readable=True)],
     workers: Annotated[int, typer.Option("--workers", "-w", min=0, help="Reader threads; 0 runs synchronously.")] = 8,
     batch_size: Annotated[int, typer.Option("--batch-size", "-b", min=1)] = 32,
     database: Annotated[
@@ -166,9 +166,13 @@ def schema_stats(
         database.parent.mkdir(parents=True, exist_ok=True)
         database_url = f"sqlite:///{database}"
     start = time.time()
-    results = recipe_epubs.collect_schema_stats(
-        directory, max_workers=workers, flush_size=batch_size, database_url=database_url
-    )
+    results = []
+    for directory in directories:
+        results.extend(
+            recipe_epubs.collect_schema_stats(
+                directory, max_workers=workers, flush_size=batch_size, database_url=database_url
+            )
+        )
     failed = sum(row.error is not None for row in results)
     print_success(
         f"Schema stats: {len(results) - failed} successful, {failed} failed; "
