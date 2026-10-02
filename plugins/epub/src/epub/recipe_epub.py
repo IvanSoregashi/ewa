@@ -181,7 +181,7 @@ def image_stats(path: str) -> None:
 
 def trying_to_get_stats(path: str | Path) -> EpubSchemaStats:
     current_path = Path(path).expanduser().resolve()
-    ess = EpubSchemaStats(filepath=str(current_path))
+    ess = EpubSchemaStats(filepath=str(current_path), filesize=round(current_path.stat().st_size / (1024 * 1024), 2))
 
     with EPUB(current_path).keep_open() as epub:
         ess.has_titlepage = epub.resources.by_path("titlepage.xhtml") is not None
@@ -224,5 +224,14 @@ def trying_to_get_stats(path: str | Path) -> EpubSchemaStats:
 
         ess.has_calibre_ts = any(meta.name == "calibre:timestamp" for meta in metadata.metas)
         ess.has_cover_cover = any(meta.name == "cover" and meta.content == "cover" for meta in metadata.metas)
+
+    values = ess.model_dump()
+    has_values = [value for name, value in values.items() if name.startswith("has_") and name != "has_such"]
+    len_values = [value for name, value in values.items() if name.startswith("len_") and name != "len_such"]
+    ess.has = all(has_values)
+    ess.has_such = "_".join(map(str, has_values))
+    ess.len = all(v == 1 for v in len_values)
+    ess.len_such = "_".join(map(str, len_values))
+    ess.titlepage_guide = (ess.guide_type, ess.guide_href, ess.guide_title) == ("cover", "titlepage.xhtml", "Cover")
 
     return ess

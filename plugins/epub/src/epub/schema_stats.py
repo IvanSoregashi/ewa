@@ -36,6 +36,13 @@ class EpubSchemaStats(SQLModel, table=True):
     has_calibre_ts: bool = False
     has_cover_cover: bool = False
 
+    has: bool = False
+    has_such: str = ""
+    len: bool = False
+    len_such: str = ""
+    filesize: float = 0.0
+    titlepage_guide: bool = False
+
 
 class EpubSchemaStatsTable(SQLiteModelTable[EpubSchemaStats]):
     def create_all(self):
